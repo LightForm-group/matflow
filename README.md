@@ -1,12 +1,3 @@
-[![PyPI version](https://badge.fury.io/py/matflow.svg)](https://badge.fury.io/py/matflow)
+# [WIP] matflow
 
-# matflow
-Computational workflow management for materials science.
-
-## Installation
-
-`pip install matflow`
-
-## Environment variables
-
-`MATFLOW_DATA_DIR`
+❗ This is a work-in-progress and not quite ready for real-world use.
