@@ -31,6 +31,7 @@ def make_workflow(profile_path, directory=None):
 
     """
 
+    profile_path = Path(profile_path)
     stage_dir = Path(directory or '').resolve()
     workflow_dict = parse_workflow_profile(profile_path)
 
@@ -38,8 +39,10 @@ def make_workflow(profile_path, directory=None):
     pprint(workflow_dict)
 
     workflow = Workflow(**workflow_dict, stage_directory=stage_dir)
-
     workflow.save_state()
+
+    # Copy profile to workflow directory:
+    workflow.path.joinpath(profile_path).write_bytes(profile_path.read_bytes())
 
     pyperclip.copy(workflow.human_id)
 
