@@ -121,20 +121,12 @@ class CommandGroup(object):
         except ValueError:
             os_type = resource.machine.os_type
 
-        print(f'ww: {wsl_wrapper}')
+        # print(f'ww: {wsl_wrapper}')
 
         if wsl_wrapper:
             os_type = 'posix'
 
-        print(f'os_type: {os_type}')
-
-        exec_file_name = self._write_task_executable(input_props, os_type, element_path)
-
-        run_cmd = exec_file_name
-        if os_type == 'posix':
-            run_cmd = f'./{run_cmd}'
-        if wsl_wrapper:
-            run_cmd = f'{wsl_wrapper} "{run_cmd}"'
+        # print(f'os_type: {os_type}')
 
         # run_dir is relative to task dir.
         run_dir = element_path.relative_to(element_path.parent)
@@ -142,6 +134,17 @@ class CommandGroup(object):
             run_dir = PurePosixPath(run_dir)
         elif os_type == 'nt':
             run_dir = PureWindowsPath(run_dir)
+
+        exec_file_name = self._write_task_executable(input_props, os_type, element_path)
+
+        run_cmd = exec_file_name
+        if os_type == 'posix':
+            run_cmd = f'source {run_cmd}'
+        if wsl_wrapper:
+            # run_cmd = f'{wsl_wrapper} "/bin/bash -ic \'cd {task_path}; source ~/init_damask.sh; {run_cmd}\'"'
+            run_cmd = f'{wsl_wrapper} "{run_cmd}"'
+
+        print(f'prepare_direct_execution: run_cmd: {run_cmd}')
 
         out = {
             'run_cmd': run_cmd,
