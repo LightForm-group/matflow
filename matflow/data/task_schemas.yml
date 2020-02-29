@@ -117,6 +117,10 @@ task_schemas:
         implementations:
           - name: damask
             version: 1
+            inputs:
+              - rescale_size
+              - rescale_grid
+              - canvas_grid
             input_map:
               - inputs:
                   - microstructure_seeds
@@ -127,11 +131,22 @@ task_schemas:
                   - volume_element.geom
                 output: volume_element
             commands:
-              - cmd: geom_fromVoronoiTessellation
+              - cmd: geom_fromVoronoiTessellation -o 0.0 0.0 0.0
                 stdin: orientation.seeds
-                stdout: volume_element.geom 
+                stdout: volume_element_initial.geom 
                 arg_labels:
                   s: size
+              - cmd: geom_rescale
+                stdin: volume_element_initial.geom
+                stdout: volume_element_rescaled.geom
+                arg_labels:
+                  g: rescale_grid
+                  s: rescale_size
+              - cmd: geom_canvas
+                stdin: volume_element_rescaled.geom
+                stdout: volume_element.geom
+                arg_labels:
+                  g: canvas_grid                  
       - name: random_voronoi
         version: 1
         notes: >
@@ -177,6 +192,10 @@ task_schemas:
         version: 1
         inputs:
           - direction # xy, xz or yz
+      - name: random_2d
+        version: 1
+        inputs:
+          - normal_direction # x, y, or z (i.e. load in yz, xz or xy planes)
     outputs:
       - load_case
 
@@ -229,15 +248,17 @@ task_schemas:
                 arg_labels:
                   l: _file:load.load
                   g: _file:geom.geom
-              - cmd: postResults --dir . --cr "f,p" --co "totalshear" geom_load.spectralOut
+                stdout: stdout.log
+              # - cmd: postResults --cr "f,p" --co "totalshear" geom_load.spectralOut
+              - cmd: postResults --dir . --cr "f,p" geom_load.spectralOut
               - cmd: addCauchy geom_load.txt
               - cmd: addStrainTensors --logarithmic --left geom_load.txt
               - cmd: addMises --stress "Cauchy" --strain "ln(V)" geom_load.txt
-              - cmd: postResults --dir . --cr "f,p" --co "totalshear" --range 160 160 1 --increments --split --separation "x,y,z" geom_load.spectralOut
-              - cmd: addCauchy geom_load_inc160.txt
-              - cmd: addStrainTensors --logarithmic --left geom_load_inc160.txt
-              - cmd: addMises --stress "Cauchy" --strain "ln(V)" geom_load_inc160.txt
-              - cmd: vtk_rectilinearGrid geom_load_inc160.txt
-              - cmd: vtk_addRectilinearGridData --data "Mises(Cauchy),Mises(ln(V))" --vtk "geom_load_inc160_pos(cell).vtr" geom_load_inc160.txt
-              - cmd: addDisplacement --nodal geom_load_inc160.txt
-              - cmd: vtk_addRectilinearGridData --data "fluct(f).pos,avg(f).pos" --vtk "geom_load_inc160_pos(cell).vtr" geom_load_inc160_nodal.txt
+              # - cmd: postResults --dir . --cr "f,p" --co "totalshear" --range 160 160 1 --increments --split --separation "x,y,z" geom_load.spectralOut
+              # - cmd: addCauchy geom_load_inc160.txt
+              # - cmd: addStrainTensors --logarithmic --left geom_load_inc160.txt
+              # - cmd: addMises --stress "Cauchy" --strain "ln(V)" geom_load_inc160.txt
+              # - cmd: vtk_rectilinearGrid geom_load_inc160.txt
+              # - cmd: vtk_addRectilinearGridData --data "Mises(Cauchy),Mises(ln(V))" --vtk "geom_load_inc160_pos(cell).vtr" geom_load_inc160.txt
+              # - cmd: addDisplacement --nodal geom_load_inc160.txt
+              # - cmd: vtk_addRectilinearGridData --data "fluct(f).pos,avg(f).pos" --vtk "geom_load_inc160_pos(cell).vtr" geom_load_inc160_nodal.txt
