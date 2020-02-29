@@ -62,8 +62,8 @@ class Task(object):
     INIT_STATUS = 'pending'
 
     def __init__(self, name, method, software_instance, task_idx, nest_idx,
-                 run_options=None, base=None, sequences=None, inputs=None, outputs=None,
-                 schema=None, status=None):
+                 run_options=None, base=None, sequences=None, num_repeats=None,
+                 inputs=None, outputs=None, schema=None, status=None, pause=False):
 
         self.name = name
         self.status = status or Task.INIT_STATUS  # | 'paused' | 'complete'
@@ -74,11 +74,12 @@ class Task(object):
         self.run_options = run_options
         self.inputs = inputs
         self.outputs = outputs
+        self.pause = pause
 
         self.schema = TaskSchema(**(schema or self._get_schema_dict()))
 
         if not self.inputs:
-            self.inputs = self._resolve_inputs(base, sequences)
+            self.inputs = self._resolve_inputs(base, num_repeats, sequences)
 
     def __repr__(self):
         out = (
@@ -96,13 +97,19 @@ class Task(object):
     def __len__(self):
         return self.num_elements
 
-    def _resolve_inputs(self, base, sequences):
+    def _resolve_inputs(self, base, num_repeats, sequences):
         """Transform `base` and `sequences` into `input` list."""
+
+        if num_repeats is not None and sequences is not None:
+            raise ValueError('Specify one of `num_repeats` of `sequences`.')
 
         print('Task._resolve_inputs: ')
 
         print('base')
         pprint(base)
+
+        print('num_repeats')
+        pprint(num_repeats)
 
         print('sequences')
         pprint(sequences)
@@ -113,17 +120,22 @@ class Task(object):
         if base is None:
             base = {}
 
-        if sequences is None:
-            return [base]
-
+        if num_repeats:
+            out = [base for _ in range(num_repeats)]
         else:
+            out = [base]
 
+        if sequences is None:
+            return out
+        else:
             # Don't modify original:
             sequences = copy.deepcopy(sequences)
 
             # Check equal `nest_idx` sequences have the same number of `vals`
             num_vals_map = {}
             for seq in sequences:
+                print('seq: ')
+                pprint(seq)
                 prev_num_vals = num_vals_map.get(seq['nest_idx'])
                 cur_num_vals = len(seq['vals'])
                 if prev_num_vals is None:

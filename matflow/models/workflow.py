@@ -20,10 +20,12 @@ class Workflow(object):
 
     def __init__(self, tasks, machines, resources, resource_conns, stage_directory=None,
                  human_id=None, status=None, machine_name=None, human_name=None,
-                 extends=None):
+                 extend=None):
 
         self.human_name = human_name or ''
-        self._extends = str(Path(extends).resolve()) if extends else None
+        self._extend_paths = [str(Path(i).resolve())
+                              for i in extend['paths']] if extend else None
+        self.extend_nest_idx = extend['nest_idx'] if extend else None
         self._stage_directory = str(stage_directory)
         self.machines, self.resources, self.resource_conns = self._init_resources(
             machines, resources, resource_conns)
@@ -59,11 +61,13 @@ class Workflow(object):
                     nest_idx=i['nest_idx'],
                     run_options=i['run_options'],
                     base=i.get('base'),
+                    num_repeats=i.get('num_repeats'),
                     sequences=i.get('sequences'),
                     inputs=i.get('inputs'),
                     outputs=i.get('outputs'),
                     schema=i.get('schema'),
                     status=i.get('status'),
+                    pause=i.get('pause', False),
                 )
             )
 
@@ -73,16 +77,16 @@ class Workflow(object):
         if not self.path.is_dir():
             self.path.mkdir()
 
-    def get_extended_workflow(self):
-        if self.extends:
-            return Workflow.load_state(self.extends.parent)
+    def get_extended_workflows(self):
+        if self.extend_paths:
+            return [Workflow.load_state(i.parent) for i in self.extend_paths]
         else:
             return None
 
     @property
-    def extends(self):
-        if self._extends:
-            return Path(self._extends)
+    def extend_paths(self):
+        if self._extend_paths:
+            return [Path(i) for i in self._extend_paths]
         else:
             return None
 
@@ -227,13 +231,20 @@ class Workflow(object):
         with Path(path).joinpath('workflow.hdf5').open() as handle:
             obj_json = hickle.load(handle)
 
+        extend = None
+        if obj_json['_extend_paths']:
+            extend = {
+                'paths': obj_json['_extend_paths'],
+                'nest_idx': obj_json['extend_nest_idx']
+            }
+
         obj = {
             'tasks': obj_json['tasks'],
             'machines': obj_json['machines'],
             'resources': obj_json['resources'],
             'resource_conns': obj_json['resource_conns'],
             'stage_directory': obj_json['_stage_directory'],
-            'extends': obj_json['_extends'],
+            'extend': extend,
             'human_name': obj_json['human_name'],
             'human_id': obj_json['human_id'],
             'status': obj_json['status'],
@@ -382,6 +393,9 @@ class Workflow(object):
                         # Copy task directory to remote resource
                         # TODO:
                         task.status = 'waiting'
+                        if task.pause:
+                            print('Pausing task.')
+                            break
                         if task.is_scheduled:
                             # Submit hpcflow project remotely over SSH
                             pass
@@ -390,6 +404,9 @@ class Workflow(object):
                             msg = 'Remote non-scheduled not yet supported.'
                             raise NotImplementedError(msg)
                     else:
+                        if task.pause:
+                            print('Pausing task.')
+                            break
                         # Execute "jobscript" locally and wait.
                         for i in run_commands:
                             proc = run(i['run_cmd'], shell=True, stdout=PIPE, stderr=PIPE,
@@ -482,8 +499,9 @@ class Workflow(object):
 
             # Also search for outputs in tasks from extended workflow:
             ext_workflow_tasks = []
-            if self.extends:
-                ext_workflow_tasks = self.get_extended_workflow().tasks
+            if self.extend_paths:
+                ext_workflow_tasks = [j for i in self.get_extended_workflows()
+                                      for j in i.tasks]
 
             cur_workflow_tasks = [i for i in self.tasks if i.task_idx < task_idx]
             prev_task_list = ext_workflow_tasks + cur_workflow_tasks
@@ -511,9 +529,13 @@ class Workflow(object):
 
                     # print(f'inp {inp} in prev_tasks_outs!')
 
+                    new_in_nest_idx = prev_task.nest_idx
+                    if self.extend_nest_idx:
+                        if inp in self.extend_nest_idx:
+                            new_in_nest_idx = self.extend_nest_idx[inp]
                     new_inputs = {
                         'name': inp_name,
-                        'nest_idx': prev_task.nest_idx,
+                        'nest_idx': new_in_nest_idx,
                         'vals': vals,
                     }
 

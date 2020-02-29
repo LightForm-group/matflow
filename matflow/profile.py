@@ -53,7 +53,7 @@ def parse_workflow_profile(profile_path):
 
     workflow_dict = {
         'human_name': profile.get('name'),
-        'extends': profile.get('extends'),
+        'extend': profile.get('extend'),
         'machines': machines,
         'resources': resources,
         'resource_conns': resource_conns,
