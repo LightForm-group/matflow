@@ -11,20 +11,20 @@ from matflow.utils import nest_lists, combine_list_of_dicts
 
 def combine_base_sequence(sequences, base=None):
 
-    # print(f'\ncombine_base_sequence.')
-    # print(f'----------------------.')
+    print(f'\ncombine_base_sequence.')
+    print(f'----------------------.')
 
-    # for i_idx, i in enumerate(sequences):
-    #     print(
-    #         f'input\n'
-    #         f'\ti_idx: {i_idx}; i.keys: {i.keys()}; name: {i["name"]}; '
-    #         f'nest_idx: {i["nest_idx"]} '
-    #         f'num vals: {len(i["vals"])}'
-    #     )
-    #     for j_idx, j in enumerate(i['vals']):
-    #         print(
-    #             f'\t\tval_idx: {j_idx}; val.keys: {j.keys()}'
-    #         )
+    for i_idx, i in enumerate(sequences):
+        print(
+            f'input\n'
+            f'\ti_idx: {i_idx}; i.keys: {i.keys()}; name: {i["name"]}; '
+            f'nest_idx: {i["nest_idx"]} '
+            f'num vals: {len(i["vals"])}'
+        )
+        for j_idx, j in enumerate(i['vals']):
+            print(
+                f'\t\tval_idx: {j_idx}; val.keys: {j.keys()}'
+            )
 
     if base is None:
         base = {}
