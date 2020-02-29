@@ -84,6 +84,132 @@ def write_microstructure_new_orientations(path, microstructure_seeds, orientatio
     np.savetxt(path, data, header=header, comments='', fmt=fmt)
 
 
+def get_load_case_random_2d(total_time, num_increments, normal_direction,
+                            target_strain_rate=None, target_strain=None):
+
+    if target_strain is None:
+        target_strain = [None] * len(total_time)
+    elif target_strain_rate is None:
+        target_strain_rate = [None] * len(total_time)
+
+    all_load_cases = []
+    def_grad_vals = (np.random.random(4) - 0.5)
+    for i, j, k, m, d in zip(total_time, num_increments, target_strain_rate,
+                             target_strain, normal_direction):
+
+        # Validation:
+        msg = 'Specify either `target_strain_rate` or `target_strain`.'
+        if all([t is None for t in [k, m]]):
+            raise ValueError(msg)
+        if all([t is not None for t in [k, m]]):
+            raise ValueError(msg)
+
+        dg_target_val = k or m
+        if m:
+            def_grad_vals *= dg_target_val
+            def_grad_vals += np.eye(2).reshape(-1)
+        elif k:
+            def_grad_vals *= dg_target_val
+
+        if d == 'x':
+            # Deformation in the y-z plane
+
+            dg_arr = np.ma.masked_array(
+                [
+                    [0, 0, 0],
+                    [0, def_grad_vals[0], def_grad_vals[1]],
+                    [0, def_grad_vals[2], def_grad_vals[3]],
+                ],
+                mask=np.array([
+                    [1, 0, 0],
+                    [1, 0, 0],
+                    [1, 0, 0],
+                ])
+            )
+            stress = np.ma.masked_array(
+                [
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                ],
+                mask=np.array([
+                    [0, 1, 1],
+                    [0, 1, 1],
+                    [0, 1, 1],
+                ])
+            )
+
+        elif d == 'y':
+            # Deformation in the x-z plane
+
+            dg_arr = np.ma.masked_array(
+                [
+                    [def_grad_vals[0], 0, def_grad_vals[1]],
+                    [0, 0, 0],
+                    [def_grad_vals[2], 0, def_grad_vals[3]],
+                ],
+                mask=np.array([
+                    [0, 1, 0],
+                    [0, 1, 0],
+                    [0, 1, 0],
+                ])
+            )
+            stress = np.ma.masked_array(
+                [
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                ],
+                mask=np.array([
+                    [1, 0, 1],
+                    [1, 0, 1],
+                    [1, 0, 1],
+                ])
+            )
+
+        elif d == 'z':
+            # Deformation in the x-y plane
+
+            dg_arr = np.ma.masked_array(
+                [
+                    [def_grad_vals[0], def_grad_vals[1], 0],
+                    [def_grad_vals[2], def_grad_vals[3], 0],
+                    [0, 0, 0],
+                ],
+                mask=np.array([
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [0, 0, 1],
+                ])
+            )
+            stress = np.ma.masked_array(
+                [
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                ],
+                mask=np.array([
+                    [1, 1, 1],
+                    [1, 1, 1],
+                    [1, 1, 0],
+                ])
+            )
+
+        def_grad_aim = dg_arr if m else None
+        def_grad_rate = dg_arr if k else None
+
+        load_case = {
+            'total_time': i,
+            'num_increments': j,
+            'def_grad_rate': def_grad_rate,
+            'def_grad_aim': def_grad_aim,
+            'stress': stress,
+        }
+        all_load_cases.append(load_case)
+
+    return all_load_cases
+
+
 def get_load_case_uniaxial(total_time, num_increments, direction, target_strain_rate=None,
                            target_strain=None):
 
@@ -370,6 +496,32 @@ def get_load_case_plane_strain(total_time, num_increments, direction, target_str
                     [1, 1, 0],
                 ])
             )
+        elif d == 'zy':
+            dg_arr = np.ma.masked_array(
+                [
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [0, 0, dg_ps_val]
+                ],
+                mask=np.array([
+                    [1, 0, 0],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                ])
+            )
+
+            stress = np.ma.masked_array(
+                [
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                ],
+                mask=np.array([
+                    [0, 1, 1],
+                    [1, 1, 1],
+                    [1, 1, 1],
+                ])
+            )
         else:
             raise NotImplementedError()
 
@@ -446,4 +598,5 @@ TASK_FUNC_MAP.update({
     ('generate_load_case', 'uniaxial'): get_load_case_uniaxial,
     ('generate_load_case', 'biaxial'): get_load_case_biaxial,
     ('generate_load_case', 'plane_strain'): get_load_case_plane_strain,
+    ('generate_load_case', 'random_2d'): get_load_case_random_2d,
 })
