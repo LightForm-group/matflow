@@ -58,7 +58,7 @@ class Workflow(object):
                 method=i['method'],
                 software_instance=software_instance,
                 task_idx=i_idx,
-                nest_idx=i['nest_idx'],
+                nest=i['nest'],
                 run_options=i['run_options'],
                 base=i.get('base'),
                 num_repeats=i.get('num_repeats'),

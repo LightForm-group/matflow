@@ -139,7 +139,7 @@ class Task(object):
 
     INIT_STATUS = 'pending'
 
-    def __init__(self, name, method, software_instance, task_idx, nest_idx,
+    def __init__(self, name, method, software_instance, task_idx, nest,
                  run_options=None, base=None, sequences=None, num_repeats=None,
                  inputs=None, outputs=None, schema=None, status=None, pause=False):
 
@@ -147,7 +147,7 @@ class Task(object):
         self.status = status or Task.INIT_STATUS  # | 'paused' | 'complete'
         self.method = method
         self.task_idx = task_idx
-        self.nest_idx = nest_idx
+        self.nest = nest
         self.software_instance = software_instance
         self.run_options = run_options
         self.inputs = inputs
