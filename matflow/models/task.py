@@ -14,7 +14,7 @@ from matflow.utils import parse_times
 from matflow.errors import IncompatibleWorkflow, IncompatibleNesting
 
 
-def check_task_compatibility(tasks_compat_props):
+def check_task_compatibility(task_compat_props):
     'Check workflow has no incompatible tasks.'
 
     """
@@ -32,16 +32,16 @@ def check_task_compatibility(tasks_compat_props):
 
     """
 
-    # print('check_task_compatibility: task_ins_outs: ')
-    # pprint(task_ins_outs)
+    print('check_task_compatibility: tasks_compat_props: ')
+    pprint(task_compat_props)
 
     dependency_idx = []
     all_outputs = []
-    for ins_outs_i in tasks_compat_props:
+    for ins_outs_i in task_compat_props:
         all_outputs.extend(ins_outs_i['outputs'])
         output_idx = []
         for input_j in ins_outs_i['inputs']:
-            for task_idx_k, ins_outs_k in enumerate(tasks_compat_props):
+            for task_idx_k, ins_outs_k in enumerate(task_compat_props):
                 if input_j in ins_outs_k['outputs']:
                     output_idx.append(task_idx_k)
         else:
@@ -75,9 +75,9 @@ def check_task_compatibility(tasks_compat_props):
     # print('check_task_compatibility: task_srt_idx: {}'.format(task_srt_idx))
 
     # Reorder:
-    tasks_compat_props = [tasks_compat_props[i] for i in task_srt_idx]
+    task_compat_props = [task_compat_props[i] for i in task_srt_idx]
     print('check_task_compatibility: tasks_compat_props:')
-    pprint(tasks_compat_props)
+    pprint(task_compat_props)
 
     dependency_idx = [[task_srt_idx[j] for j in dependency_idx[i]]
                       for i in task_srt_idx]
@@ -86,7 +86,7 @@ def check_task_compatibility(tasks_compat_props):
     # Now use dependency_idx and nesting info to find num_elements for each task:
     pass
 
-    return task_srt_idx, tasks_compat_props
+    return task_srt_idx, task_compat_props
 
 
 class TaskSchema(object):
