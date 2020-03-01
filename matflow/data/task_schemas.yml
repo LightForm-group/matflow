@@ -1,5 +1,86 @@
 task_schemas:
 
+  - name: dummy_task_1
+    outputs:
+      - parameter_2
+    methods:
+      - name: method_1
+        inputs:
+          - parameter_1
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                  - parameter_1
+                file: t1_m1_infile_1
+            output_map:
+              - files:
+                  - outfile.txt
+                output: parameter_2
+            commands:
+              - cmd: hpcflow dummy doSomething
+                arg_labels:
+                  infile1: _file:t1_m1_infile_1
+                  infile2: _file:t1_m1_infile_1
+          - name: software_2
+            input_map:
+              - inputs:
+                  - parameter_1
+                file: t1_m1_infile_1
+            output_map:
+              - files:
+                  - outfile.txt
+                output: parameter_2
+            commands:
+              - cmd: hpcflow dummy doSomething
+                arg_labels:
+                  infile1: _file:t1_m1_infile_1
+                  infile2: _file:t1_m1_infile_1                  
+
+  - name: dummy_task_1_inv
+    outputs:
+      - parameter_1
+    methods:
+      - name: method_1
+        inputs:
+          - parameter_2
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                  - parameter_2
+                file: t1_m1_infile_1
+            output_map:
+              - files:
+                  - outfile.txt
+                output: parameter_1
+            commands:
+              - cmd: hpcflow dummy doSomething
+                arg_labels:
+                  infile1: _file:t1_m1_infile_1
+                  infile2: _file:t1_m1_infile_1
+
+  - name: dummy_task_2
+    outputs:
+      - parameter_4
+    methods:
+      - name: method_1
+        inputs:
+          - parameter_2
+          - parameter_3
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                  - parameter_2
+                  - parameter_3
+                file: t2_m1_infile_1
+            commands:
+              - cmd: hpcflow dummy doSomething
+                arg_labels:
+                  infile1: _file:t2_m1_infile_1
+                  infile2: _file:t2_m1_infile_1                  
+
   - name: estimate_ODF
     version: 1
     outputs:

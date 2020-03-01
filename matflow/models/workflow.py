@@ -5,6 +5,7 @@ from subprocess import run, PIPE
 from warnings import warn
 
 import hickle
+import numpy as np
 
 from matflow import (CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP)
@@ -12,6 +13,10 @@ from matflow.models import Task, Machine, Resource, ResourceConnection
 from matflow.jsonable import to_jsonable
 from matflow.sequence import combine_base_sequence
 from matflow.utils import parse_times, zeropad
+
+
+class IncompatibleWorkflow(Exception):
+    pass
 
 
 class Workflow(object):
@@ -37,7 +42,7 @@ class Workflow(object):
         except ValueError:
             warn(f'Could not find resource name for workflow: {human_name}/{human_id}')
 
-        self.tasks = []
+        task_objs = []
         for i_idx, i in enumerate(tasks):
 
             software_instance = i.get('software_instance')
@@ -52,30 +57,87 @@ class Workflow(object):
                     software_instance['num_cores'] = [
                         int(i) for i in software_instance['num_cores']]
 
-            self.tasks.append(
-                Task(
-                    name=i['name'],
-                    method=i['method'],
-                    software_instance=software_instance,
-                    task_idx=i_idx,
-                    nest_idx=i['nest_idx'],
-                    run_options=i['run_options'],
-                    base=i.get('base'),
-                    num_repeats=i.get('num_repeats'),
-                    sequences=i.get('sequences'),
-                    inputs=i.get('inputs'),
-                    outputs=i.get('outputs'),
-                    schema=i.get('schema'),
-                    status=i.get('status'),
-                    pause=i.get('pause', False),
-                )
+            new_task = Task(
+                name=i['name'],
+                method=i['method'],
+                software_instance=software_instance,
+                task_idx=i_idx,
+                nest_idx=i['nest_idx'],
+                run_options=i['run_options'],
+                base=i.get('base'),
+                num_repeats=i.get('num_repeats'),
+                sequences=i.get('sequences'),
+                inputs=i.get('inputs'),
+                outputs=i.get('outputs'),
+                schema=i.get('schema'),
+                status=i.get('status'),
+                pause=i.get('pause', False),
             )
+
+            task_objs.append(new_task)
+
+        self.tasks = self._check_workflow_compat(task_objs)
 
         self.status = status or Workflow.INIT_STATUS  # | 'waiting' | 'complete'
         self.human_id = human_id or self._make_human_id()
 
         if not self.path.is_dir():
             self.path.mkdir()
+
+    def _check_workflow_compat(self, tasks):
+        'Check workflow has no incompatible tasks.'
+        task_ins_outs = []
+        for i in tasks:
+            task_ins_outs.append({
+                'inputs': i.schema.inputs,
+                'outputs': i.schema.outputs,
+            })
+
+        print('Workflow._check_workflow_compat: task_ins_outs: ')
+        pprint(task_ins_outs)
+
+        dependency_idx = []
+        all_outputs = []
+        for task_idx_i, ins_outs_i in enumerate(task_ins_outs):
+            all_outputs.extend(ins_outs_i['outputs'])
+            output_idx = []
+            for input_j in ins_outs_i['inputs']:
+                for task_idx_k, ins_outs_k in enumerate(task_ins_outs):
+                    if input_j in ins_outs_k['outputs']:
+                        output_idx.append(task_idx_k)
+            else:
+                dependency_idx.append(output_idx)
+
+        if len(all_outputs) != len(set(all_outputs)):
+            msg = 'Multiple tasks in the workflow have the same output!'
+            raise IncompatibleWorkflow(msg)
+
+        print('Workflow._check_workflow_compat: all_outputs: {}'.format(all_outputs))
+        print('Workflow._check_workflow_compat: dependency_idx: {}'.format(dependency_idx))
+
+        # Check for circular dependencies in task inputs/outputs:
+        all_deps = []
+        for idx, deps in enumerate(dependency_idx):
+            for i in deps:
+                all_deps.append(tuple(sorted([idx, i])))
+
+        print('Workflow._check_workflow_compat: all_deps: {}'.format(all_deps))
+
+        if len(all_deps) != len(set(all_deps)):
+            msg = 'Workflow tasks are circularly dependent!'
+            raise IncompatibleWorkflow(msg)
+
+        # Find the minimum index at which each task must be positioned to satisfy input
+        # dependencies:
+        min_idx = [max(i or [0]) + 1 for i in dependency_idx]
+        print('Workflow._check_workflow_compat: min_idx: {}'.format(min_idx))
+
+        task_srt_idx = np.argsort(min_idx)
+        print('Workflow._check_workflow_compat: task_srt_idx: {}'.format(task_srt_idx))
+
+        tasks = [tasks[i] for i in task_srt_idx]
+
+        return tasks
 
     def get_extended_workflows(self):
         if self.extend_paths:

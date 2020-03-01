@@ -8,6 +8,8 @@ import shutil
 from matflow._version import __version__
 
 PKG_DATA_DIR = Path(__file__).parent.joinpath('data')
+TEST_WORKFLOWS_DIR = PKG_DATA_DIR.joinpath('test_workflows')
+TEST_WORKING_DIR = PKG_DATA_DIR.joinpath('tests_working_dir')
 _TASK_SCHEMAS_FILE_PATH = PKG_DATA_DIR.joinpath('task_schemas.yml')
 
 DATA_DIR = Path(os.getenv('MATFLOW_DATA_DIR', '~/.matflow')).expanduser()

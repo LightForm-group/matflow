@@ -125,9 +125,7 @@ class Task(object):
         else:
             out = [base]
 
-        if sequences is None:
-            return out
-        else:
+        if sequences is not None:
             # Don't modify original:
             sequences = copy.deepcopy(sequences)
 
@@ -156,10 +154,10 @@ class Task(object):
 
             out = combine_base_sequence(sequences, base)
 
-            print('out')
-            pprint(out)
+        print('out')
+        pprint(out)
 
-            return out
+        return out
 
     @property
     def num_elements(self):
