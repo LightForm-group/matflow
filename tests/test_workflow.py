@@ -5,7 +5,7 @@ from shutil import rmtree
 
 from matflow import TEST_WORKFLOWS_DIR, TEST_WORKING_DIR
 from matflow.api import make_workflow
-from matflow.models.workflow import IncompatibleWorkflow
+from matflow.errors import IncompatibleWorkflow
 
 
 class TaskCompatibilityTestCase(unittest.TestCase):

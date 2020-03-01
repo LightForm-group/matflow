@@ -4,11 +4,89 @@ import copy
 from pathlib import Path
 from pprint import pprint
 
+import numpy as np
+
 from matflow import CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS
 from matflow.models import CommandGroup, Command
 from matflow.jsonable import to_jsonable
 from matflow.sequence import combine_base_sequence
 from matflow.utils import parse_times
+from matflow.errors import IncompatibleWorkflow, IncompatibleNesting
+
+
+def check_task_compatibility(tasks_compat_props):
+    'Check workflow has no incompatible tasks.'
+
+    """
+    TODO: 
+        * enforce restriction: any given output from one task may only be used as
+            input in _one_ other task.
+        * When considering nesting, specify `nest: True | False` on the outputting
+            task (not the inputting task). Must do this since
+        * when extending a workflow, need to also specify which outputs to extract and
+            whether `nest: True | False`.
+        * implement new key: `merge_priority: INT 0 -> len(outputting tasks)-1`:
+            * must be specified on all outputting tasks if any of them is `nest: False`
+            * if not specified (and all are `nest: True`), default will be set as
+                randomly range(len(outputting tasks)-1).
+
+    """
+
+    # print('check_task_compatibility: task_ins_outs: ')
+    # pprint(task_ins_outs)
+
+    dependency_idx = []
+    all_outputs = []
+    for ins_outs_i in tasks_compat_props:
+        all_outputs.extend(ins_outs_i['outputs'])
+        output_idx = []
+        for input_j in ins_outs_i['inputs']:
+            for task_idx_k, ins_outs_k in enumerate(tasks_compat_props):
+                if input_j in ins_outs_k['outputs']:
+                    output_idx.append(task_idx_k)
+        else:
+            dependency_idx.append(output_idx)
+
+    if len(all_outputs) != len(set(all_outputs)):
+        msg = 'Multiple tasks in the workflow have the same output!'
+        raise IncompatibleWorkflow(msg)
+
+    # print('check_task_compatibility: all_outputs: {}'.format(all_outputs))
+    # print('check_task_compatibility: dependency_idx: {}'.format(dependency_idx))
+
+    # Check for circular dependencies in task inputs/outputs:
+    all_deps = []
+    for idx, deps in enumerate(dependency_idx):
+        for i in deps:
+            all_deps.append(tuple(sorted([idx, i])))
+
+    # print('check_task_compatibility: all_deps: {}'.format(all_deps))
+
+    if len(all_deps) != len(set(all_deps)):
+        msg = 'Workflow tasks are circularly dependent!'
+        raise IncompatibleWorkflow(msg)
+
+    # Find the minimum index at which each task must be positioned to satisfy input
+    # dependencies:
+    min_idx = [max(i or [0]) + 1 for i in dependency_idx]
+    # print('check_task_compatibility: min_idx: {}'.format(min_idx))
+
+    task_srt_idx = np.argsort(min_idx)
+    # print('check_task_compatibility: task_srt_idx: {}'.format(task_srt_idx))
+
+    # Reorder:
+    tasks_compat_props = [tasks_compat_props[i] for i in task_srt_idx]
+    print('check_task_compatibility: tasks_compat_props:')
+    pprint(tasks_compat_props)
+
+    dependency_idx = [[task_srt_idx[j] for j in dependency_idx[i]]
+                      for i in task_srt_idx]
+    print('check_task_compatibility: dependency_idx: {}'.format(dependency_idx))
+
+    # Now use dependency_idx and nesting info to find num_elements for each task:
+    pass
+
+    return task_srt_idx, tasks_compat_props
 
 
 class TaskSchema(object):
