@@ -98,7 +98,7 @@ class Workflow(object):
 
         dependency_idx = []
         all_outputs = []
-        for task_idx_i, ins_outs_i in enumerate(task_ins_outs):
+        for ins_outs_i in task_ins_outs:
             all_outputs.extend(ins_outs_i['outputs'])
             output_idx = []
             for input_j in ins_outs_i['inputs']:
