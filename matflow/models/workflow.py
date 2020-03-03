@@ -110,7 +110,7 @@ class Workflow(object):
 
             num_elements.append(tasks_compat_props[idx]['num_elements'])
 
-        return task_objs, num_elements
+        return validated_tasks, num_elements
 
     def get_extended_workflows(self):
         if self.extend_paths:
