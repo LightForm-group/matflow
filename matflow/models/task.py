@@ -2,6 +2,7 @@
 
 import copy
 from pathlib import Path
+from warnings import warn
 from pprint import pprint
 
 import numpy as np
@@ -11,7 +12,8 @@ from matflow.models import CommandGroup, Command
 from matflow.jsonable import to_jsonable
 from matflow.sequence import combine_base_sequence
 from matflow.utils import parse_times
-from matflow.errors import IncompatibleWorkflow, IncompatibleNesting
+from matflow.errors import (IncompatibleWorkflow, IncompatibleNesting,
+                            MissingMergePriority)
 
 
 def check_task_compatibility(task_compat_props):
@@ -32,9 +34,6 @@ def check_task_compatibility(task_compat_props):
 
     """
 
-    print('check_task_compatibility: tasks_compat_props: ')
-    pprint(task_compat_props)
-
     dependency_idx = []
     all_outputs = []
     for ins_outs_i in task_compat_props:
@@ -51,16 +50,11 @@ def check_task_compatibility(task_compat_props):
         msg = 'Multiple tasks in the workflow have the same output!'
         raise IncompatibleWorkflow(msg)
 
-    # print('check_task_compatibility: all_outputs: {}'.format(all_outputs))
-    # print('check_task_compatibility: dependency_idx: {}'.format(dependency_idx))
-
     # Check for circular dependencies in task inputs/outputs:
     all_deps = []
     for idx, deps in enumerate(dependency_idx):
         for i in deps:
             all_deps.append(tuple(sorted([idx, i])))
-
-    # print('check_task_compatibility: all_deps: {}'.format(all_deps))
 
     if len(all_deps) != len(set(all_deps)):
         msg = 'Workflow tasks are circularly dependent!'
@@ -69,24 +63,83 @@ def check_task_compatibility(task_compat_props):
     # Find the minimum index at which each task must be positioned to satisfy input
     # dependencies:
     min_idx = [max(i or [0]) + 1 for i in dependency_idx]
-    # print('check_task_compatibility: min_idx: {}'.format(min_idx))
-
     task_srt_idx = np.argsort(min_idx)
-    # print('check_task_compatibility: task_srt_idx: {}'.format(task_srt_idx))
 
     # Reorder:
     task_compat_props = [task_compat_props[i] for i in task_srt_idx]
-    print('check_task_compatibility: tasks_compat_props:')
-    pprint(task_compat_props)
-
-    dependency_idx = [[task_srt_idx[j] for j in dependency_idx[i]]
+    dependency_idx = [[np.argsort(task_srt_idx)[j] for j in dependency_idx[i]]
                       for i in task_srt_idx]
-    print('check_task_compatibility: dependency_idx: {}'.format(dependency_idx))
 
-    # Now use dependency_idx and nesting info to find num_elements for each task:
-    pass
+    # Note: when considering upstream tasks for a given downstream task, need to nest
+    # according to the upstream tasks' `num_elements`, not their `length`.
+    for idx, downstream_task in enumerate(task_compat_props):
 
-    return task_srt_idx, task_compat_props
+        # Do any further downstream tasks depend on this task?
+        depended_on = False
+        for deps_idx in dependency_idx[(idx + 1):]:
+            if idx in deps_idx:
+                depended_on = True
+                break
+
+        if not depended_on and downstream_task.get('nest') is not None:
+            msg = '`nest` value is specified but not required for task "{}".'.format(
+                downstream_task['name'])
+            warn(msg)
+
+        # Add `nest: True` by default to this task if nesting is not specified, and if at
+        # least one further downstream task depends on this task:
+        if downstream_task.get('nest', None) is None:
+            if depended_on:
+                downstream_task['nest'] = True
+
+        # Add default `merge_priority` of `None`:
+        if 'merge_priority' not in downstream_task:
+            downstream_task['merge_priority'] = None
+
+        # Find num_elements on downstream task:
+        if not dependency_idx[idx]:
+            num_elements = downstream_task['length']
+
+        else:
+            upstream_tasks = [task_compat_props[i] for i in dependency_idx[idx]]
+            is_nesting_mixed = len(set([i['nest'] for i in upstream_tasks])) > 1
+
+            for i in upstream_tasks:
+
+                if i['merge_priority'] is None and is_nesting_mixed:
+                    msg = ('`merge_priority` for task "{}" must be specified, because'
+                           ' nesting is mixed.'.format(i['name']))
+                    raise MissingMergePriority(msg)
+
+                elif i['merge_priority'] is not None and not is_nesting_mixed:
+                    msg = ('`merge_priority` value is specified but not required for '
+                           'task "{}", because nesting is not mixed.'.format(
+                               downstream_task['name']))
+                    warn(msg)
+
+            all_merge_priority = [i.get('merge_priority') or 0 for i in upstream_tasks]
+            merging_order = np.argsort(all_merge_priority)
+
+            num_elements = downstream_task['length']
+            for i in merging_order:
+                task_to_merge = upstream_tasks[i]
+                if task_to_merge['nest']:
+                    num_elements *= task_to_merge['num_elements']
+                else:
+                    if task_to_merge['num_elements'] != num_elements:
+                        msg = ('Cannot merge without nesting task "{}" (with {} elements)'
+                               ' with task "{}" (with {} elements [during '
+                               'merge]).'.format(
+                                   task_to_merge['name'],
+                                   task_to_merge['num_elements'],
+                                   downstream_task['name'],
+                                   num_elements,
+                               ))
+                        raise IncompatibleNesting(msg)
+
+        downstream_task['num_elements'] = num_elements
+
+    return list(task_srt_idx), task_compat_props
 
 
 class TaskSchema(object):
@@ -139,15 +192,17 @@ class Task(object):
 
     INIT_STATUS = 'pending'
 
-    def __init__(self, name, method, software_instance, task_idx, nest,
-                 run_options=None, base=None, sequences=None, num_repeats=None,
-                 inputs=None, outputs=None, schema=None, status=None, pause=False):
+    def __init__(self, name, method, software_instance, task_idx, nest=None,
+                 merge_priority=None, run_options=None, base=None, sequences=None,
+                 num_repeats=None, inputs=None, outputs=None, schema=None, status=None,
+                 pause=False):
 
         self.name = name
         self.status = status or Task.INIT_STATUS  # | 'paused' | 'complete'
         self.method = method
         self.task_idx = task_idx
         self.nest = nest
+        self.merge_priority = merge_priority
         self.software_instance = software_instance
         self.run_options = run_options
         self.inputs = inputs
@@ -173,7 +228,7 @@ class Task(object):
         return out
 
     def __len__(self):
-        return self.num_elements
+        return len(self.inputs)
 
     def _resolve_inputs(self, base, num_repeats, sequences):
         """Transform `base` and `sequences` into `input` list."""
@@ -236,10 +291,6 @@ class Task(object):
         pprint(out)
 
         return out
-
-    @property
-    def num_elements(self):
-        return len(self.inputs)
 
     @property
     def software(self):

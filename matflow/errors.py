@@ -4,3 +4,7 @@ class IncompatibleWorkflow(Exception):
 
 class IncompatibleNesting(IncompatibleWorkflow):
     pass
+
+
+class MissingMergePriority(IncompatibleNesting):
+    pass

@@ -58,7 +58,7 @@ class Workflow(object):
                 method=i['method'],
                 software_instance=software_instance,
                 task_idx=i_idx,
-                nest=i['nest'],
+                nest=i.get('nest'),
                 run_options=i['run_options'],
                 base=i.get('base'),
                 num_repeats=i.get('num_repeats'),
@@ -72,7 +72,10 @@ class Workflow(object):
 
             task_objs.append(new_task)
 
-        self.tasks = self._validate_tasks(task_objs)
+        tasks, num_elements = self._validate_tasks(task_objs)
+        self.tasks = tasks
+        self._num_elements = num_elements
+
         self.status = status or Workflow.INIT_STATUS  # | 'waiting' | 'complete'
         self.human_id = human_id or self._make_human_id()
 
@@ -84,27 +87,40 @@ class Workflow(object):
         tasks_compat_props = []
         for i in task_objs:
             tasks_compat_props.append({
+                'name': i.name,
                 'inputs': i.schema.inputs,
                 'outputs': i.schema.outputs,
                 'length': len(i),
-                'nest_idx': i.nest_idx,
+                'nest': i.nest,
+                'merge_priority': i.merge_priority,
             })
 
         task_srt_idx, tasks_compat_props = check_task_compatibility(tasks_compat_props)
 
-        # Reorder tasks:
-        task_objs = [task_objs[i] for i in task_srt_idx]
+        validated_tasks = []
+        num_elements = []
+        for idx, i in enumerate(task_srt_idx):
 
-        # Add new compatibility properties (num_elements, dependencies) to task objects:
-        pass
+            # Reorder tasks:
+            task_i = task_objs[i]
 
-        return task_objs
+            # Ensure nest value is set:
+            task_i.nest = tasks_compat_props[idx]['nest']
+            validated_tasks.append(task_i)
+
+            num_elements.append(tasks_compat_props[idx]['num_elements'])
+
+        return task_objs, num_elements
 
     def get_extended_workflows(self):
         if self.extend_paths:
             return [Workflow.load_state(i.parent) for i in self.extend_paths]
         else:
             return None
+
+    @property
+    def num_elements(self):
+        return self._num_elements
 
     @property
     def extend_paths(self):
