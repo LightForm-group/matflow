@@ -72,6 +72,7 @@ def check_task_compatibility(task_compat_props):
 
     # Note: when considering upstream tasks for a given downstream task, need to nest
     # according to the upstream tasks' `num_elements`, not their `length`.
+    inputs_idx = []
     for idx, downstream_task in enumerate(task_compat_props):
 
         # Do any further downstream tasks depend on this task?
@@ -121,6 +122,15 @@ def check_task_compatibility(task_compat_props):
             merging_order = np.argsort(all_merge_priority)
 
             num_elements = downstream_task['length']
+            inputs_idx = {}
+            for input_name in downstream_task['inputs']:
+                inputs_idx.update({
+                    input_name: {
+                        'task_idx': -1,
+                        'element_idx': list(range(num_elements)),
+                    }
+                })
+
             for i in merging_order:
                 task_to_merge = upstream_tasks[i]
                 if task_to_merge['nest']:
@@ -194,7 +204,7 @@ class Task(object):
 
     def __init__(self, name, method, software_instance, task_idx, nest=None,
                  merge_priority=None, run_options=None, base=None, sequences=None,
-                 num_repeats=None, inputs=None, outputs=None, schema=None, status=None,
+                 num_repeats=None, inputs_local=None, outputs=None, schema=None, status=None,
                  pause=False):
 
         self.name = name
@@ -205,14 +215,14 @@ class Task(object):
         self.merge_priority = merge_priority
         self.software_instance = software_instance
         self.run_options = run_options
-        self.inputs = inputs
+        self.inputs_local = inputs_local
         self.outputs = outputs
         self.pause = pause
 
         self.schema = TaskSchema(**(schema or self._get_schema_dict()))
 
-        if not self.inputs:
-            self.inputs = self._resolve_inputs(base, num_repeats, sequences)
+        if not self.inputs_local:
+            self.inputs_local = self._resolve_inputs_local(base, num_repeats, sequences)
 
     def __repr__(self):
         out = (
@@ -228,27 +238,27 @@ class Task(object):
         return out
 
     def __len__(self):
-        return len(self.inputs)
+        return len(self.inputs_local)
 
-    def _resolve_inputs(self, base, num_repeats, sequences):
+    def _resolve_inputs_local(self, base, num_repeats, sequences):
         """Transform `base` and `sequences` into `input` list."""
 
         if num_repeats is not None and sequences is not None:
             raise ValueError('Specify one of `num_repeats` of `sequences`.')
 
-        print('Task._resolve_inputs: ')
+        # print('Task._resolve_inputs: ')
 
-        print('base')
-        pprint(base)
+        # print('base')
+        # pprint(base)
 
-        print('num_repeats')
-        pprint(num_repeats)
+        # print('num_repeats')
+        # pprint(num_repeats)
 
-        print('sequences')
-        pprint(sequences)
+        # print('sequences')
+        # pprint(sequences)
 
-        print('self.schema')
-        pprint(self.schema)
+        # print('self.schema')
+        # pprint(self.schema)
 
         if base is None:
             base = {}
@@ -265,8 +275,8 @@ class Task(object):
             # Check equal `nest_idx` sequences have the same number of `vals`
             num_vals_map = {}
             for seq in sequences:
-                print('seq: ')
-                pprint(seq)
+                # print('seq: ')
+                # pprint(seq)
                 prev_num_vals = num_vals_map.get(seq['nest_idx'])
                 cur_num_vals = len(seq['vals'])
                 if prev_num_vals is None:
@@ -287,8 +297,8 @@ class Task(object):
 
             out = combine_base_sequence(sequences, base)
 
-        print('out')
-        pprint(out)
+        # print('out')
+        # pprint(out)
 
         return out
 
@@ -414,5 +424,5 @@ class Task(object):
     def initialise_outputs(self):
         self.outputs = [
             {key: None for key in self.schema.outputs}
-            for _ in range(len(self.inputs))
+            for _ in range(len(self.inputs_local))
         ]

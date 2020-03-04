@@ -63,7 +63,7 @@ class Workflow(object):
                 base=i.get('base'),
                 num_repeats=i.get('num_repeats'),
                 sequences=i.get('sequences'),
-                inputs=i.get('inputs'),
+                inputs_local=i.get('inputs_local'),
                 outputs=i.get('outputs'),
                 schema=i.get('schema'),
                 status=i.get('status'),
