@@ -81,6 +81,48 @@ task_schemas:
                   infile1: _file:t2_m1_infile_1
                   infile2: _file:t2_m1_infile_1                  
 
+  - name: dummy_task_3
+    outputs:
+      - parameter_6
+    methods:
+      - name: method_1
+        inputs:
+          - parameter_5
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                  - parameter_5
+                file: t3_m1_infile_1
+            commands:
+              - cmd: hpcflow dummy doSomething
+                arg_labels:
+                  infile1: _file:t3_m1_infile_1
+                  infile2: _file:t3_m1_infile_1 
+
+  - name: dummy_task_4
+    outputs:
+      - parameter_8
+    methods:
+      - name: method_1
+        inputs:
+          - parameter_2
+          - parameter_6
+          - parameter_7
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                - parameter_2
+                - parameter_6
+                - parameter_7
+                file: t4_m1_infile_1
+            commands:
+              - cmd: hpcflow dummy doSomething
+                arg_labels:
+                  infile1: _file:t4_m1_infile_1
+                  infile2: _file:t4_m1_infile_1
+
   - name: estimate_ODF
     version: 1
     outputs:
