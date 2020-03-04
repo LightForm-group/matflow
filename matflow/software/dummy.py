@@ -30,6 +30,20 @@ def dummy_input_map_2(path, parameter_2, parameter_3):
         handle.write('parameter_3: {}\n'.format(parameter_3))
 
 
+def dummy_input_map_3(path, parameter_5):
+    with Path(path).open('w') as handle:
+        handle.write('{}\n'.format(randint(0, 1e6)))
+        handle.write('parameter_5: {}\n'.format(parameter_5))
+
+
+def dummy_input_map_4(path, parameter_2, parameter_6, parameter_7):
+    with Path(path).open('w') as handle:
+        handle.write('{}\n'.format(randint(0, 1e6)))
+        handle.write('parameter_2: {}\n'.format(parameter_2))
+        handle.write('parameter_6: {}\n'.format(parameter_6))
+        handle.write('parameter_7: {}\n'.format(parameter_7))
+
+
 def dummy_output_map_1(path):
 
     with Path(path).open('r') as handle:
@@ -48,6 +62,13 @@ TASK_INPUT_MAP.update({
     ('dummy_task_2', 'method_1', 'software_1'): {
         't2_m1_infile_1': dummy_input_map_2,
     },
+    ('dummy_task_3', 'method_1', 'software_1'): {
+        't3_m1_infile_1': dummy_input_map_3,
+    },
+    ('dummy_task_4', 'method_1', 'software_1'): {
+        't4_m1_infile_1': dummy_input_map_4,
+    },
+
 })
 
 TASK_OUTPUT_MAP.update({
