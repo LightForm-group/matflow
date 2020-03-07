@@ -12,6 +12,50 @@ from matflow.sequence import combine_base_sequence
 from matflow.utils import parse_times
 
 
+def resolve_local_inputs(base, num_repeats, sequences):
+    """Transform `base` and `sequences` into `input` list."""
+
+    if num_repeats is not None and sequences is not None:
+        raise ValueError('Specify one of `num_repeats` of `sequences`.')
+
+    if base is None:
+        base = {}
+
+    if num_repeats:
+        local_inputs = [base for _ in range(num_repeats)]
+    else:
+        local_inputs = [base]
+
+    if sequences is not None:
+        # Don't modify original:
+        sequences = copy.deepcopy(sequences)
+
+        # Check equal `nest_idx` sequences have the same number of `vals`
+        num_vals_map = {}
+        for seq in sequences:
+            prev_num_vals = num_vals_map.get(seq['nest_idx'])
+            cur_num_vals = len(seq['vals'])
+            if prev_num_vals is None:
+                num_vals_map.update({seq['nest_idx']: cur_num_vals})
+            elif prev_num_vals != cur_num_vals:
+                raise ValueError(
+                    'Sequences with the same `nest_idx` must '
+                    'have the same number of values.'
+                )
+
+        # Sort by `nest_idx`
+        sequences.sort(key=lambda x: x['nest_idx'])
+
+        # Turn `vals` into list of dicts
+        for seq_idx, seq in enumerate(sequences):
+            sequences[seq_idx]['vals'] = [
+                {seq['name']: i} for i in seq['vals']]
+
+        local_inputs = combine_base_sequence(sequences, base)
+
+    return local_inputs
+
+
 class TaskSchema(object):
     """Class to represent the schema of a particular method/implementation of a task.
 
@@ -82,7 +126,7 @@ class Task(object):
         self.schema = TaskSchema(**(schema or self._get_schema_dict()))
 
         if not self.inputs_local:
-            self.inputs_local = self._resolve_inputs_local(base, num_repeats, sequences)
+            self.inputs_local = resolve_local_inputs(base, num_repeats, sequences)
 
         print('Task inputs_local:')
         pprint(self.inputs_local)
@@ -102,68 +146,6 @@ class Task(object):
 
     def __len__(self):
         return len(self.inputs_local)
-
-    def _resolve_inputs_local(self, base, num_repeats, sequences):
-        """Transform `base` and `sequences` into `input` list."""
-
-        if num_repeats is not None and sequences is not None:
-            raise ValueError('Specify one of `num_repeats` of `sequences`.')
-
-        # print('Task._resolve_inputs: ')
-
-        # print('base')
-        # pprint(base)
-
-        # print('num_repeats')
-        # pprint(num_repeats)
-
-        # print('sequences')
-        # pprint(sequences)
-
-        # print('self.schema')
-        # pprint(self.schema)
-
-        if base is None:
-            base = {}
-
-        if num_repeats:
-            out = [base for _ in range(num_repeats)]
-        else:
-            out = [base]
-
-        if sequences is not None:
-            # Don't modify original:
-            sequences = copy.deepcopy(sequences)
-
-            # Check equal `nest_idx` sequences have the same number of `vals`
-            num_vals_map = {}
-            for seq in sequences:
-                # print('seq: ')
-                # pprint(seq)
-                prev_num_vals = num_vals_map.get(seq['nest_idx'])
-                cur_num_vals = len(seq['vals'])
-                if prev_num_vals is None:
-                    num_vals_map.update({seq['nest_idx']: cur_num_vals})
-                elif prev_num_vals != cur_num_vals:
-                    raise ValueError(
-                        'Sequences with the same `nest_idx` must '
-                        'have the same number of values.'
-                    )
-
-            # Sort by `nest_idx`
-            sequences.sort(key=lambda x: x['nest_idx'])
-
-            # Turn `vals` into list of dicts
-            for seq_idx, seq in enumerate(sequences):
-                sequences[seq_idx]['vals'] = [
-                    {seq['name']: i} for i in seq['vals']]
-
-            out = combine_base_sequence(sequences, base)
-
-        # print('out')
-        # pprint(out)
-
-        return out
 
     @property
     def software(self):
