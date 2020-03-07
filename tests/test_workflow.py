@@ -7,7 +7,7 @@ from matflow import TEST_WORKFLOWS_DIR, TEST_WORKING_DIR
 from matflow.api import make_workflow
 from matflow.errors import (IncompatibleWorkflow, IncompatibleNesting,
                             MissingMergePriority)
-from matflow.models.task import check_task_compatibility
+from matflow.models.workflow import check_task_compatibility
 
 """
 tests for inputs/outputs_idx:
