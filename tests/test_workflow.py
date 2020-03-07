@@ -9,6 +9,18 @@ from matflow.errors import (IncompatibleWorkflow, IncompatibleNesting,
                             MissingMergePriority)
 from matflow.models.task import check_task_compatibility
 
+"""
+tests for inputs/outputs_idx:
+- for a variety of scenarios, check all parameters from the same task have the same number of elements_idx.
+- for a few scenarios, check expected elements_idx and task_idx.
+- check all keys of output (i.e. `task_idx`) are exactly the set of task_idx values in downstream + upstream tasks.
+- check works when no upstream tasks.
+
+tests for resolve_task_num_elements:
+- check works when no upstream tasks
+
+"""
+
 
 class TaskCompatibilityTestCase(unittest.TestCase):
     'Tests ensuring correct behaviour for incompatible tasks.'
@@ -93,7 +105,7 @@ class TaskNestingTestCase(unittest.TestCase):
         ]
         num_elem_expected = [2, 3, 36]
 
-        _, compat_props_new = check_task_compatibility(compat_props)
+        _, compat_props_new, _ = check_task_compatibility(compat_props)
         num_elem = [i['num_elements'] for i in compat_props_new]
         self.assertTrue(num_elem == num_elem_expected)
 
@@ -125,7 +137,7 @@ class TaskNestingTestCase(unittest.TestCase):
             },
         ]
         num_elem_expected = [2, 6, 6]
-        _, compat_props_new = check_task_compatibility(compat_props)
+        _, compat_props_new, _ = check_task_compatibility(compat_props)
         num_elem = [i['num_elements'] for i in compat_props_new]
         self.assertTrue(num_elem == num_elem_expected)
 
@@ -146,7 +158,7 @@ class TaskNestingTestCase(unittest.TestCase):
                 'length': 1,
             },
         ]
-        _, compat_props_1 = check_task_compatibility(compat_props)
+        _, compat_props_1, _ = check_task_compatibility(compat_props)
         num_elem = [i['num_elements'] for i in compat_props_1]
         num_elem_expected = [1, 1]
 
@@ -185,10 +197,10 @@ class TaskNestingTestCase(unittest.TestCase):
             },
         ]
 
-        _, compat_props_1_new = check_task_compatibility(compat_props_1)
+        _, compat_props_1_new, _ = check_task_compatibility(compat_props_1)
         num_elem_1 = [i['num_elements'] for i in compat_props_1_new]
 
-        _, compat_props_2_new = check_task_compatibility(compat_props_2)
+        _, compat_props_2_new, _ = check_task_compatibility(compat_props_2)
         num_elem_2 = [i['num_elements'] for i in compat_props_2_new]
 
         self.assertTrue(num_elem_1 == num_elem_2)
@@ -219,7 +231,7 @@ class TaskNestingTestCase(unittest.TestCase):
             },
         ]
         with self.assertRaises(MissingMergePriority):
-            _, _ = check_task_compatibility(compat_props)
+            _, _, _ = check_task_compatibility(compat_props)
 
     def test_incompatible_nesting(self):
         """Ensure raise if nesting is incompatible with task lengths."""
@@ -255,7 +267,7 @@ class TaskNestingTestCase(unittest.TestCase):
             },
         ]
         with self.assertWarns(Warning):
-            _, _ = check_task_compatibility(compat_props)
+            _, _, _ = check_task_compatibility(compat_props)
 
     def test_warning_on_unrequired_nest(self):
         """Ensure a warning is issued when `nest` is specified on a task whose output is
@@ -270,7 +282,7 @@ class TaskNestingTestCase(unittest.TestCase):
             },
         ]
         with self.assertWarns(Warning):
-            _, _ = check_task_compatibility(compat_props)
+            _, _, _ = check_task_compatibility(compat_props)
 
     def test_nest_true_added_by_default(self):
         """Ensure `nest: True` is added by default to tasks where nesting is unspecified
@@ -289,7 +301,7 @@ class TaskNestingTestCase(unittest.TestCase):
                 'length': 1,
             },
         ]
-        _, compat_props_new = check_task_compatibility(compat_props)
+        _, compat_props_new, _ = check_task_compatibility(compat_props)
         self.assertTrue(compat_props_new[0].get('nest') == True)
 
 
@@ -323,7 +335,7 @@ class TaskOrderingTestCase(unittest.TestCase):
                 'length': 1,
             },
         ]
-        srt_idx, _ = check_task_compatibility(compat_props)
+        srt_idx, _, _ = check_task_compatibility(compat_props)
         self.assertTrue(
             srt_idx == [1, 2, 3, 0] or srt_idx == [2, 1, 3, 0]
         )

@@ -72,9 +72,13 @@ class Workflow(object):
 
             task_objs.append(new_task)
 
-        tasks, num_elements = self._validate_tasks(task_objs)
+        tasks, elements_idx = self._validate_tasks(task_objs)
+
+        # TODO: don't instantiate tasks until in the correct order and with correct nest
+        # values, and local_inputs have been resolved.
+
         self.tasks = tasks
-        self._num_elements = num_elements
+        self._elements_idx = elements_idx
 
         self.status = status or Workflow.INIT_STATUS  # | 'waiting' | 'complete'
         self.human_id = human_id or self._make_human_id()
@@ -84,9 +88,9 @@ class Workflow(object):
 
     def _validate_tasks(self, task_objs):
 
-        tasks_compat_props = []
+        task_info_lst = []
         for i in task_objs:
-            tasks_compat_props.append({
+            task_info_lst.append({
                 'name': i.name,
                 'inputs': i.schema.inputs,
                 'outputs': i.schema.outputs,
@@ -95,22 +99,20 @@ class Workflow(object):
                 'merge_priority': i.merge_priority,
             })
 
-        task_srt_idx, tasks_compat_props = check_task_compatibility(tasks_compat_props)
+        task_srt_idx, task_info_lst, elements_idx = check_task_compatibility(
+            task_info_lst)
 
         validated_tasks = []
-        num_elements = []
         for idx, i in enumerate(task_srt_idx):
 
             # Reorder tasks:
             task_i = task_objs[i]
 
             # Ensure nest value is set:
-            task_i.nest = tasks_compat_props[idx]['nest']
+            task_i.nest = task_info_lst[idx]['nest']
             validated_tasks.append(task_i)
 
-            num_elements.append(tasks_compat_props[idx]['num_elements'])
-
-        return validated_tasks, num_elements
+        return validated_tasks, elements_idx
 
     def get_extended_workflows(self):
         if self.extend_paths:
@@ -119,8 +121,8 @@ class Workflow(object):
             return None
 
     @property
-    def num_elements(self):
-        return self._num_elements
+    def elements_idx(self):
+        return self._elements_idx
 
     @property
     def extend_paths(self):
