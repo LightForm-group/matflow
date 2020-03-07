@@ -2,9 +2,9 @@ class IncompatibleWorkflow(Exception):
     pass
 
 
-class IncompatibleNesting(IncompatibleWorkflow):
+class IncompatibleTaskNesting(IncompatibleWorkflow):
     pass
 
 
-class MissingMergePriority(IncompatibleNesting):
+class MissingMergePriority(IncompatibleTaskNesting):
     pass

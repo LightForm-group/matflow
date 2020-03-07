@@ -13,7 +13,7 @@ from matflow.models import Task, Machine, Resource, ResourceConnection
 from matflow.models.task import combine_base_sequence
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, zeropad
-from matflow.errors import (IncompatibleWorkflow, IncompatibleNesting,
+from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
                             MissingMergePriority)
 
 
@@ -743,7 +743,7 @@ def get_task_num_elements(downstream_task, upstream_tasks):
                                downstream_task['name'],
                                num_elements,
                            ))
-                    raise IncompatibleNesting(msg)
+                    raise IncompatibleTaskNesting(msg)
 
     return num_elements
 

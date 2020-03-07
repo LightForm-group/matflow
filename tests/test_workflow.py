@@ -5,7 +5,7 @@ from shutil import rmtree
 
 from matflow import TEST_WORKFLOWS_DIR, TEST_WORKING_DIR
 from matflow.api import make_workflow
-from matflow.errors import (IncompatibleWorkflow, IncompatibleNesting,
+from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
                             MissingMergePriority)
 from matflow.models.workflow import check_task_compatibility
 
@@ -250,7 +250,7 @@ class TaskNestingTestCase(unittest.TestCase):
                 'length': 2,
             },
         ]
-        with self.assertRaises(IncompatibleNesting):
+        with self.assertRaises(IncompatibleTaskNesting):
             _, _ = check_task_compatibility(compat_props)
 
     def test_warning_on_unrequired_merge_priority(self):
