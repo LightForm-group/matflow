@@ -10,8 +10,8 @@ import numpy as np
 from matflow import (CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP)
 from matflow.models import Task, Machine, Resource, ResourceConnection
+from matflow.models.task import combine_base_sequence
 from matflow.jsonable import to_jsonable
-from matflow.sequence import combine_base_sequence
 from matflow.utils import parse_times, zeropad
 from matflow.errors import (IncompatibleWorkflow, IncompatibleNesting,
                             MissingMergePriority)
