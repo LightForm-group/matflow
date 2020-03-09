@@ -75,11 +75,6 @@ class Workflow(object):
             schema_dict = get_schema_dict(task['name'], task['method'], software_instance)
             schema = TaskSchema(**schema_dict)
 
-            # Check inputs specified for this task are expected by the schema:
-            check_inputs = list(task.get('base', {}).keys())
-            check_inputs += [j['name'] for j in task.get('sequences', [])]
-            schema.check_surplus_inputs(check_inputs)
-
             inputs_local = resolve_local_inputs(
                 task.get('base'),
                 task.get('num_repeats'),
@@ -99,6 +94,8 @@ class Workflow(object):
                 'schema': schema,
                 'inputs_local': inputs_local,
             })
+            # TODO: just need local inputs names passed here (and for
+            # `check_surplus_inputs` call above), not values as well.
 
         task_srt_idx, task_info_lst, elements_idx = check_task_compatibility(
             task_info_lst)
@@ -688,6 +685,8 @@ def check_missing_inputs(task_info_lst, dependency_list):
     for deps_idx, task_info in zip(dependency_list, task_info_lst):
 
         defined_inputs = list(task_info['inputs_local'][0].keys())
+        task_info['schema'].check_surplus_inputs(defined_inputs)
+
         if deps_idx:
             for j in deps_idx:
                 for output in task_info_lst[j]['outputs']:
