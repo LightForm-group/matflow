@@ -679,12 +679,12 @@ def get_dependency_idx(task_info_lst):
 
     dependency_idx = []
     all_outputs = []
-    for ins_outs_i in task_info_lst:
-        all_outputs.extend(ins_outs_i['outputs'])
+    for task_info in task_info_lst:
+        all_outputs.extend(task_info['outputs'])
         output_idx = []
-        for input_j in ins_outs_i['inputs']:
-            for task_idx_k, ins_outs_k in enumerate(task_info_lst):
-                if input_j in ins_outs_k['outputs']:
+        for input_j in task_info['inputs']:
+            for task_idx_k, task_info_k in enumerate(task_info_lst):
+                if input_j in task_info_k['outputs']:
                     output_idx.append(task_idx_k)
         else:
             dependency_idx.append(output_idx)
