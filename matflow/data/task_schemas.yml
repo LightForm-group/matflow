@@ -109,6 +109,7 @@ task_schemas:
           - parameter_2
           - parameter_6
           - parameter_7
+          - parameter_9
         implementations:
           - name: software_1
             input_map:
@@ -116,6 +117,7 @@ task_schemas:
                 - parameter_2
                 - parameter_6
                 - parameter_7
+                - parameter_9
                 file: t4_m1_infile_1
             commands:
               - cmd: hpcflow dummy doSomething

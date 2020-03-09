@@ -10,7 +10,8 @@ import numpy as np
 from matflow import (CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP)
 from matflow.models import Task, Machine, Resource, ResourceConnection
-from matflow.models.task import combine_base_sequence
+from matflow.models.task import (get_schema_dict, combine_base_sequence, TaskSchema,
+                                 resolve_local_inputs)
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, zeropad
 from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
@@ -40,45 +41,7 @@ class Workflow(object):
         except ValueError:
             warn(f'Could not find resource name for workflow: {human_name}/{human_id}')
 
-        task_objs = []
-        for i_idx, i in enumerate(tasks):
-
-            software_instance = i.get('software_instance')
-            if i.get('software'):
-                if not software_instance:
-                    software_instance = self._get_software_instance(
-                        i['software'],
-                        i['run_options']['resource'],
-                        i['run_options'].get('num_cores', 1),
-                    )
-                else:
-                    software_instance['num_cores'] = [
-                        int(i) for i in software_instance['num_cores']]
-
-            new_task = Task(
-                name=i['name'],
-                method=i['method'],
-                software_instance=software_instance,
-                task_idx=i_idx,
-                nest=i.get('nest'),
-                run_options=i['run_options'],
-                base=i.get('base'),
-                num_repeats=i.get('num_repeats'),
-                sequences=i.get('sequences'),
-                inputs_local=i.get('inputs_local'),
-                outputs=i.get('outputs'),
-                schema=i.get('schema'),
-                status=i.get('status'),
-                pause=i.get('pause', False),
-            )
-
-            task_objs.append(new_task)
-
-        tasks, elements_idx = self._validate_tasks(task_objs)
-
-        # TODO: don't instantiate tasks until in the correct order and with correct nest
-        # values, and local_inputs have been resolved.
-
+        tasks, elements_idx = self._validate_tasks(tasks)
         self.tasks = tasks
         self._elements_idx = elements_idx
 
@@ -88,17 +51,53 @@ class Workflow(object):
         if not self.path.is_dir():
             self.path.mkdir()
 
-    def _validate_tasks(self, task_objs):
+    def _validate_tasks(self, tasks):
+
+        # TODO: validate sequences dicts somewhere.
 
         task_info_lst = []
-        for i in task_objs:
+        software_instances = []
+        for task in tasks:
+
+            software_instance = task.get('software_instance')
+            if task.get('software'):
+                if not software_instance:
+                    software_instance = self._get_software_instance(
+                        task['software'],
+                        task['run_options']['resource'],
+                        task['run_options'].get('num_cores', 1),
+                    )
+                else:
+                    software_instance['num_cores'] = [
+                        int(i) for i in software_instance['num_cores']]
+
+            software_instances.append(software_instance)
+            schema_dict = get_schema_dict(task['name'], task['method'], software_instance)
+            schema = TaskSchema(**schema_dict)
+
+            # Check inputs specified for this task are expected by the schema:
+            check_inputs = list(task.get('base', {}).keys())
+            check_inputs += [j['name'] for j in task.get('sequences', [])]
+            schema.check_surplus_inputs(check_inputs)
+
+            inputs_local = resolve_local_inputs(
+                task.get('base'),
+                task.get('num_repeats'),
+                task.get('sequences'),
+            )
+
+            task['schema'] = schema
+            task['inputs_local'] = inputs_local
+
             task_info_lst.append({
-                'name': i.name,
-                'inputs': i.schema.inputs,
-                'outputs': i.schema.outputs,
-                'length': len(i),
-                'nest': i.nest,
-                'merge_priority': i.merge_priority,
+                'name': task['name'],
+                'inputs': schema.inputs,
+                'outputs': schema.outputs,
+                'length': len(task['inputs_local']),
+                'nest': task.get('nest'),
+                'merge_priority': task.get('merge_priority'),
+                'schema': schema,
+                'inputs_local': inputs_local,
             })
 
         task_srt_idx, task_info_lst, elements_idx = check_task_compatibility(
@@ -107,12 +106,20 @@ class Workflow(object):
         validated_tasks = []
         for idx, i in enumerate(task_srt_idx):
 
-            # Reorder tasks:
-            task_i = task_objs[i]
+            # Reorder and instantiate task
+            task_i = tasks[i]
 
-            # Ensure nest value is set:
-            task_i.nest = task_info_lst[idx]['nest']
-            validated_tasks.append(task_i)
+            task_i.pop('base', None)
+            task_i.pop('sequences', None)
+            task_i.pop('software')
+
+            task_i['nest'] = task_info_lst[idx]['nest']
+            task_i['task_idx'] = task_info_lst[idx]['task_idx']
+            task_i['merge_priority'] = task_info_lst[idx]['merge_priority']
+            task_i['software_instance'] = software_instances[idx]
+
+            task_i_obj = Task(**task_i)
+            validated_tasks.append(task_i_obj)
 
         return validated_tasks, elements_idx
 
@@ -625,6 +632,7 @@ def check_task_compatibility(task_info_lst):
     """
 
     dependency_idx = get_dependency_idx(task_info_lst)
+    check_missing_inputs(task_info_lst, dependency_idx)
 
     # Find the index at which each task must be positioned to satisfy input
     # dependencies, and reorder tasks (and `dependency_idx`!):
@@ -673,6 +681,20 @@ def check_task_compatibility(task_info_lst):
         elements_idx.append(params_idx)
 
     return list(task_srt_idx), task_info_lst, elements_idx
+
+
+def check_missing_inputs(task_info_lst, dependency_list):
+
+    for deps_idx, task_info in zip(dependency_list, task_info_lst):
+
+        defined_inputs = list(task_info['inputs_local'][0].keys())
+        if deps_idx:
+            for j in deps_idx:
+                for output in task_info_lst[j]['outputs']:
+                    if output in task_info['inputs']:
+                        defined_inputs.append(output)
+
+        task_info['schema'].check_missing_inputs(defined_inputs)
 
 
 def get_dependency_idx(task_info_lst):

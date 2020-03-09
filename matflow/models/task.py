@@ -9,10 +9,108 @@ from matflow import CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS
 from matflow.models import CommandGroup, Command
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, nest_lists, combine_list_of_dicts
+from matflow.errors import IncompatibleSequence, TaskSchemaError, TaskParameterError
 
 
-def resolve_local_inputs(base, num_repeats, sequences):
+def get_schema_dict(name, method, software_instance=None):
+    """Get the schema associated with the method/implementation of this task."""
+
+    match_task_idx = None
+    match_method_idx = None
+    match_imp_idx = None
+
+    for task_ref_idx, task_ref in enumerate(TASK_SCHEMAS):
+
+        if task_ref['name'] == name:
+
+            match_task_idx = task_ref_idx
+            for met_idx, met in enumerate(task_ref['methods']):
+
+                if met['name'] == method:
+
+                    match_method_idx = met_idx
+                    implementations = met.get('implementations')
+                    if implementations:
+
+                        for imp_idx, imp in enumerate(implementations):
+
+                            if imp['name'] == software_instance['name']:
+                                match_imp_idx = imp_idx
+                                break
+                    break
+            break
+
+    if match_task_idx is None:
+        msg = (f'No matching task found with name: "{name}"')
+        raise ValueError(msg)
+
+    if match_method_idx is None:
+        msg = (f'No matching method found with name: "{method}"'
+               f' in task: "{name}""')
+        raise ValueError(msg)
+
+    task_ref = TASK_SCHEMAS[match_task_idx]
+    met_ref = task_ref['methods'][met_idx]
+    inputs = task_ref.get('inputs', []) + met_ref.get('inputs', [])
+    outputs = task_ref.get('outputs', []) + met_ref.get('outputs', [])
+
+    imp_ref = None
+    in_map = None
+    out_map = None
+    # command_group = None
+    command_opt = None
+
+    if match_imp_idx is not None:
+        imp_ref = met_ref['implementations'][match_imp_idx]
+
+        inputs += imp_ref.get('inputs', [])
+        outputs += imp_ref.get('outputs', [])
+
+        in_map = imp_ref.get('input_map', [])
+        out_map = imp_ref.get('output_map', [])
+        command_opt = imp_ref.get('commands', [])
+
+        # commands = [Command(**i) for i in command_opt]
+        # command_group = CommandGroup(
+        #     commands, self.software_instance.get('env_pre'),
+        #     self.software_instance.get('env_post')
+        # )
+
+    if software_instance:
+        implementation = software_instance['name']
+        command_group = {
+            'commands': command_opt,
+            'env_pre': software_instance.get('env_pre'),
+            'env_post': software_instance.get('env_post'),
+        }
+    else:
+        implementation = None
+        command_group = None
+
+    schema_dict = {
+        'name': name,
+        'method': method,
+        'implementation': implementation,
+        'inputs': inputs,
+        'outputs': outputs,
+        'input_map': in_map,
+        'output_map': out_map,
+        'command_group': command_group,
+    }
+
+    return schema_dict
+
+
+def resolve_local_inputs(base=None, num_repeats=None, sequences=None):
     """Transform `base` and `sequences` into `input` list."""
+
+    # TODO: shouldn't need to specify nest_idx if only one sequence.
+
+    # print('\nbase:')
+    # pprint(base)
+
+    # print('sequences:')
+    # pprint(sequences)
 
     if num_repeats is not None and sequences is not None:
         raise ValueError('Specify one of `num_repeats` of `sequences`.')
@@ -26,36 +124,55 @@ def resolve_local_inputs(base, num_repeats, sequences):
         local_inputs = [base]
 
     if sequences is not None:
-        # Don't modify original:
+
+        # === Don't modify original:
         sequences = copy.deepcopy(sequences)
 
-        # Check equal `nest_idx` sequences have the same number of `vals`
+        # === Check equal `nest_idx` sequences have the same number of `vals`
         num_vals_map = {}
         for seq in sequences:
             prev_num_vals = num_vals_map.get(seq['nest_idx'])
             cur_num_vals = len(seq['vals'])
+
+            # print('\tprev_num_vals: {}'.format(prev_num_vals))
+
             if prev_num_vals is None:
                 num_vals_map.update({seq['nest_idx']: cur_num_vals})
-            elif prev_num_vals != cur_num_vals:
-                raise ValueError(
-                    'Sequences with the same `nest_idx` must '
-                    'have the same number of values.'
-                )
 
-        # Sort by `nest_idx`
+            elif prev_num_vals != cur_num_vals:
+                msg = ('Sequences with the same `nest_idx` must have the same number of '
+                       'values.')
+                raise IncompatibleSequence(msg)
+
+            # print('\tcur_num_vals: {}'.format(cur_num_vals))
+
+        # print('Now sorting the sequences by nest_idx.')
+
+        # === Sort by `nest_idx`
         sequences.sort(key=lambda x: x['nest_idx'])
 
-        # Turn `vals` into list of dicts
+        # print('Sorted sequences:')
+        # pprint(sequences)
+
+        # === Turn `vals` into list of dicts
         for seq_idx, seq in enumerate(sequences):
-            sequences[seq_idx]['vals'] = [
-                {seq['name']: i} for i in seq['vals']]
+            sequences[seq_idx]['vals'] = [{seq['name']: i} for i in seq['vals']]
+
+        # print('Turning vals into list of dict. Sequences now:')
+        # pprint(sequences)
 
         local_inputs = combine_base_sequence(sequences, base)
+
+    print('\ntask.resolve_local_inputs: local_inputs:')
+    pprint(local_inputs)
 
     return local_inputs
 
 
 def combine_base_sequence(sequences, base=None):
+
+    # print('combine_base_sequence: sequences:')
+    # pprint(sequences)
 
     if base is None:
         base = {}
@@ -72,7 +189,6 @@ def combine_base_sequence(sequences, base=None):
         merged_seqs[-1]['name'] = [merged_seqs[-1]['name']]
 
         for next_idx in range(seq_idx + 1, len(sequences)):
-            # print(f'next_idx: {next_idx}')
 
             if sequences[next_idx]['nest_idx'] == seq['nest_idx']:
 
@@ -111,25 +227,86 @@ class TaskSchema(object):
             'command_group': command_group,
     """
 
-    def __init__(self, name, method=None, implementation=None, inputs=None,
-                 outputs=None, input_map=None, output_map=None,
-                 command_group=None):
-        """Instantiate a TaskSchema.
+    def __init__(self, name, outputs, method=None, implementation=None, inputs=None,
+                 input_map=None, output_map=None, command_group=None):
+        'Instantiate a TaskSchema.'
 
-        to check:
-        *   all inputs/outputs referred to in the input/output_maps are also in the
-            input/output lists.
-
-        """
         self.name = name
+        self.outputs = outputs
         self.method = method
         self.implementation = implementation
-        self.inputs = inputs
-        self.outputs = outputs
-        self.input_map = input_map
-        self.output_map = output_map
+        self.inputs = inputs or []
+        self.input_map = input_map or []
+        self.output_map = output_map or []
 
         self.command_group = CommandGroup(**command_group) if command_group else None
+
+        self._validate_inputs_outputs()
+
+    def _validate_inputs_outputs(self):
+        'Basic checks on inputs and outputs.'
+
+        # Check the task does not output an input(!):
+        for i in self.outputs:
+            if i in self.inputs:
+                msg = 'Task schema input "{}" cannot also be an output!'
+                raise TaskSchemaError(msg.format(i))
+
+        # Check correct keys in supplied input/output maps:
+        for in_map in self.input_map:
+            if list(in_map.keys()) != ['inputs', 'file']:
+                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in in_map.keys()])
+                msg = ('Input maps must map a list of `inputs` into a `file` but found '
+                       'input map with keys {} for schema "{}".')
+                raise TaskSchemaError(msg.format(bad_keys_fmt, self.name))
+            if not isinstance(in_map['inputs'], list):
+                msg = 'Input map `inputs` must be a list for schema "{}".'
+                raise TaskSchemaError(msg.format(self.name))
+
+        for out_map in self.output_map:
+            if list(out_map.keys()) != ['files', 'output']:
+                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in out_map.keys()])
+                msg = ('Output maps must map a list of `files` into an `output` but found '
+                       'output map with keys {} for schema "{}".')
+                raise TaskSchemaError(msg.format(bad_keys_fmt, self.name))
+            if not isinstance(out_map['output'], str):
+                msg = 'Output map `output` must be a string for schema "{}".'
+                raise TaskSchemaError(msg.format(self.name))
+
+        # Check inputs/outputs named in input/output_maps are in inputs/outputs lists:
+        input_map_ins = [j for i in self.input_map for j in i['inputs']]
+        unknown_map_inputs = set(input_map_ins) - set(self.inputs)
+
+        output_map_outs = [i['output'] for i in self.output_map]
+        unknown_map_outputs = set(output_map_outs) - set(self.outputs)
+
+        if unknown_map_inputs:
+            bad_ins_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_inputs])
+            msg = 'Input map inputs {} not known by the schema "{}" with inputs: {}.'
+            raise TaskSchemaError(msg.format(bad_ins_map_fmt, self.name, self.inputs))
+
+        if unknown_map_outputs:
+            bad_outs_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_outputs])
+            msg = 'Output map outputs {} not known by the schema "{}" with outputs: {}.'
+            raise TaskSchemaError(msg.format(bad_outs_map_fmt, self.name, self.outputs))
+
+    def check_surplus_inputs(self, inputs):
+        'Check for any inputs that are specified but not required by this schema.'
+
+        surplus_ins = set(inputs) - set(self.inputs)
+        if surplus_ins:
+            surplus_ins_fmt = ', '.join(['"{}"'.format(i) for i in surplus_ins])
+            msg = 'Input(s) {} not known by the schema "{}" with inputs: {}.'
+            raise TaskParameterError(msg.format(surplus_ins_fmt, self.name, self.inputs))
+
+    def check_missing_inputs(self, inputs):
+        'Check for any inputs that are required by this schema but not specified.'
+
+        missing_ins = set(self.inputs) - set(inputs)
+        if missing_ins:
+            missing_ins_fmt = ', '.join(['"{}"'.format(i) for i in missing_ins])
+            msg = 'Input(s) {} missing for the schema "{}" with inputs: {}'
+            raise TaskParameterError(msg.format(missing_ins_fmt, self.name, self.inputs))
 
     @property
     def is_func(self):
@@ -164,14 +341,8 @@ class Task(object):
         self.inputs_local = inputs_local
         self.outputs = outputs
         self.pause = pause
-
-        self.schema = TaskSchema(**(schema or self._get_schema_dict()))
-
-        if not self.inputs_local:
-            self.inputs_local = resolve_local_inputs(base, num_repeats, sequences)
-
-        print('Task inputs_local:')
-        pprint(self.inputs_local)
+        self.schema = schema
+        self.inputs_local = inputs_local
 
     def __repr__(self):
         out = (
@@ -219,94 +390,6 @@ class Task(object):
         src_name = workflow.resource_name
         dst_name = self.resource_name
         return workflow.resource_conns[(src_name, dst_name)]
-
-    def _get_schema_dict(self):
-        """Get the schema associated with the method/implementation of this task."""
-
-        match_task_idx = None
-        match_method_idx = None
-        match_imp_idx = None
-
-        for task_ref_idx, task_ref in enumerate(TASK_SCHEMAS):
-
-            if task_ref['name'] == self.name:
-
-                match_task_idx = task_ref_idx
-                for met_idx, met in enumerate(task_ref['methods']):
-
-                    if met['name'] == self.method:
-
-                        match_method_idx = met_idx
-                        implementations = met.get('implementations')
-                        if implementations:
-
-                            for imp_idx, imp in enumerate(implementations):
-
-                                if imp['name'] == self.software_instance['name']:
-                                    match_imp_idx = imp_idx
-                                    break
-                        break
-                break
-
-        if match_task_idx is None:
-            msg = (f'No matching task found with name: "{self.name}"')
-            raise ValueError(msg)
-
-        if match_method_idx is None:
-            msg = (f'No matching method found with name: "{self.method}"'
-                   f' in task: "{self.name}""')
-            raise ValueError(msg)
-
-        task_ref = TASK_SCHEMAS[match_task_idx]
-        met_ref = task_ref['methods'][met_idx]
-        inputs = task_ref.get('inputs', []) + met_ref.get('inputs', [])
-        outputs = task_ref.get('outputs', []) + met_ref.get('outputs', [])
-
-        imp_ref = None
-        in_map = None
-        out_map = None
-        # command_group = None
-        command_opt = None
-
-        if match_imp_idx is not None:
-            imp_ref = met_ref['implementations'][match_imp_idx]
-
-            inputs += imp_ref.get('inputs', [])
-            outputs += imp_ref.get('outputs', [])
-
-            in_map = imp_ref.get('input_map', [])
-            out_map = imp_ref.get('output_map', [])
-            command_opt = imp_ref.get('commands', [])
-
-            # commands = [Command(**i) for i in command_opt]
-            # command_group = CommandGroup(
-            #     commands, self.software_instance.get('env_pre'),
-            #     self.software_instance.get('env_post')
-            # )
-
-        if self.software_instance:
-            implementation = self.software_instance['name']
-            command_group = {
-                'commands': command_opt,
-                'env_pre': self.software_instance.get('env_pre'),
-                'env_post': self.software_instance.get('env_post'),
-            }
-        else:
-            implementation = None
-            command_group = None
-
-        schema_dict = {
-            'name': self.name,
-            'method': self.method,
-            'implementation': implementation,
-            'inputs': inputs,
-            'outputs': outputs,
-            'input_map': in_map,
-            'output_map': out_map,
-            'command_group': command_group,
-        }
-
-        return schema_dict
 
     def initialise_outputs(self):
         self.outputs = [
