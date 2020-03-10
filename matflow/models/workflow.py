@@ -11,7 +11,7 @@ from matflow import (CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS, TASK_INPUT
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP)
 from matflow.models import Task, Machine, Resource, ResourceConnection
 from matflow.models.task import (get_schema_dict, combine_base_sequence, TaskSchema,
-                                 resolve_local_inputs)
+                                 get_local_inputs)
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, zeropad
 from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
@@ -75,24 +75,21 @@ class Workflow(object):
             schema_dict = get_schema_dict(task['name'], task['method'], software_instance)
             schema = TaskSchema(**schema_dict)
 
-            inputs_local = resolve_local_inputs(
-                task.get('base'),
-                task.get('num_repeats'),
-                task.get('sequences'),
+            local_inputs = get_local_inputs(
+                base=task.get('base'),
+                num_repeats=task.get('num_repeats'),
+                sequences=task.get('sequences'),
             )
-
-            task['schema'] = schema
-            task['inputs_local'] = inputs_local
 
             task_info_lst.append({
                 'name': task['name'],
                 'inputs': schema.inputs,
                 'outputs': schema.outputs,
-                'length': len(task['inputs_local']),
+                'length': local_inputs['length'],
                 'nest': task.get('nest'),
                 'merge_priority': task.get('merge_priority'),
                 'schema': schema,
-                'inputs_local': inputs_local,
+                'local_inputs': local_inputs,
             })
             # TODO: just need local inputs names passed here (and for
             # `check_surplus_inputs` call above), not values as well.
@@ -114,6 +111,8 @@ class Workflow(object):
             task_i['task_idx'] = task_info_lst[idx]['task_idx']
             task_i['merge_priority'] = task_info_lst[idx]['merge_priority']
             task_i['software_instance'] = software_instances[idx]
+            task_i['schema'] = task_info_lst[idx]['schema']
+            task_i['local_inputs'] = task_info_lst[idx]['local_inputs']
 
             task_i_obj = Task(**task_i)
             validated_tasks.append(task_i_obj)
@@ -675,7 +674,10 @@ def check_task_compatibility(task_info_lst):
 
         task_elems_idx = get_task_elements_idx(downstream_tsk, upstream_tasks)
         params_idx = get_input_elements_idx(task_elems_idx, downstream_tsk, task_info_lst)
-        elements_idx.append(params_idx)
+        elements_idx.append({
+            'num_elements': num_elements,
+            'inputs': params_idx,
+        })
 
     return list(task_srt_idx), task_info_lst, elements_idx
 
@@ -684,7 +686,7 @@ def check_missing_inputs(task_info_lst, dependency_list):
 
     for deps_idx, task_info in zip(dependency_list, task_info_lst):
 
-        defined_inputs = list(task_info['inputs_local'][0].keys())
+        defined_inputs = list(task_info['local_inputs']['inputs'].keys())
         task_info['schema'].check_surplus_inputs(defined_inputs)
 
         if deps_idx:
@@ -830,14 +832,18 @@ def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
                 param_task_idx = input_task_idx
                 break
         if input_task_idx is None:
-            param_task_idx = -1
             input_task_idx = downstream_task['task_idx']
-
-        params_idx.update({
-            input_name: {
-                'task_idx': param_task_idx,
-                'elements_idx': task_elements_idx[input_task_idx],
-            }
-        })
+            params_idx.update({
+                input_name: {
+                    'input_idx': task_elements_idx[input_task_idx],
+                }
+            })
+        else:
+            params_idx.update({
+                input_name: {
+                    'task_idx': param_task_idx,
+                    'output_idx': task_elements_idx[input_task_idx],
+                }
+            })
 
     return params_idx

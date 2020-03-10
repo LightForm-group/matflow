@@ -5,6 +5,8 @@ from pathlib import Path
 from warnings import warn
 from pprint import pprint
 
+import numpy as np
+
 from matflow import CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS
 from matflow.models import CommandGroup, Command
 from matflow.jsonable import to_jsonable
@@ -104,6 +106,7 @@ def get_schema_dict(name, method, software_instance=None):
 def resolve_local_inputs(base=None, num_repeats=None, sequences=None):
     """Transform `base` and `sequences` into `input` list."""
 
+    # TODO: delete this function.
     # TODO: shouldn't need to specify nest_idx if only one sequence.
 
     # print('\nbase:')
@@ -171,6 +174,8 @@ def resolve_local_inputs(base=None, num_repeats=None, sequences=None):
 
 def combine_base_sequence(sequences, base=None):
 
+    # TODO: delete this function.
+
     # print('combine_base_sequence: sequences:')
     # pprint(sequences)
 
@@ -212,6 +217,113 @@ def combine_base_sequence(sequences, base=None):
         nested_seq_all.append(combine_list_of_dicts([base] + seq))
 
     return nested_seq_all
+
+
+def normalise_local_inputs(base=None, num_repeats=None, sequences=None):
+    'Validate and normalise task inputs.'
+
+    if num_repeats is not None and sequences is not None:
+        raise ValueError('Specify one of `num_repeats` of `sequences`.')
+
+    if base is None:
+        base = {}
+
+    nest_req = True if len(sequences) > 1 else False
+
+    prev_num_vals = None
+    prev_nest = None
+    inputs_lst = []
+    for seq in sequences:
+
+        if 'name' not in seq:
+            msg = '`name` key is required for sequence.'
+            raise ValueError(msg)
+
+        if 'vals' not in seq:
+            msg = '`vals` is required for sequence "{}"'
+            raise ValueError(msg.format(seq['name']))
+        else:
+            num_vals = len(seq['vals'])
+
+        if nest_req:
+            if 'nest_idx' not in seq:
+                msg = '`nest_idx` is required for sequence "{}"'
+                raise ValueError(msg.format(seq['name']))
+            else:
+                if seq['nest_idx'] < 0:
+                    msg = '`nest_idx` must be a positive integer or zero for sequence "{}"'
+                    raise ValueError(msg.format(seq['name']))
+        else:
+            # Set a default `nest_idx`:
+            seq['nest_idx'] = 0
+
+        nest = seq['nest_idx']
+
+        if prev_num_vals and nest == prev_nest:
+            # For same nest_idx, sequences must have the same lengths:
+            if num_vals != prev_num_vals:
+                msg = ('Sequence "{}" shares a `nest_idx` with another sequence but has '
+                       'a different number of values.')
+                raise ValueError(msg.format(seq['name']))
+
+        prev_num_vals = num_vals
+        prev_nest = nest
+        inputs_lst.append(copy.deepcopy(seq))
+
+    for in_name, in_val in base.items():
+        inputs_lst.append({
+            'name': in_name,
+            'nest_idx': -1,
+            'vals': [copy.deepcopy(in_val)],
+        })
+
+    inputs_lst.sort(key=lambda x: x['nest_idx'])
+
+    return inputs_lst
+
+
+def get_local_inputs(base=None, num_repeats=None, sequences=None):
+
+    inputs_lst = normalise_local_inputs(base, num_repeats, sequences)
+
+    lengths = [len(i['vals']) for i in inputs_lst]
+
+    total_len = len(inputs_lst[0]['vals'])
+    for idx, i in enumerate(inputs_lst[1:], 1):
+        if i['nest_idx'] > inputs_lst[idx - 1]['nest_idx']:
+            total_len *= len(i['vals'])
+
+    prev_reps = total_len
+    prev_tile = 1
+    prev_nest = None
+
+    inputs_dct = {
+        'length': total_len,
+        'inputs': {},
+    }
+
+    for idx, input_i in enumerate(inputs_lst):
+
+        if not prev_nest or input_i['nest_idx'] > prev_nest:
+            rep_i = int(prev_reps / lengths[idx])
+            tile_i = int(total_len / (lengths[idx] * rep_i))
+            prev_nest = input_i['nest_idx']
+        else:
+            rep_i = prev_reps
+            tile_i = prev_tile
+
+        inputs_dct['inputs'].update({
+            input_i['name']: {
+                'nest_idx': input_i['nest_idx'],
+                'vals': input_i['vals'],
+                'vals_idx': np.tile(np.repeat(np.arange(lengths[idx]), rep_i), tile_i)
+            }
+        })
+
+        prev_reps = rep_i
+        prev_tile = tile_i
+
+    return inputs_dct
 
 
 class TaskSchema(object):
@@ -327,7 +439,7 @@ class Task(object):
 
     def __init__(self, name, method, software_instance, task_idx, nest=None,
                  merge_priority=None, run_options=None, base=None, sequences=None,
-                 num_repeats=None, inputs_local=None, outputs=None, schema=None, status=None,
+                 num_repeats=None, local_inputs=None, outputs=None, schema=None, status=None,
                  pause=False):
 
         self.name = name
@@ -338,11 +450,10 @@ class Task(object):
         self.merge_priority = merge_priority
         self.software_instance = software_instance
         self.run_options = run_options
-        self.inputs_local = inputs_local
+        self.local_inputs = local_inputs
         self.outputs = outputs
         self.pause = pause
         self.schema = schema
-        self.inputs_local = inputs_local
 
     def __repr__(self):
         out = (
@@ -358,7 +469,7 @@ class Task(object):
         return out
 
     def __len__(self):
-        return len(self.inputs_local)
+        return self.local_inputs['length']
 
     @property
     def software(self):
@@ -394,5 +505,5 @@ class Task(object):
     def initialise_outputs(self):
         self.outputs = [
             {key: None for key in self.schema.outputs}
-            for _ in range(len(self.inputs_local))
+            for _ in range(len(self.local_inputs))
         ]
