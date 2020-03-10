@@ -40,8 +40,9 @@ with _TASK_SCHEMAS_FILE_PATH.open() as handle:
 TASK_INPUT_MAP = {}
 TASK_OUTPUT_MAP = {}
 TASK_FUNC_MAP = {}
+COMMAND_LINE_ARG_MAP = {}
 
-# Populate the task input/output maps:
+# Populate the task input/output maps (this line must be below TASK_INPUT_MAP and so on):
 from matflow.software import *
 
 # Check no two resources/machines share the same name:
