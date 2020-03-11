@@ -37,6 +37,57 @@ class CommandGroup(object):
         out += ')'
         return out
 
+    def get_formatted_commands(self, inputs_list):
+        'Format commands into strings with hpcflow variable substitutions where required.'
+
+        print('get_formatted_commands: inputs_list: {}'.format(inputs_list))
+
+        fmt_commands = []
+
+        var_names = {}
+        for command in self.commands:
+
+            fmt_opts = []
+            for opt in command.options:
+                print('looking at opt: {}'.format(opt))
+                fmt_opt = list(opt)
+                for opt_token_idx, opt_token in enumerate(fmt_opt):
+                    if opt_token in inputs_list:
+                        # Replace with an `hpcflow` variable:
+                        var_name = 'matflow_input_{}'.format(opt_token)
+                        fmt_opt[opt_token_idx] = '<<{}>>'.format(var_name)
+                        if opt_token not in var_names:
+                            var_names.update({opt_token: var_name})
+
+                fmt_opt_joined = ' '.join(fmt_opt)
+                print('adding to fmt_opts: {}'.format(fmt_opt_joined))
+
+                fmt_opts.append(fmt_opt_joined)
+
+            print('fmt_opts is: {}'.format(fmt_opts))
+
+            fmt_params = []
+            for param in command.parameters:
+                if param in inputs_list:
+                    # Replace with an `hpcflow` variable:
+                    var_name = 'matflow_input_{}'.format(param)
+                    fmt_param = '<<{}>>'.format(var_name)
+                    fmt_params.append(fmt_param)
+                    if param not in var_names:
+                        var_names.update({param: var_name})
+
+            cmd_fmt = ' '.join([command.command] + fmt_opts + fmt_params)
+
+            if command.stdin:
+                cmd_fmt += ' < {}'.format(command.stdin)
+
+            if command.stdout:
+                cmd_fmt += ' > {}'.format(command.stdout)
+
+            fmt_commands.append(cmd_fmt)
+
+        return (fmt_commands, var_names)
+
     def _write_task_executable(self, input_props, os_type, path):
 
         exec_str = []
@@ -158,144 +209,25 @@ class CommandGroup(object):
 
 
 class Command(object):
-    """Class to represent a command to be executed by a shell.
+    'Class to represent a command to be executed by a shell.'
 
-    Idea is sometimes a task will be submitted via a scheduler, in which case
-    the commands associated with the task will be embedded within a jobscript
-    file, whereas sometimes a task will be submitted directly to the shell, in
-    which case we can use the a series of subprocess.run calls to execute the
-    task. Therefore, the relevant abstraction involves a Command object, which
-    can be used in both cases.
+    def __init__(self, command, options=None, parameters=None, stdin=None, stdout=None):
 
-    Commands for generate_rve with damask are:
-
-    seeds_fromRandom -N {num_grains} -g {res_0} {res_1} {res_2} > orientation.seeds
-    geom_fromVoronoi < orientation.seeds > rve.geom
-
-    """
-
-    def __init__(self, cmd, arg_labels=None, flag_labels=None, opts=None,
-                 stdin=None, stdout=None, args=None):
-
-        self.cmd = cmd
-        self.arg_labels = arg_labels
-        self.flag_labels = flag_labels
-        self.opts = opts
+        self.command = command
+        self.options = options or []
+        self.parameters = parameters or []
         self.stdin = stdin
         self.stdout = stdout
-        self.args = args
-
-    def set_argument_inputs(self, inputs):
-        """Associate inputs to the command, where available."""
-
-        # print(f'\nset_argument_inputs')
-
-        def resolve_input(label, inputs):
-
-            if label.startswith('_file:'):
-                val_path = Path(inputs['_files'][label.split('_file:')[1]])
-                val = val_path.name
-            else:
-                val = inputs.get(k)
-
-            return val
-
-        args = None
-        flags = None
-        opts = None
-
-        if self.arg_labels:
-            args = {}
-            for k in self.arg_labels.values():
-                val = resolve_input(k, inputs)
-                args.update({k: val})
-
-        if self.flag_labels:
-            flags = {}
-            for k in self.flag_labels.values():
-                val = inputs.get(k, False)
-                flags.update({k: val})
-
-        if self.opts:
-            opts = []
-            for opt in self.opts:
-                val = resolve_input(opt, inputs)
-
-        return args, flags, opts
-
-    def prepare_execution(self, input_props):
-        """Generate a string containing the command with arguments."""
-
-        # print(f'prepare_execution.')
-        # print(f'input_props: {input_props}')
-
-        cmd_args, cmd_flags, cmd_opts = self.set_argument_inputs(input_props)
-        out = f'{self.cmd}'
-
-        # Add arguments to the command:
-        if self.arg_labels:
-
-            args = []
-            for key, lab in self.arg_labels.items():
-
-                arg_val = cmd_args.get(lab)
-                if arg_val is None:
-                    msg = ('Input for "{}" is not assigned; cannot execute '
-                           'command.'.format(lab))
-                    raise ValueError(msg)
-
-                if isinstance(arg_val, list):
-                    arg_val = ' '.join([f'{i}' for i in arg_val])
-
-                key_dash = '-' if len(key) == 1 else '--'
-                args.append(f'{key_dash}{key} {arg_val}')
-
-            out += ' ' + ' '.join(args)
-
-        if self.flag_labels:
-
-            flags = []
-            for key, lab in self.flag_labels.items():
-
-                flag_val = cmd_flags.get(lab)
-                if flag_val:
-                    key_dash = '-' if len(key) == 1 else '--'
-                    flags.append(f'{key_dash}{key}')
-
-            out += ' ' + ' '.join(flags)
-
-        if self.opts:
-
-            out += ' ' + ' '.join(cmd_opts)
-
-        # Add file redirection:
-        if self.stdin:
-            out += f' < {self.stdin}'
-
-        if self.stdout:
-            out += f' > {self.stdout}'
-
-        return out
 
     def __repr__(self):
-        out = f'{self.__class__.__name__}({self.cmd!r}'
-        if self.arg_labels:
-            out += f', arg_labels={self.arg_labels!r}'
-        if self.args:
-            out += f', args={self.args!r}'
+        out = f'{self.__class__.__name__}({self.command!r}'
+        if self.options:
+            out += f', options={self.options!r}'
+        if self.parameters:
+            out += f', parameters={self.parameters!r}'
         if self.stdin:
             out += f', stdin={self.stdin!r}'
         if self.stdout:
             out += f', stdout={self.stdout!r}'
         out += ')'
-        return out
-
-    def __str__(self):
-        out = f'{self.cmd}'
-        if self.arg_labels:
-            out += ' ' + ' '.join([f'-{i}' for i in self.arg_labels.keys()])
-        if self.stdin:
-            out += ' ' + f'< {self.stdin}'
-        if self.stdout:
-            out += ' ' + f'> {self.stdout}'
         return out

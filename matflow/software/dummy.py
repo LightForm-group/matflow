@@ -8,7 +8,7 @@ from pathlib import Path
 from textwrap import dedent
 from random import randint
 
-from matflow import TASK_INPUT_MAP, TASK_OUTPUT_MAP, TASK_FUNC_MAP
+from matflow import TASK_INPUT_MAP, TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP
 
 
 def dummy_input_map_1(path, parameter_1):
@@ -51,6 +51,16 @@ def dummy_output_map_1(path):
 
     return parameter_2
 
+
+def fmt_parameter_1(parameter_1):
+    return '{}'.format(parameter_1)
+
+
+COMMAND_LINE_ARG_MAP.update({
+    ('dummy_task_1', 'method_1', 'software_1'): {
+        'parameter_1': fmt_parameter_1,
+    }
+})
 
 TASK_INPUT_MAP.update({
     ('dummy_task_1', 'method_1', 'software_1'): {

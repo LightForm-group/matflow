@@ -13,7 +13,7 @@ from damask_parse import (read_geom, read_table,
                           write_geom, write_load_case, write_material_config)
 from damask_parse.utils import get_header
 
-from matflow import TASK_INPUT_MAP, TASK_OUTPUT_MAP, TASK_FUNC_MAP
+from matflow import TASK_INPUT_MAP, TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP
 
 
 def read_seeds_from_random(path):
@@ -561,6 +561,17 @@ def generate_geom_VTK(path, volume_element):
     geom_path = path.parent.joinpath('geom.geom')
     write_damask_geom(geom_path, volume_element)
 
+
+def fmt_size(size):
+    # TODO: # Some of these functions could also be imported from a "theme" package?
+    return ' '.join(['{}'.format(i) for i in size])
+
+
+COMMAND_LINE_ARG_MAP.update({
+    ('generate_volume_element', 'random_voronoi_from_orientations', 'damask'): {
+        'size': fmt_size,
+    }
+})
 
 TASK_INPUT_MAP.update({
     ('generate_volume_element', 'random_voronoi', 'damask'): {
