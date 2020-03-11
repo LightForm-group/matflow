@@ -18,10 +18,11 @@ task_schemas:
                   - outfile.txt
                 output: parameter_2
             commands:
-              - cmd: hpcflow dummy doSomething
-                arg_labels:
-                  infile1: _file:t1_m1_infile_1
-                  infile2: _file:t1_m1_infile_1
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, _file:t1_m1_infile_1]
+                  - [--infile2, _file:t1_m1_infile_1]
+                  - [--value, parameter_1]
           - name: software_2
             input_map:
               - inputs:
@@ -32,10 +33,11 @@ task_schemas:
                   - outfile.txt
                 output: parameter_2
             commands:
-              - cmd: hpcflow dummy doSomething
-                arg_labels:
-                  infile1: _file:t1_m1_infile_1
-                  infile2: _file:t1_m1_infile_1                  
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, _file:t1_m1_infile_1]
+                  - [--infile2, _file:t1_m1_infile_1]
+                  - [--value, parameter_1]
 
   - name: dummy_task_1_inv
     outputs:
@@ -55,10 +57,10 @@ task_schemas:
                   - outfile.txt
                 output: parameter_1
             commands:
-              - cmd: hpcflow dummy doSomething
-                arg_labels:
-                  infile1: _file:t1_m1_infile_1
-                  infile2: _file:t1_m1_infile_1
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, _file:t1_m1_infile_1]
+                  - [--infile2, _file:t1_m1_infile_1]
 
   - name: dummy_task_2
     outputs:
@@ -76,10 +78,10 @@ task_schemas:
                   - parameter_3
                 file: t2_m1_infile_1
             commands:
-              - cmd: hpcflow dummy doSomething
-                arg_labels:
-                  infile1: _file:t2_m1_infile_1
-                  infile2: _file:t2_m1_infile_1                  
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, _file:t2_m1_infile_1]
+                  - [--infile2, _file:t2_m1_infile_1]
 
   - name: dummy_task_3
     outputs:
@@ -95,10 +97,10 @@ task_schemas:
                   - parameter_5
                 file: t3_m1_infile_1
             commands:
-              - cmd: hpcflow dummy doSomething
-                arg_labels:
-                  infile1: _file:t3_m1_infile_1
-                  infile2: _file:t3_m1_infile_1 
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, _file:t3_m1_infile_1]
+                  - [--infile2, _file:t3_m1_infile_1]
 
   - name: dummy_task_4
     outputs:
@@ -120,10 +122,10 @@ task_schemas:
                 - parameter_9
                 file: t4_m1_infile_1
             commands:
-              - cmd: hpcflow dummy doSomething
-                arg_labels:
-                  infile1: _file:t4_m1_infile_1
-                  infile2: _file:t4_m1_infile_1
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, _file:t4_m1_infile_1]
+                  - [--infile2, _file:t4_m1_infile_1]
 
   - name: estimate_ODF
     version: 1
