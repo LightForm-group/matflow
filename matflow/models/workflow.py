@@ -8,7 +8,7 @@ import hickle
 import numpy as np
 
 from matflow import (CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
-                     TASK_OUTPUT_MAP, TASK_FUNC_MAP)
+                     TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP)
 from matflow.models import Task, Machine, Resource, ResourceConnection
 from matflow.models.task import (get_schema_dict, combine_base_sequence, TaskSchema,
                                  get_local_inputs)
@@ -49,7 +49,176 @@ class Workflow(object):
         self.human_id = human_id or self._make_human_id()
 
         if not self.path.is_dir():
-            self.path.mkdir()
+            self._write_directories()
+            self._write_hpcflow_workflow()
+
+    def _write_directories(self):
+        'Generate task and element directories.'
+
+        self.path.mkdir()
+
+        for elems_idx, task in zip(self.elements_idx, self.tasks):
+
+            # Generate task directory:
+            task_path = task.get_task_path(self.path)
+            task_path.mkdir()
+
+            num_elems = elems_idx['num_elements']
+            # Generate element directories:
+            for i in range(num_elems):
+                task_elem_path = task_path.joinpath(str(zeropad(i, num_elems - 1)))
+                task_elem_path.mkdir()
+
+    def _write_hpcflow_workflow(self):
+        'Generate an hpcflow workflow file to execute this workflow.'
+
+        # A task input may either be used in the input map to generate an input file,
+        # of it may be used directly as a command line argument in the command that is to
+        # be executed. In the latter case, it should be an hpcflow variable?
+
+        command_groups = []
+        variables = {}
+        for elems_idx, task in zip(self.elements_idx, self.tasks):
+
+            task_path_rel = str(task.get_task_path(self.path).name)
+
+            # Need to create variables for any inputs that are used as command line
+            # arguments:
+            # Need to form commands by concatenating cmd with arguments
+
+            # TODO: need to define how inputs that are "consumed" at the command line
+            # should be formatted. Maybe have an additional function in the relevant
+            # software module that takes the input value and returns a formatted string.
+            # Ideally, there should be a default behaviour as well...Maybe classes would
+            # help?
+
+            # TODO: What about when the values of these arguments are not yet known?
+            # .. in this case, add to the input map the creation of a file that contains
+            # .. one variable value per line. Then need to add a new variable type to
+            # .. hpcflow "file_contents", which can read these (with an expected
+            # .. multiplicity.)
+
+            # Need to substitute for hpcflow variables:
+            # - option parameters
+            # - parameters
+
+            # TODO:
+            # - create variable and corresponding variable file in element dir.
+            #   for each input that appears in a command.
+
+            # firstly, identify which inputs are included in the commands
+
+            print('\ntask.schema.command_group:')
+            pprint(task.schema.command_group)
+
+            print('elems_idx:')
+            pprint(elems_idx)
+
+            print('local inputs:')
+            pprint(task.local_inputs)
+
+            # `input_vars` are those inputs that appear in the commands:
+            fmt_commands, input_vars = task.schema.command_group.get_formatted_commands(
+                task.local_inputs['inputs'].keys())
+
+            cmd_line_inputs = {}
+            for local_in_name, local_in in task.local_inputs['inputs'].items():
+                if local_in_name in input_vars:
+
+                    print("local_in['vals_idx']: {}".format(local_in['vals_idx']))
+
+                    # Expand values for intra-task nesting:
+                    values = [local_in['vals'][i] for i in local_in['vals_idx']]
+
+                    # Format values:
+                    fmt_func = COMMAND_LINE_ARG_MAP[
+                        (task.schema.name, task.schema.method, task.schema.implementation)
+                    ][local_in_name]
+
+                    values_fmt = [fmt_func(i) for i in values]
+
+                    print('values_fmt: {}'.format(values_fmt))
+
+                    # Expand values for inter-task nesting:
+                    values_fmt_all = [
+                        values_fmt[i]
+                        for i in elems_idx['inputs'][local_in_name]['input_idx']
+                    ]
+                    cmd_line_inputs.update({local_in_name: values_fmt_all})
+
+                    print('values_fmt_all: {}'.format(values_fmt_all))
+
+                    # Create text file in each element directory for each in `input_vars`:
+                    pass
+
+            print('cmd_lin_inputs: {}'.format(cmd_line_inputs))
+
+            num_elems = elems_idx['num_elements']
+
+            task_path = task.get_task_path(self.path)
+
+            for local_in_name, var_name in input_vars.items():
+
+                var_file_name = '{}.txt'.format(var_name)
+                variables.update({
+                    var_name: {
+                        'file_contents': var_file_name,
+                    }
+                })
+
+                for i in range(num_elems):
+
+                    task_elem_path = task_path.joinpath(str(zeropad(i, num_elems - 1)))
+                    in_val = cmd_line_inputs[local_in_name][i]
+
+                    var_file_path = task_elem_path.joinpath(var_file_name)
+                    with var_file_path.open('w') as handle:
+                        handle.write(in_val + '\n')
+
+            print('fmt_commands: ')
+            pprint(fmt_commands)
+
+            print('input_vars')
+            pprint(input_vars)
+
+            # Need to write a text file for each variable command arg (it can live in
+            # elem dir).
+
+            command_sandwich = [
+                ('matflow prepare-task --task-idx={} '
+                 '--element-idx=<<element_idx>>'.format(task.task_idx))
+            ] + fmt_commands + [
+                ('matflow process-task --task-idx={} '
+                    '--element-idx=<<element_idx>>'.format(task.task_idx)),
+            ]
+
+            cmd_group = {
+                'directory': '<<{}_dirs>>'.format(task_path_rel),
+                'nesting': 'hold',
+                'commands': command_sandwich,
+            }
+            command_groups.append(cmd_group)
+
+            # Add variable for the task directories:
+            variables.update({
+                '{}_dirs'.format(task_path_rel): {
+                    'file_regex': {
+                        'pattern': '({}/[0-9]+$)'.format(task_path_rel),
+                        'is_dir': True,
+                    }
+                }
+            })
+
+        hf_data = {
+            'scheduler': 'sge',
+            'output_dir': 'output',
+            'error_dir': 'output',
+            'command_groups': command_groups,
+            'variables': variables,
+        }
+
+        print('\nhf_data:')
+        pprint(hf_data)
 
     def _validate_tasks(self, tasks):
 
@@ -638,6 +807,8 @@ def check_task_compatibility(task_info_lst):
     dependency_idx = [[np.argsort(task_srt_idx)[j] for j in dependency_idx[i]]
                       for i in task_srt_idx]
 
+    print('\nworkflow.check_task_compatibility: dependency_idx: {}'.format(dependency_idx))
+
     # Add sorted task idx:
     for idx, i in enumerate(task_info_lst):
         i['task_idx'] = idx
@@ -673,11 +844,21 @@ def check_task_compatibility(task_info_lst):
         downstream_tsk['num_elements'] = num_elements
 
         task_elems_idx = get_task_elements_idx(downstream_tsk, upstream_tasks)
+
+        print('\nworkflow.check_task_compatibility: task_elems_idx')
+        pprint(task_elems_idx)
+
         params_idx = get_input_elements_idx(task_elems_idx, downstream_tsk, task_info_lst)
         elements_idx.append({
             'num_elements': num_elements,
             'inputs': params_idx,
         })
+
+        print('\nworkflow.check_task_compatibility: local_inputs:')
+        pprint(downstream_tsk['local_inputs'])
+
+    print('\nworkflow.check_task_compatibility: elements_idx:')
+    pprint(elements_idx)
 
     return list(task_srt_idx), task_info_lst, elements_idx
 
@@ -733,9 +914,16 @@ def get_task_num_elements(downstream_task, upstream_tasks):
 
     num_elements = downstream_task['length']
 
+    print('worfklow.get_task_num_elements: num_elements: {}; num upstream: {}'.format(
+        num_elements, len(upstream_tasks)))
+
+    # print('worfklow.get_task_num_elements: upstream_tasks')
+    # pprint(upstream_tasks)
+
     if upstream_tasks:
 
         is_nesting_mixed = len(set([i['nest'] for i in upstream_tasks])) > 1
+        # print('get_task_num_elements: is_nesting_mixed: {}'.format(is_nesting_mixed))
 
         for i in upstream_tasks:
 
@@ -847,3 +1035,60 @@ def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
             })
 
     return params_idx
+
+
+"""
+--> matlab -nodisplay -nosplash -nodesktop -r -wait "run('sample_texture_from_ODF.m'); exit;"
+command: matlab
+options: [
+    [-nodisplay]
+    [-nosplash]
+    [-nodesktop]
+    [-r]
+    [-wait]
+]
+parameters: [
+    "run('sample_texture_from_ODF.m'); exit;"
+]
+
+
+command: DAMASK_spectral
+options: [
+    [--load, _file:load.load]
+    [--geom, _file:geom.geom]
+]
+parameters: []
+stdout: stdout.log
+
+
+--> geom_rescale -g rescale_grid -s rescale_size < v1.geom > v2.geom
+command: geom_rescale
+options: [
+    [-g, rescale_grid]
+    [-s, rescale_size]
+]
+parameters: []
+stdin: v1.geom
+stdout: v2.geom
+
+
+--> hpcflow dummy doSomething --infile1 infile1.txt --infile2 infile2.txt
+command: hpcflow
+subcommands: [
+    {
+        command: dummy
+        subcommands: [
+            {
+                command: doSomething
+                options: [
+                    [--infile1, infile1.txt]
+                    [--infile2, infile2.txt]
+                ]
+            }            
+        ]
+    }
+]
+
+
+
+"""
