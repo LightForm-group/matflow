@@ -6,6 +6,7 @@ from warnings import warn
 
 import hickle
 import numpy as np
+import yaml
 
 from matflow import (CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP)
@@ -184,12 +185,11 @@ class Workflow(object):
             # Need to write a text file for each variable command arg (it can live in
             # elem dir).
 
+            # TODO: need to add definition of element_idx variable?
             command_sandwich = [
-                ('matflow prepare-task --task-idx={} '
-                 '--element-idx=<<element_idx>>'.format(task.task_idx))
+                ('matflow prepare-task --task-idx={} '.format(task.task_idx))
             ] + fmt_commands + [
-                ('matflow process-task --task-idx={} '
-                    '--element-idx=<<element_idx>>'.format(task.task_idx)),
+                ('matflow process-task --task-idx={} '.format(task.task_idx)),
             ]
 
             cmd_group = {
@@ -219,6 +219,9 @@ class Workflow(object):
 
         print('\nhf_data:')
         pprint(hf_data)
+
+        with self.path.joinpath('hf.yml').open('w') as handle:
+            yaml.safe_dump(hf_data, handle)
 
     def _validate_tasks(self, tasks):
 

@@ -20,8 +20,8 @@ task_schemas:
             commands:
               - command: hpcflow dummy doSomething
                 options:
-                  - [--infile1, _file:t1_m1_infile_1]
-                  - [--infile2, _file:t1_m1_infile_1]
+                  - [--infile1, t1_m1_infile_1]
+                  - [--infile2, t1_m1_infile_1]
                   - [--value, parameter_1]
           - name: software_2
             input_map:
@@ -35,8 +35,8 @@ task_schemas:
             commands:
               - command: hpcflow dummy doSomething
                 options:
-                  - [--infile1, _file:t1_m1_infile_1]
-                  - [--infile2, _file:t1_m1_infile_1]
+                  - [--infile1, t1_m1_infile_1]
+                  - [--infile2, t1_m1_infile_1]
                   - [--value, parameter_1]
 
   - name: dummy_task_1_inv
