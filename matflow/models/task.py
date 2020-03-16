@@ -230,6 +230,8 @@ def normalise_local_inputs(base=None, num_repeats=None, sequences=None):
 
     if base is None:
         base = {}
+    if sequences is None:
+        sequences = []
 
     nest_req = True if len(sequences) > 1 else False
 
