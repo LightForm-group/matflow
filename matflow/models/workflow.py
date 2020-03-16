@@ -131,6 +131,7 @@ class Workflow(object):
                     with var_file_path.open('w') as handle:
                         handle.write(in_val + '\n')
 
+            sources = task.software_instance.get('sources', [])
             command_groups.extend([
                 {
                     'directory': '.',
@@ -143,6 +144,7 @@ class Workflow(object):
                     'directory': '<<{}_dirs>>'.format(task_path_rel),
                     'nesting': 'hold',
                     'commands': fmt_commands,
+                    'sources': sources,
                 },
                 {
                     'directory': '.',
