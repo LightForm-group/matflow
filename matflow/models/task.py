@@ -78,6 +78,9 @@ def get_schema_dict(name, method, software_instance=None):
         #     self.software_instance.get('env_post')
         # )
 
+    inputs = list(set(inputs))
+    outputs = list(set(outputs))
+
     if software_instance:
         implementation = software_instance['name']
         command_group = {
