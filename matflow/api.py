@@ -44,7 +44,10 @@ def make_workflow(profile_path, directory=None):
     # Copy profile to workflow directory:
     workflow.path.joinpath(profile_path).write_bytes(profile_path.read_bytes())
 
-    pyperclip.copy(workflow.human_id)
+    try:
+        pyperclip.copy(workflow.human_id)
+    except:
+        pass
 
     return workflow
 
