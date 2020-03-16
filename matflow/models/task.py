@@ -59,7 +59,6 @@ def get_schema_dict(name, method, software_instance=None):
     imp_ref = None
     in_map = None
     out_map = None
-    # command_group = None
     command_opt = None
 
     if match_imp_idx is not None:
@@ -71,12 +70,6 @@ def get_schema_dict(name, method, software_instance=None):
         in_map = imp_ref.get('input_map', [])
         out_map = imp_ref.get('output_map', [])
         command_opt = imp_ref.get('commands', [])
-
-        # commands = [Command(**i) for i in command_opt]
-        # command_group = CommandGroup(
-        #     commands, self.software_instance.get('env_pre'),
-        #     self.software_instance.get('env_post')
-        # )
 
     inputs = list(set(inputs))
     outputs = list(set(outputs))
