@@ -91,9 +91,19 @@ class Workflow(object):
                     values = [local_in['vals'][i] for i in local_in['vals_idx']]
 
                     # Format values:
-                    fmt_func = COMMAND_LINE_ARG_MAP[
+                    fmt_func_scope = COMMAND_LINE_ARG_MAP.get(
                         (task.schema.name, task.schema.method, task.schema.implementation)
-                    ][local_in_name]
+                    )
+                    fmt_func = None
+                    if fmt_func_scope:
+                        fmt_func = fmt_func_scope.get(local_in_name)
+
+                    if not fmt_func:
+                        # Apply some default formatting.
+                        if isinstance(values[0], list):
+                            def fmt_func(x): return ' '.join(['{}'.format(i) for i in x])
+                        else:
+                            def fmt_func(x): return '{}'.format(x)
 
                     values_fmt = [fmt_func(i) for i in values]
 
