@@ -291,16 +291,20 @@ def get_local_inputs(base=None, num_repeats=None, sequences=None):
 
     inputs_lst = normalise_local_inputs(base, num_repeats, sequences)
 
-    lengths = [len(i['vals']) for i in inputs_lst]
+    if inputs_lst:
 
-    total_len = len(inputs_lst[0]['vals'])
-    for idx, i in enumerate(inputs_lst[1:], 1):
-        if i['nest_idx'] > inputs_lst[idx - 1]['nest_idx']:
-            total_len *= len(i['vals'])
+        lengths = [len(i['vals']) for i in inputs_lst]
+        total_len = len(inputs_lst[0]['vals'])
+        for idx, i in enumerate(inputs_lst[1:], 1):
+            if i['nest_idx'] > inputs_lst[idx - 1]['nest_idx']:
+                total_len *= len(i['vals'])
 
-    prev_reps = total_len
-    prev_tile = 1
-    prev_nest = None
+        prev_reps = total_len
+        prev_tile = 1
+        prev_nest = None
+
+    else:
+        total_len = 1
 
     inputs_dct = {
         'length': total_len,
