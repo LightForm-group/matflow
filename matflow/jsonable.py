@@ -11,6 +11,7 @@ NATIVE_TYPES = (
     str,
     np.ndarray,
     np.int32,
+    np.int64,
     type(None),
 )
 
