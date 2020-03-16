@@ -61,13 +61,18 @@ class CommandGroup(object):
 
             fmt_params = []
             for param in command.parameters:
+                
+                fmt_param = param
                 if param in inputs_list:
                     # Replace with an `hpcflow` variable:
                     var_name = 'matflow_input_{}'.format(param)
                     fmt_param = '<<{}>>'.format(var_name)
-                    fmt_params.append(fmt_param)
+                    
                     if param not in var_names:
                         var_names.update({param: var_name})
+                
+                fmt_params.append(fmt_param)
+                
 
             cmd_fmt = ' '.join([command.command] + fmt_opts + fmt_params)
 
