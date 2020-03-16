@@ -439,8 +439,8 @@ class Task(object):
 
     def __init__(self, name, method, software_instance, task_idx, nest=None,
                  merge_priority=None, run_options=None, base=None, sequences=None,
-                 num_repeats=None, local_inputs=None, outputs=None, schema=None, status=None,
-                 pause=False):
+                 num_repeats=None, local_inputs=None, inputs=None, outputs=None,
+                 schema=None, status=None, pause=False):
 
         self.name = name
         self.status = status or Task.INIT_STATUS  # | 'paused' | 'complete'
@@ -451,6 +451,7 @@ class Task(object):
         self.software_instance = software_instance
         self.run_options = run_options
         self.local_inputs = local_inputs
+        self.inputs = inputs
         self.outputs = outputs
         self.pause = pause
         self.schema = schema
