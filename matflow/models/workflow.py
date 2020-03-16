@@ -73,50 +73,11 @@ class Workflow(object):
     def _write_hpcflow_workflow(self):
         'Generate an hpcflow workflow file to execute this workflow.'
 
-        # A task input may either be used in the input map to generate an input file,
-        # of it may be used directly as a command line argument in the command that is to
-        # be executed. In the latter case, it should be an hpcflow variable?
-
         command_groups = []
         variables = {}
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
             task_path_rel = str(task.get_task_path(self.path).name)
-
-            # Need to create variables for any inputs that are used as command line
-            # arguments:
-            # Need to form commands by concatenating cmd with arguments
-
-            # TODO: need to define how inputs that are "consumed" at the command line
-            # should be formatted. Maybe have an additional function in the relevant
-            # software module that takes the input value and returns a formatted string.
-            # Ideally, there should be a default behaviour as well...Maybe classes would
-            # help?
-
-            # TODO: What about when the values of these arguments are not yet known?
-            # .. in this case, add to the input map the creation of a file that contains
-            # .. one variable value per line. Then need to add a new variable type to
-            # .. hpcflow "file_contents", which can read these (with an expected
-            # .. multiplicity.)
-
-            # Need to substitute for hpcflow variables:
-            # - option parameters
-            # - parameters
-
-            # TODO:
-            # - create variable and corresponding variable file in element dir.
-            #   for each input that appears in a command.
-
-            # firstly, identify which inputs are included in the commands
-
-            print('\ntask.schema.command_group:')
-            pprint(task.schema.command_group)
-
-            print('elems_idx:')
-            pprint(elems_idx)
-
-            print('local inputs:')
-            pprint(task.local_inputs)
 
             # `input_vars` are those inputs that appear in the commands:
             fmt_commands, input_vars = task.schema.command_group.get_formatted_commands(
@@ -125,8 +86,6 @@ class Workflow(object):
             cmd_line_inputs = {}
             for local_in_name, local_in in task.local_inputs['inputs'].items():
                 if local_in_name in input_vars:
-
-                    print("local_in['vals_idx']: {}".format(local_in['vals_idx']))
 
                     # Expand values for intra-task nesting:
                     values = [local_in['vals'][i] for i in local_in['vals_idx']]
@@ -138,21 +97,12 @@ class Workflow(object):
 
                     values_fmt = [fmt_func(i) for i in values]
 
-                    print('values_fmt: {}'.format(values_fmt))
-
                     # Expand values for inter-task nesting:
                     values_fmt_all = [
                         values_fmt[i]
                         for i in elems_idx['inputs'][local_in_name]['input_idx']
                     ]
                     cmd_line_inputs.update({local_in_name: values_fmt_all})
-
-                    print('values_fmt_all: {}'.format(values_fmt_all))
-
-                    # Create text file in each element directory for each in `input_vars`:
-                    pass
-
-            print('cmd_lin_inputs: {}'.format(cmd_line_inputs))
 
             num_elems = elems_idx['num_elements']
 
@@ -163,10 +113,15 @@ class Workflow(object):
                 var_file_name = '{}.txt'.format(var_name)
                 variables.update({
                     var_name: {
-                        'file_contents': var_file_name,
+                        'file_contents': {
+                            'path': var_file_name,
+                            'expected_multiplicity': 1,
+                        },
+                        'value': '{}',
                     }
                 })
 
+                # Create text file in each element directory for each in `input_vars`:
                 for i in range(num_elems):
 
                     task_elem_path = task_path.joinpath(str(zeropad(i, num_elems - 1)))
@@ -176,28 +131,27 @@ class Workflow(object):
                     with var_file_path.open('w') as handle:
                         handle.write(in_val + '\n')
 
-            print('fmt_commands: ')
-            pprint(fmt_commands)
-
-            print('input_vars')
-            pprint(input_vars)
-
-            # Need to write a text file for each variable command arg (it can live in
-            # elem dir).
-
-            # TODO: need to add definition of element_idx variable?
-            command_sandwich = [
-                ('matflow prepare-task --task-idx={} '.format(task.task_idx))
-            ] + fmt_commands + [
-                ('matflow process-task --task-idx={} '.format(task.task_idx)),
-            ]
-
-            cmd_group = {
-                'directory': '<<{}_dirs>>'.format(task_path_rel),
-                'nesting': 'hold',
-                'commands': command_sandwich,
-            }
-            command_groups.append(cmd_group)
+            command_groups.extend([
+                {
+                    'directory': '.',
+                    'nesting': 'hold',
+                    'commands': [
+                        'matflow prepare-task --task-idx={}'.format(task.task_idx)
+                    ]
+                },
+                {
+                    'directory': '<<{}_dirs>>'.format(task_path_rel),
+                    'nesting': 'hold',
+                    'commands': fmt_commands,
+                },
+                {
+                    'directory': '.',
+                    'nesting': 'hold',
+                    'commands': [
+                        'matflow process-task --task-idx={}'.format(task.task_idx)
+                    ]
+                },
+            ])
 
             # Add variable for the task directories:
             variables.update({
@@ -205,7 +159,9 @@ class Workflow(object):
                     'file_regex': {
                         'pattern': '({}/[0-9]+$)'.format(task_path_rel),
                         'is_dir': True,
-                    }
+                        'group': 0,
+                    },
+                    'value': '{}',
                 }
             })
 
@@ -217,10 +173,7 @@ class Workflow(object):
             'variables': variables,
         }
 
-        print('\nhf_data:')
-        pprint(hf_data)
-
-        with self.path.joinpath('hf.yml').open('w') as handle:
+        with self.path.joinpath('1.hf.yml').open('w') as handle:
             yaml.safe_dump(hf_data, handle)
 
     def _validate_tasks(self, tasks):
@@ -247,11 +200,13 @@ class Workflow(object):
             schema_dict = get_schema_dict(task['name'], task['method'], software_instance)
             schema = TaskSchema(**schema_dict)
 
-            local_inputs = get_local_inputs(
-                base=task.get('base'),
-                num_repeats=task.get('num_repeats'),
-                sequences=task.get('sequences'),
-            )
+            local_inputs = task.get('local_inputs')
+            if local_inputs is None:
+                local_inputs = get_local_inputs(
+                    base=task.get('base'),
+                    num_repeats=task.get('num_repeats'),
+                    sequences=task.get('sequences'),
+                )
 
             task_info_lst.append({
                 'name': task['name'],
@@ -263,8 +218,6 @@ class Workflow(object):
                 'schema': schema,
                 'local_inputs': local_inputs,
             })
-            # TODO: just need local inputs names passed here (and for
-            # `check_surplus_inputs` call above), not values as well.
 
         task_srt_idx, task_info_lst, elements_idx = check_task_compatibility(
             task_info_lst)
@@ -277,7 +230,7 @@ class Workflow(object):
 
             task_i.pop('base', None)
             task_i.pop('sequences', None)
-            task_i.pop('software')
+            task_i.pop('software', None)
 
             task_i['nest'] = task_info_lst[idx]['nest']
             task_i['task_idx'] = task_info_lst[idx]['task_idx']
@@ -781,6 +734,98 @@ class Workflow(object):
         # Reassign task inputs:
         cur_task.inputs = expanded_ins
 
+    def prepare_task(self, task_idx):
+        'Prepare inputs and run input maps.'
+
+        task = self.tasks[task_idx]
+        elems_idx = self.elements_idx[task_idx]
+        num_elems = elems_idx['num_elements']
+        inputs = [{} for _ in range(num_elems)]
+
+        for input_name, inputs_idx in elems_idx['inputs'].items():
+            task_idx = inputs_idx.get('task_idx')
+            if task_idx is not None:
+                # Input values should be copied from a previous task's `outputs`
+                prev_task = self.tasks[task_idx]
+                prev_outs = prev_task.outputs
+
+                if not prev_outs:
+                    msg = ('Task "{}" does not have the outputs required to parametrise '
+                           'the current task: "{}".')
+                    raise ValueError(msg.format(prev_task.name, task.name))
+
+                values_all = [prev_outs[i][input_name] for i in inputs_idx['output_idx']]
+
+            else:
+                # Input values should be copied from this task's `local_inputs`
+
+                # Expand values for intra-task nesting:
+                local_in = task.local_inputs['inputs'][input_name]
+                values = [local_in['vals'][i] for i in local_in['vals_idx']]
+
+                # Expand values for inter-task nesting:
+                values_all = [values[i] for i in inputs_idx['input_idx']]
+
+            for element, val in zip(inputs, values_all):
+                element.update({input_name: val})
+
+        task.inputs = inputs
+
+        in_map_lookup = TASK_INPUT_MAP[(task.name, task.method, task.software)]
+        task_path = task.get_task_path(self.path)
+        for elem_idx, elem_inputs in zip(range(num_elems), task.inputs):
+
+            task_elem_path = task_path.joinpath(str(zeropad(elem_idx, num_elems - 1)))
+
+            # For each input file to be written, invoke the function:
+            for in_map in task.schema.input_map:
+
+                # Filter only those inputs required for this file:
+                in_map_inputs = {
+                    key: val for key, val in elem_inputs.items()
+                    if key in in_map['inputs']
+                }
+                file_path = task_elem_path.joinpath(in_map['file'])
+
+                # Run input map to generate required input files:
+                func = in_map_lookup[in_map['file']]
+                func(path=file_path, **in_map_inputs)
+
+        self.save_state()
+
+    def process_task(self, task_idx):
+        'Process outputs from an executed task: run output map and save outputs.'
+
+        task = self.tasks[task_idx]
+        elems_idx = self.elements_idx[task_idx]
+        num_elems = elems_idx['num_elements']
+        outputs = [{} for _ in range(num_elems)]
+
+        # For this task, get the output map function lookup:
+        out_map_lookup = TASK_OUTPUT_MAP[(task.name, task.method, task.software)]
+        task_path = task.get_task_path(self.path)
+
+        for elem_idx in range(num_elems):
+
+            task_elem_path = task_path.joinpath(str(zeropad(elem_idx, num_elems - 1)))
+
+            # For each output to be parsed, invoke the function:
+            for out_map in task.schema.output_map:
+
+                # Filter only those file paths required for this output:
+                file_paths = []
+                for i in out_map['files']:
+                    out_file_path = task_elem_path.joinpath(i)
+                    file_paths.append(out_file_path)
+
+                func = out_map_lookup[out_map['output']]
+                output = func(*file_paths)
+                outputs[elem_idx][out_map['output']] = output
+
+        task.outputs = outputs
+
+        self.save_state()
+
 
 def check_task_compatibility(task_info_lst):
     'Check workflow has no incompatible tasks.'
@@ -810,8 +855,6 @@ def check_task_compatibility(task_info_lst):
     task_info_lst = [task_info_lst[i] for i in task_srt_idx]
     dependency_idx = [[np.argsort(task_srt_idx)[j] for j in dependency_idx[i]]
                       for i in task_srt_idx]
-
-    print('\nworkflow.check_task_compatibility: dependency_idx: {}'.format(dependency_idx))
 
     # Add sorted task idx:
     for idx, i in enumerate(task_info_lst):
@@ -849,20 +892,11 @@ def check_task_compatibility(task_info_lst):
 
         task_elems_idx = get_task_elements_idx(downstream_tsk, upstream_tasks)
 
-        print('\nworkflow.check_task_compatibility: task_elems_idx')
-        pprint(task_elems_idx)
-
         params_idx = get_input_elements_idx(task_elems_idx, downstream_tsk, task_info_lst)
         elements_idx.append({
             'num_elements': num_elements,
             'inputs': params_idx,
         })
-
-        print('\nworkflow.check_task_compatibility: local_inputs:')
-        pprint(downstream_tsk['local_inputs'])
-
-    print('\nworkflow.check_task_compatibility: elements_idx:')
-    pprint(elements_idx)
 
     return list(task_srt_idx), task_info_lst, elements_idx
 
@@ -918,16 +952,9 @@ def get_task_num_elements(downstream_task, upstream_tasks):
 
     num_elements = downstream_task['length']
 
-    print('worfklow.get_task_num_elements: num_elements: {}; num upstream: {}'.format(
-        num_elements, len(upstream_tasks)))
-
-    # print('worfklow.get_task_num_elements: upstream_tasks')
-    # pprint(upstream_tasks)
-
     if upstream_tasks:
 
         is_nesting_mixed = len(set([i['nest'] for i in upstream_tasks])) > 1
-        # print('get_task_num_elements: is_nesting_mixed: {}'.format(is_nesting_mixed))
 
         for i in upstream_tasks:
 

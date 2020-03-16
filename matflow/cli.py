@@ -31,8 +31,24 @@ def make(profile, directory=None):
 @click.argument('directory', type=click.Path(exists=True))
 def proceed(directory):
     'Start/continue a workflow.'
-    print('matflow.cli.proceed')
+    print('matflow.cli.proceed', flush=True)
     api.proceed(directory)
+
+
+@cli.command()
+@click.option('--task-idx', '-t', type=click.INT, required=True)
+@click.option('--directory', '-d', type=click.Path(exists=True))
+def prepare_task(task_idx, directory=None):
+    print('matflow.cli.prepare_task', flush=True)
+    api.prepare_task(task_idx, directory)
+
+
+@cli.command()
+@click.option('--task-idx', '-t', type=click.INT, required=True)
+@click.option('--directory', '-d', type=click.Path(exists=True))
+def process_task(task_idx, directory=None):
+    print('matflow.cli.process_task', flush=True)
+    api.process_task(task_idx, directory)
 
 
 if __name__ == '__main__':
