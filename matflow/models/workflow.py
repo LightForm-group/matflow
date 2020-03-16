@@ -773,7 +773,7 @@ class Workflow(object):
 
         task.inputs = inputs
 
-        in_map_lookup = TASK_INPUT_MAP[(task.name, task.method, task.software)]
+        in_map_lookup = TASK_INPUT_MAP.get((task.name, task.method, task.software))
         task_path = task.get_task_path(self.path)
         for elem_idx, elem_inputs in zip(range(num_elems), task.inputs):
 
