@@ -40,8 +40,6 @@ class CommandGroup(object):
     def get_formatted_commands(self, inputs_list):
         'Format commands into strings with hpcflow variable substitutions where required.'
 
-        print('get_formatted_commands: inputs_list: {}'.format(inputs_list))
-
         fmt_commands = []
 
         var_names = {}
@@ -49,7 +47,6 @@ class CommandGroup(object):
 
             fmt_opts = []
             for opt in command.options:
-                print('looking at opt: {}'.format(opt))
                 fmt_opt = list(opt)
                 for opt_token_idx, opt_token in enumerate(fmt_opt):
                     if opt_token in inputs_list:
@@ -60,11 +57,7 @@ class CommandGroup(object):
                             var_names.update({opt_token: var_name})
 
                 fmt_opt_joined = ' '.join(fmt_opt)
-                print('adding to fmt_opts: {}'.format(fmt_opt_joined))
-
                 fmt_opts.append(fmt_opt_joined)
-
-            print('fmt_opts is: {}'.format(fmt_opts))
 
             fmt_params = []
             for param in command.parameters:
