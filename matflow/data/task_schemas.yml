@@ -226,11 +226,11 @@ task_schemas:
             outputs:
               - microstructure_seeds
             commands:
-              - cmd: seeds_fromRandom
+              - command: seeds_fromRandom
                 stdout: positions.txt
-                arg_labels: 
-                  N: num_grains
-                  g: grid_size           
+                options: 
+                  - [-N, num_grains]
+                  - [-g, grid_size]       
             output_map:
               - files: [positions.txt]
                 output: microstructure_seeds
@@ -240,6 +240,41 @@ task_schemas:
     outputs:
       - volume_element
     methods:
+      - name: random_voronoi
+        version: 1
+        notes: >
+          In this method we use the random orientations that already exist in
+          microstructure_seeds.
+        inputs:
+          - microstructure_seeds
+          - size
+        implementations:
+          - name: damask
+            inputs:
+              - rescale_size
+              - rescale_grid          
+            version: 1
+            input_map:
+              - inputs:
+                  - microstructure_seeds
+                file: orientation.seeds
+            output_map:
+              - files:
+                  - volume_element.geom
+                output: volume_element
+            commands:
+              - command: geom_fromVoronoiTessellation
+                stdin: orientation.seeds
+                stdout: volume_element_initial.geom 
+                options:
+                  - [-s, size]
+              - command: geom_rescale
+                stdin: volume_element_initial.geom
+                stdout: volume_element.geom 
+                options:
+                  - [-g, rescale_grid]
+                  - [-s, rescale_size]
+
       - name: random_voronoi_from_orientations      
         version: 1
         notes: >
@@ -255,7 +290,6 @@ task_schemas:
             inputs:
               - rescale_size
               - rescale_grid
-              - canvas_grid
             input_map:
               - inputs:
                   - microstructure_seeds
@@ -266,48 +300,18 @@ task_schemas:
                   - volume_element.geom
                 output: volume_element
             commands:
-              - cmd: geom_fromVoronoiTessellation -o 0.0 0.0 0.0
+              - command: geom_fromVoronoiTessellation
                 stdin: orientation.seeds
                 stdout: volume_element_initial.geom 
-                arg_labels:
-                  s: size
-              - cmd: geom_rescale
+                options:
+                  - [-s, size]
+              - command: geom_rescale
                 stdin: volume_element_initial.geom
-                stdout: volume_element_rescaled.geom
-                arg_labels:
-                  g: rescale_grid
-                  s: rescale_size
-              - cmd: geom_canvas
-                stdin: volume_element_rescaled.geom
-                stdout: volume_element.geom
-                arg_labels:
-                  g: canvas_grid                  
-      - name: random_voronoi
-        version: 1
-        notes: >
-          In this method we use the random orientations that already exist in
-          microstructure_seeds.
-        inputs:
-          - microstructure_seeds
-          - size
-        implementations:
-          - name: damask
-            version: 1
-            input_map:
-              - inputs:
-                  - microstructure_seeds
-                file: orientation.seeds
-            output_map:
-              - files:
-                  - volume_element.geom
-                output: volume_element
-            commands:
-              - cmd: geom_fromVoronoiTessellation
-                stdin: orientation.seeds
                 stdout: volume_element.geom 
-                arg_labels:
-                  s: size
-  
+                options:
+                  - [-g, rescale_grid]
+                  - [-s, rescale_size]
+
   - name: generate_load_case
     version: 1
     inputs:
@@ -349,14 +353,16 @@ task_schemas:
                   - volume_element
                 file: geom.vtk
             commands:
-              - cmd: geom_check geom.geom
+              - command: geom_check
+                parameters: [geom.geom]
 
   - name: simulate_volume_element_loading
     version: 1
     inputs: 
-      - load_case
       - volume_element
       - material_properties
+    outputs:
+      - volume_element_response
     methods:
       - name: CP_FFT
         version: 1
@@ -369,9 +375,6 @@ task_schemas:
                   - volume_element
                 file: material.config
               - inputs:
-                  - load_case
-                file: load.load
-              - inputs:
                   - volume_element
                 file: geom.geom
             output_map:
@@ -379,21 +382,25 @@ task_schemas:
                   - geom_load.txt
                 output: volume_element_response
             commands:
-              - cmd: DAMASK_spectral
-                arg_labels:
-                  l: _file:load.load
-                  g: _file:geom.geom
+              - command: DAMASK_spectral
+                options:
+                  - [--load, load.load]
+                  - [--geom, geom.geom]
                 stdout: stdout.log
-              # - cmd: postResults --cr "f,p" --co "totalshear" geom_load.spectralOut
-              - cmd: postResults --dir . --cr "f,p" geom_load.spectralOut
-              - cmd: addCauchy geom_load.txt
-              - cmd: addStrainTensors --logarithmic --left geom_load.txt
-              - cmd: addMises --stress "Cauchy" --strain "ln(V)" geom_load.txt
-              # - cmd: postResults --dir . --cr "f,p" --co "totalshear" --range 160 160 1 --increments --split --separation "x,y,z" geom_load.spectralOut
-              # - cmd: addCauchy geom_load_inc160.txt
-              # - cmd: addStrainTensors --logarithmic --left geom_load_inc160.txt
-              # - cmd: addMises --stress "Cauchy" --strain "ln(V)" geom_load_inc160.txt
-              # - cmd: vtk_rectilinearGrid geom_load_inc160.txt
-              # - cmd: vtk_addRectilinearGridData --data "Mises(Cauchy),Mises(ln(V))" --vtk "geom_load_inc160_pos(cell).vtr" geom_load_inc160.txt
-              # - cmd: addDisplacement --nodal geom_load_inc160.txt
-              # - cmd: vtk_addRectilinearGridData --data "fluct(f).pos,avg(f).pos" --vtk "geom_load_inc160_pos(cell).vtr" geom_load_inc160_nodal.txt
+              - command: postResults
+                options: 
+                  - [--dir, "."]
+                  - [--cr, "f,p"]
+                parameters: [geom_load.spectralOut]
+              - command: addCauchy
+                parameters: [geom_load.txt]
+              - command: addStrainTensors
+                options:
+                  - [--logarithmic]
+                  - [--left]
+                parameters: [geom_load.txt]
+              - command: addMises
+                options:
+                  - [--stress, '"Cauchy"']
+                  - [--strain, '"ln(V)"']
+                parameters: [geom_load.txt]
