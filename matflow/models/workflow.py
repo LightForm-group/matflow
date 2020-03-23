@@ -25,7 +25,7 @@ class Workflow(object):
 
     def __init__(self, tasks, machines, resources, resource_conns, stage_directory=None,
                  human_id=None, status=None, machine_name=None, human_name=None,
-                 extend=None):
+                 extend=None, viewer=False, profile_str=None):
 
         self.human_name = human_name or ''
         self._extend_paths = [str(Path(i).resolve())
@@ -36,6 +36,7 @@ class Workflow(object):
             machines, resources, resource_conns)
 
         self.machine_name = machine_name or CURRENT_MACHINE
+        self.profile_str = profile_str
 
         try:
             self.resource_name = self._get_resource_name()
@@ -49,7 +50,7 @@ class Workflow(object):
         self.status = status or Workflow.INIT_STATUS  # | 'waiting' | 'complete'
         self.human_id = human_id or self._make_human_id()
 
-        if not self.path.is_dir():
+        if not self.path.is_dir() and not viewer:
             self._write_directories()
             self._write_hpcflow_workflow()
 
@@ -410,9 +411,12 @@ class Workflow(object):
             hickle.dump(to_jsonable(self), handle)
 
     @classmethod
-    def load_state(cls, path):
+    def load_state(cls, path, viewer=False, full_path=False):
         """Load state of workflow from an HDF5 file."""
-        with Path(path).joinpath('workflow.hdf5').open() as handle:
+        path = Path(path)
+        if not full_path:
+            path = path.joinpath('workflow.hdf5')
+        with path.open() as handle:
             obj_json = hickle.load(handle)
 
         extend = None
@@ -432,7 +436,11 @@ class Workflow(object):
             'human_name': obj_json['human_name'],
             'human_id': obj_json['human_id'],
             'status': obj_json['status'],
+            'profile_str': obj_json['profile_str'],
         }
+        if viewer:
+            obj.update({'viewer': True})
+
         return cls(**obj)
 
     def proceed(self):

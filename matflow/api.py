@@ -35,10 +35,14 @@ def make_workflow(profile_path, directory=None):
     stage_dir = Path(directory or '').resolve()
     workflow_dict = parse_workflow_profile(profile_path)
 
+    with profile_path.open('r') as handle:
+        profile_str = handle.read()
+
     # print('workflow_dict:')
     # pprint(workflow_dict)
 
-    workflow = Workflow(**workflow_dict, stage_directory=stage_dir)
+    workflow = Workflow(**workflow_dict, stage_directory=stage_dir,
+                        profile_str=profile_str)
     workflow.save_state()
 
     # Copy profile to workflow directory:
@@ -52,10 +56,11 @@ def make_workflow(profile_path, directory=None):
     return workflow
 
 
-def load_workflow(directory):
+def load_workflow(directory, viewer=False, full_path=False):
 
-    project_dir = Path(directory or '').resolve()
-    workflow = Workflow.load_state(project_dir)
+    path = Path(directory or '').resolve()
+    workflow = Workflow.load_state(path, viewer, full_path)
+
     return workflow
 
 
