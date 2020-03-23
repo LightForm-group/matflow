@@ -30,7 +30,7 @@ def read_seeds_from_random(path):
         if ln.startswith('randomSeed'):
             random_seed = int(ln.split()[1])
 
-    data = np.loadtxt(path, skiprows=(num_header_lns + 1))
+    data = np.loadtxt(path, skiprows=(num_header_lns + 1), ndmin=2)
     position = data[:, 0:3]
     eulers = data[:, 3:6]
 

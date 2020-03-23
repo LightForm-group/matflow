@@ -286,6 +286,9 @@ task_schemas:
           - size
         implementations:
           - name: damask
+            inputs: 
+              - rescale_size            
+              - rescale_grid
             version: 1
             inputs:
               - rescale_size
