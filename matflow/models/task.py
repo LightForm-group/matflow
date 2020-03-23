@@ -475,6 +475,12 @@ class Task(object):
         return self.local_inputs['length']
 
     @property
+    def name_friendly(self):
+        'Capitalise and remove underscores'
+        name = '{}{}'.format(self.name[0].upper(), self.name[1:]).replace('_', ' ')
+        return name
+
+    @property
     def software(self):
         return self.software_instance['name']
 
