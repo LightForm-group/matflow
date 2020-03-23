@@ -354,7 +354,7 @@ task_schemas:
             input_map: 
               - inputs:
                   - volume_element
-                file: geom.vtk
+                file: geom.geom
             commands:
               - command: geom_check
                 parameters: [geom.geom]

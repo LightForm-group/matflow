@@ -557,11 +557,6 @@ def read_damask_table(path):
     return table_dat
 
 
-def generate_geom_VTK(path, volume_element):
-    geom_path = path.parent.joinpath('geom.geom')
-    write_damask_geom(geom_path, volume_element)
-
-
 def fmt_size(size):
     # TODO: # Some of these functions could also be imported from a "theme" package?
     return ' '.join(['{}'.format(i) for i in size])
@@ -586,7 +581,7 @@ TASK_INPUT_MAP.update({
         'material.config': write_damask_material,
     },
     ('visualise_volume_element', 'VTK', 'damask'): {
-        'geom.vtk': generate_geom_VTK,
+        'geom.geom': write_damask_geom,
     },
 })
 
