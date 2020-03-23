@@ -761,6 +761,7 @@ class Workflow(object):
         elems_idx = self.elements_idx[task_idx]
         num_elems = elems_idx['num_elements']
         inputs = [{} for _ in range(num_elems)]
+        files = [{} for _ in range(num_elems)]
 
         for input_name, inputs_idx in elems_idx['inputs'].items():
             task_idx = inputs_idx.get('task_idx')
@@ -807,9 +808,17 @@ class Workflow(object):
                 }
                 file_path = task_elem_path.joinpath(in_map['file'])
 
+                # TODO: check file_path exists, unit test this as well.
+
                 # Run input map to generate required input files:
                 func = in_map_lookup[in_map['file']]
                 func(path=file_path, **in_map_inputs)
+
+                # Save generated file as string in workflow:
+                with file_path.open('r') as handle:
+                    files[elem_idx].update({in_map['file']: handle.read()})
+
+        task.files = files
 
         self.save_state()
 
@@ -837,6 +846,10 @@ class Workflow(object):
                 for i in out_map['files']:
                     out_file_path = task_elem_path.joinpath(i)
                     file_paths.append(out_file_path)
+
+                    # Save generated file as string in workflow:
+                    with out_file_path.open('r') as handle:
+                        task.files[elem_idx].update({i: handle.read()})
 
                 func = out_map_lookup[out_map['output']]
                 output = func(*file_paths)

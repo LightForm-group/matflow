@@ -442,7 +442,7 @@ class Task(object):
     def __init__(self, name, method, software_instance, task_idx, nest=None,
                  merge_priority=None, run_options=None, base=None, sequences=None,
                  num_repeats=None, local_inputs=None, inputs=None, outputs=None,
-                 schema=None, status=None, pause=False):
+                 schema=None, status=None, pause=False, files=None):
 
         self.name = name
         self.status = status or Task.INIT_STATUS  # | 'paused' | 'complete'
@@ -457,6 +457,7 @@ class Task(object):
         self.outputs = outputs
         self.pause = pause
         self.schema = schema
+        self.files = files
 
     def __repr__(self):
         out = (
