@@ -13,7 +13,13 @@ from damask_parse import (read_geom, read_table,
                           write_geom, write_load_case, write_material_config)
 from damask_parse.utils import get_header
 
-from matflow import TASK_INPUT_MAP, TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP
+from matflow import (
+    TASK_INPUT_MAP,
+    TASK_OUTPUT_MAP,
+    TASK_FUNC_MAP,
+    COMMAND_LINE_ARG_MAP,
+    TASK_OUTPUT_FILES_MAP
+)
 
 
 def read_seeds_from_random(path):
@@ -598,6 +604,12 @@ TASK_OUTPUT_MAP.update({
     ('simulate_volume_element_loading', 'CP_FFT', 'damask'): {
         'volume_element_response': read_damask_table,
     }
+})
+
+TASK_OUTPUT_FILES_MAP.update({
+    ('visualise_volume_element', 'VTK', 'damask'): {
+        '__file__VTR_file': 'geom.vtr',
+    },
 })
 
 TASK_FUNC_MAP.update({

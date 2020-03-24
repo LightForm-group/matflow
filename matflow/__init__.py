@@ -41,6 +41,7 @@ TASK_INPUT_MAP = {}
 TASK_OUTPUT_MAP = {}
 TASK_FUNC_MAP = {}
 COMMAND_LINE_ARG_MAP = {}
+TASK_OUTPUT_FILES_MAP = {}
 
 # Populate the task input/output maps (this line must be below TASK_INPUT_MAP and so on):
 from matflow.software import *

@@ -9,7 +9,8 @@ import numpy as np
 import yaml
 
 from matflow import (CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
-                     TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP)
+                     TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP,
+                     TASK_OUTPUT_FILES_MAP)
 from matflow.models import Task, Machine, Resource, ResourceConnection
 from matflow.models.task import (get_schema_dict, combine_base_sequence, TaskSchema,
                                  get_local_inputs)
@@ -792,7 +793,8 @@ class Workflow(object):
 
         task.inputs = inputs
 
-        in_map_lookup = TASK_INPUT_MAP.get((task.name, task.method, task.software))
+        schema_id = (task.name, task.method, task.software)
+        in_map_lookup = TASK_INPUT_MAP.get(schema_id)
         task_path = task.get_task_path(self.path)
         for elem_idx, elem_inputs in zip(range(num_elems), task.inputs):
 
@@ -830,8 +832,8 @@ class Workflow(object):
         num_elems = elems_idx['num_elements']
         outputs = [{} for _ in range(num_elems)]
 
-        # For this task, get the output map function lookup:
-        out_map_lookup = TASK_OUTPUT_MAP[(task.name, task.method, task.software)]
+        schema_id = (task.name, task.method, task.software)
+        out_map_lookup = TASK_OUTPUT_MAP.get(schema_id)
         task_path = task.get_task_path(self.path)
 
         for elem_idx in range(num_elems):
@@ -854,6 +856,19 @@ class Workflow(object):
                 func = out_map_lookup[out_map['output']]
                 output = func(*file_paths)
                 outputs[elem_idx][out_map['output']] = output
+
+            # Save output files specified explicitly as outputs:
+            for output_name in task.schema.outputs:
+                if output_name.startswith('__file__'):
+                    file_name = TASK_OUTPUT_FILES_MAP[schema_id].get(output_name)
+                    if not file_name:
+                        msg = 'Output file map missing for output name: "{}"'
+                        raise ValueError(msg.format(output_name))
+                    out_file_path = task_elem_path.joinpath(file_name)
+
+                    # Save file in workflow:
+                    with out_file_path.open('r') as handle:
+                        outputs[elem_idx][output_name] = handle.read()
 
         task.outputs = outputs
 

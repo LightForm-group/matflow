@@ -143,14 +143,14 @@ task_schemas:
       - name: from_CTF_file
         version: 1
         inputs: 
-          - _file:CTF_file_path
+          - __file__CTF_file
           - rotation_angle
         implementations:
           - name: matlab_mtex
             version: 1
             input_map:
               - inputs:
-                  - _file:CTF_file_path
+                  - __file__CTF_file
                   - rotation_angle
                 file: estimate_ODF_from_CTF.m
             commands:
@@ -347,6 +347,8 @@ task_schemas:
       - volume_element
     methods:
       - name: VTK
+        outputs:
+          - __file__VTR_file
         version: 1
         implementations:
           - name: damask
