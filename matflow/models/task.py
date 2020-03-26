@@ -103,19 +103,19 @@ class Task(object):
         if num_repeats is not None and sequences is not None:
             raise ValueError('Specify one of `num_repeats` of `sequences`.')
 
-        print('Task._resolve_inputs: ')
+        # print('Task._resolve_inputs: ')
 
-        print('base')
-        pprint(base)
+        # print('base')
+        # pprint(base)
 
-        print('num_repeats')
-        pprint(num_repeats)
+        # print('num_repeats')
+        # pprint(num_repeats)
 
-        print('sequences')
-        pprint(sequences)
+        # print('sequences')
+        # pprint(sequences)
 
-        print('self.schema')
-        pprint(self.schema)
+        # print('self.schema')
+        # pprint(self.schema)
 
         if base is None:
             base = {}
@@ -134,8 +134,8 @@ class Task(object):
             # Check equal `nest_idx` sequences have the same number of `vals`
             num_vals_map = {}
             for seq in sequences:
-                print('seq: ')
-                pprint(seq)
+                # print('seq: ')
+                # pprint(seq)
                 prev_num_vals = num_vals_map.get(seq['nest_idx'])
                 cur_num_vals = len(seq['vals'])
                 if prev_num_vals is None:
@@ -156,8 +156,8 @@ class Task(object):
 
             out = combine_base_sequence(sequences, base)
 
-            print('out')
-            pprint(out)
+            # print('out')
+            # pprint(out)
 
             return out
 

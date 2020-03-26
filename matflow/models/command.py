@@ -144,7 +144,7 @@ class CommandGroup(object):
             # run_cmd = f'{wsl_wrapper} "/bin/bash -ic \'cd {task_path}; source ~/init_damask.sh; {run_cmd}\'"'
             run_cmd = f'{wsl_wrapper} "{run_cmd}"'
 
-        print(f'prepare_direct_execution: run_cmd: {run_cmd}')
+        # print(f'prepare_direct_execution: run_cmd: {run_cmd}')
 
         out = {
             'run_cmd': run_cmd,

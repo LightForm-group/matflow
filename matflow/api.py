@@ -35,8 +35,8 @@ def make_workflow(profile_path, directory=None):
     stage_dir = Path(directory or '').resolve()
     workflow_dict = parse_workflow_profile(profile_path)
 
-    print('workflow_dict:')
-    pprint(workflow_dict)
+    # print('workflow_dict:')
+    # pprint(workflow_dict)
 
     workflow = Workflow(**workflow_dict, stage_directory=stage_dir)
     workflow.save_state()

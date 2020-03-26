@@ -254,7 +254,7 @@ class Workflow(object):
     def proceed(self):
         'Start or continue the Workflow task execution.'
 
-        print('Workflow.proceed')
+        # print('Workflow.proceed')
 
         # If task is remote or scheduled, instead of executing the commands, generate
         # an hpcflow project, transfer to remote location and submit.
@@ -263,11 +263,11 @@ class Workflow(object):
         # if successful, can continue with next task. Otherwise, end.
 
         allpaths = list(self.path.glob('*'))
-        print(f'allpaths: {allpaths}')
+        # print(f'allpaths: {allpaths}')
 
         for task_idx, task in enumerate(self.tasks):
 
-            print(f'task_idx: {task_idx}')
+            # print(f'task_idx: {task_idx}')
 
             if task.status == 'complete':
                 continue
@@ -320,16 +320,16 @@ class Workflow(object):
                         args = copy.deepcopy(input_props)
                         output = TASK_FUNC_MAP[(task.name, task.method)](**args)
 
-                        print('got output from func map: ')
-                        pprint(output)
+                        # print('got output from func map: ')
+                        # pprint(output)
 
                         if output is not None:
                             # Assume for now that a function outputs only one
                             # "object/label":
                             task.outputs[element_idx][task.schema.outputs[0]] = output
 
-                            print('updated task output:')
-                            pprint(task.outputs)
+                            # print('updated task output:')
+                            # pprint(task.outputs)
 
                     elif task.schema.input_map:
                         # Run input map for each element
@@ -394,7 +394,7 @@ class Workflow(object):
                         # TODO:
                         task.status = 'waiting'
                         if task.pause:
-                            print('Pausing task.')
+                            # print('Pausing task.')
                             break
                         if task.is_scheduled:
                             # Submit hpcflow project remotely over SSH
@@ -405,15 +405,15 @@ class Workflow(object):
                             raise NotImplementedError(msg)
                     else:
                         if task.pause:
-                            print('Pausing task.')
+                            # print('Pausing task.')
                             break
                         # Execute "jobscript" locally and wait.
                         for i in run_commands:
                             proc = run(i['run_cmd'], shell=True, stdout=PIPE, stderr=PIPE,
                                        cwd=str(task_path.joinpath(i['run_dir'])))
 
-                            print('stdout', proc.stdout.decode())
-                            print('stderr', proc.stderr.decode())
+                            # print('stdout', proc.stdout.decode())
+                            # print('stderr', proc.stderr.decode())
 
                     if task.status == 'waiting':
                         print('Task is waiting, pausing workflow progression.')
