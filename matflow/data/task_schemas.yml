@@ -205,6 +205,9 @@ task_schemas:
         version: 1
         inputs:
           - normal_direction # x, y, or z (i.e. load in yz, xz or xy planes)
+      - name: random_3d
+        version: 1
+        inputs: []
     outputs:
       - load_case
 

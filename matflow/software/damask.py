@@ -540,6 +540,148 @@ def get_load_case_plane_strain(total_time, num_increments, direction, target_str
     return all_load_cases
 
 
+def get_load_case_random_3d(total_time, num_increments, target_strain):
+
+    def defgradScale(defgrad, finalStrain):
+
+        def fill_star(a, b):
+            if a != '*' and b != '*':
+                return a, b
+            elif a == '*' and b != '*':
+                return b, b
+            elif a != '*' and b == '*':
+                return a, a
+            else:
+                return 0.0, 0.0
+
+        defgrad0 = defgrad[:]  # AP: copy defgrad
+
+        # Remove star elements (i.e. undefined) from off-diagonals;
+        # this is just for calculating the factor
+        # by which to scale defgrad to generate the specified equivalent strain.
+        defgrad0[1], defgrad0[3] = fill_star(defgrad[1], defgrad[3])
+        defgrad0[2], defgrad0[6] = fill_star(defgrad[2], defgrad[6])
+        defgrad0[5], defgrad0[7] = fill_star(defgrad[5], defgrad[7])
+
+        for i in [0, 4, 8]:
+            if defgrad0[i] == '*':
+                defgrad0[i] = 0.0
+
+        # AP: note that the determinant gives the volume scaling factor of a linear
+        # transformation...
+        det0 = 1.0 - np.linalg.det(np.array(defgrad0).reshape(3, 3))
+
+        # Maybe we need to avoid a negative determinant?
+
+        # AP: something to do with avoiding zeros on
+        # the diagonal, perhaps presuming the zero was introduced in the above step:
+        if defgrad0[0] == 0.0:
+            defgrad0[0] = det0 / (defgrad0[4] * defgrad0[8] - defgrad0[5] * defgrad0[7])
+
+        if defgrad0[4] == 0.0:
+            defgrad0[4] = det0 / (defgrad0[0] * defgrad0[8] - defgrad0[2] * defgrad0[6])
+
+        if defgrad0[8] == 0.0:
+            defgrad0[8] = det0 / (defgrad0[0] * defgrad0[4] - defgrad0[1] * defgrad0[3])
+
+        # AP: compute Green strain
+        strain = 0.5 * (np.dot(np.array(defgrad0).reshape(3, 3).T,
+                               np.array(defgrad0).reshape(3, 3)) - np.eye(3))  # Green Strain
+
+        # AP: compute Von Mises equivalent strain (i.e. a scalar to compare with
+        # specified final strain.):
+        eqstrain = 2.0 / 3.0 * np.sqrt(1.5 * (strain[0][0]**2 + strain[1][1]**2 + strain[2][2]**2) +
+                                       3.0 * (strain[0][1]**2 + strain[1][2]**2 + strain[2][0]**2))
+
+        # AP: factor of 1.05 to make sure we go just over the requested final strain?
+        ratio = finalStrain * 1.05 / eqstrain
+
+        # AP: the returned scale factor should be >= 1
+        return max(ratio, 1.0)
+
+    all_load_cases = []
+    for total_time_i, num_incs_i, target_strain_i in zip(total_time, num_increments, target_strain):
+
+        # print('total_time_i: {}'.format(total_time_i))
+        # print('num_incs_i: {}'.format(num_incs_i))
+        # print('target_strain_i: {}'.format(target_strain_i))
+
+        defgrad = ['*'] * 9
+        stress = [0] * 9
+        values = (np.random.random_sample(9) - .5) * target_strain_i * 2
+
+        main = np.array([0, 4, 8])  # AP: these are the diagonal element indices
+        np.random.shuffle(main)
+
+        # fill 2 out of 3 main entries
+        for i in main[:2]:
+            defgrad[i] = 1. + values[i]
+            stress[i] = '*'
+
+        # fill 3 off-diagonal pairs of defgrad (1 or 2 entries)
+        for off in [[1, 3, 0], [2, 6, 0], [5, 7, 0]]:
+            off = np.array(off)
+            np.random.shuffle(off)
+            for i in off[0:2]:
+                if i != 0:
+                    defgrad[i] = values[i]
+                    stress[i] = '*'
+
+        ratio = defgradScale(defgrad, target_strain_i)
+
+        # AP: scale all elements by ratio (disregarding the identity on the
+        # diagonal.)
+        for i in [0, 4, 8]:
+            if defgrad[i] != '*':
+                defgrad[i] = (defgrad[i] - 1.0) * ratio + 1.0
+
+        for i in [1, 2, 3, 5, 6, 7]:
+            if defgrad[i] != '*':
+                defgrad[i] = defgrad[i] * ratio
+
+        dg_arr = []
+        mask_arr = []
+        for i in range(3):
+            dg_arr_row = []
+            mask_arr_row = []
+            for j in range(3):
+                idx = 3*i + j
+                dg_arr_val = 0 if defgrad[idx] == '*' else defgrad[idx]
+                dg_arr_row.append(dg_arr_val)
+                mask_arr_val = 1 if defgrad[idx] == '*' else 0
+                mask_arr_row.append(mask_arr_val)
+            dg_arr.append(dg_arr_row)
+            mask_arr.append(mask_arr_row)
+
+        dg_arr = np.ma.masked_array(dg_arr, mask=mask_arr)
+
+        stress_arr = []
+        mask_arr = []
+        for i in range(3):
+            stress_arr_row = []
+            mask_arr_row = []
+            for j in range(3):
+                idx = 3*i + j
+                stress_arr_val = 0 if stress[idx] == '*' else stress[idx]
+                stress_arr_row.append(stress_arr_val)
+                mask_arr_val = 1 if stress[idx] == '*' else 0
+                mask_arr_row.append(mask_arr_val)
+            stress_arr.append(stress_arr_row)
+            mask_arr.append(mask_arr_row)
+
+        stress_arr = np.ma.masked_array(stress_arr, mask=mask_arr)
+
+        load_case = {
+            'total_time': total_time_i,
+            'num_increments': num_incs_i,
+            'def_grad_aim': dg_arr,
+            'stress': stress_arr,
+        }
+        all_load_cases.append(load_case)
+
+    return all_load_cases
+
+
 def write_damask_load_case(path, load_case):
     write_load_case(path, load_case)
 
@@ -599,4 +741,5 @@ TASK_FUNC_MAP.update({
     ('generate_load_case', 'biaxial'): get_load_case_biaxial,
     ('generate_load_case', 'plane_strain'): get_load_case_plane_strain,
     ('generate_load_case', 'random_2d'): get_load_case_random_2d,
+    ('generate_load_case', 'random_3d'): get_load_case_random_3d,
 })
