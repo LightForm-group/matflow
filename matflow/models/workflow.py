@@ -8,6 +8,8 @@ import hickle
 import numpy as np
 import yaml
 
+from hpcflow.api import get_stats as hpcflow_get_stats
+
 from matflow import (CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP,
                      TASK_OUTPUT_FILES_MAP)
@@ -150,20 +152,23 @@ class Workflow(object):
                     'nesting': 'hold',
                     'commands': [
                         'matflow prepare-task --task-idx={}'.format(task.task_idx)
-                    ]
+                    ],
+                    'stats': False,
                 },
                 {
                     'directory': '<<{}_dirs>>'.format(task_path_rel),
                     'nesting': 'hold',
                     'commands': fmt_commands,
                     'sources': sources,
+                    'stats': task.stats,
                 },
                 {
                     'directory': '.',
                     'nesting': 'hold',
                     'commands': [
                         'matflow process-task --task-idx={}'.format(task.task_idx)
-                    ]
+                    ],
+                    'stats': False,
                 },
             ])
 
@@ -835,6 +840,21 @@ class Workflow(object):
         schema_id = (task.name, task.method, task.software)
         out_map_lookup = TASK_OUTPUT_MAP.get(schema_id)
         task_path = task.get_task_path(self.path)
+
+        # Save hpcflow task stats
+        hf_stats_all = hpcflow_get_stats(self.path, jsonable=True, datetime_dicts=True)
+
+        print('matflow.models.workflow. process_task: hf_stats_all: ')
+        pprint(hf_stats_all)
+
+        workflow_idx = 0
+        submission_idx = 0
+        hf_sub_stats = hf_stats_all[workflow_idx]['submissions'][submission_idx]
+
+        # Every third hpcflow task, since there are two additional hpcflow tasks for
+        # each matflow task:
+        hf_task_stats = hf_sub_stats['command_group_submissions'][1::3][task_idx]['tasks']
+        task.resource_usage = hf_task_stats
 
         for elem_idx in range(num_elems):
 
