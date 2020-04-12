@@ -12,6 +12,7 @@ import numpy as np
 from damask_parse import (read_geom, read_table,
                           write_geom, write_load_case, write_material_config)
 from damask_parse.utils import get_header
+from vecmaths.rotation import get_random_rotation_matrix
 
 from matflow import TASK_INPUT_MAP, TASK_OUTPUT_MAP, TASK_FUNC_MAP
 
@@ -682,6 +683,140 @@ def get_load_case_random_3d(total_time, num_increments, target_strain):
     return all_load_cases
 
 
+def get_random_3D_def_grad(magnitude):
+
+    # Find a random rotation matrix and a random stretch matrix and
+    # multiply: F = RU
+
+    R = get_random_rotation_matrix()
+
+    # Five stretch components, since it's a symmetric matrix and the
+    # trace must be zero:
+    stretch_comps = np.random.random((5,)) * magnitude
+    stretch = np.zeros((3, 3)) * np.nan
+
+    # Diagonal comps:
+    stretch[[0, 1], [0, 1]] = stretch_comps[:2]
+    stretch[2, 2] = -(stretch[0, 0] + stretch[1, 1])
+
+    # Off-diagonal comps:
+    stretch[[1, 0], [0, 1]] = stretch_comps[2]
+    stretch[[2, 0], [0, 2]] = stretch_comps[3]
+    stretch[[1, 2], [2, 1]] = stretch_comps[4]
+
+    # Add the identity:
+    U = stretch + np.eye(3)
+
+    # Scale by the determinant:
+    U = U / np.linalg.det(U)
+
+    F = R @ U
+
+    return F
+
+
+def get_random_3D_def_grad_v2(magnitude):
+
+    # Find a random rotation matrix and a random stretch matrix and
+    # multiply: F = RU
+
+    R = get_random_rotation_matrix()
+    print('R:\n{}'.format(R))
+
+    assert np.allclose(R.T @ R, np.eye(3))
+    assert np.isclose(np.linalg.det(R), 1)
+
+    # Five stretch components, since it's a symmetric matrix and the
+    # trace must be zero:
+    stretch_comps = (np.random.random((5,)) - 0.5) * magnitude
+
+    stretch = np.zeros((3, 3)) * np.nan
+
+    # Diagonal comps (trace must be zero):
+    stretch[[0, 1], [0, 1]] = stretch_comps[:2]
+    stretch[2, 2] = -(stretch[0, 0] + stretch[1, 1])
+
+    # Off-diagonal comps:
+    stretch[[1, 0], [0, 1]] = stretch_comps[2]
+    stretch[[2, 0], [0, 2]] = stretch_comps[3]
+    stretch[[1, 2], [2, 1]] = stretch_comps[4]
+
+    print('\nstretch:\n{}'.format(stretch))
+
+    # Add the identity:
+    U = stretch
+
+    print('\nU:\n{}'.format(U))
+
+    F = (R @ U) + np.eye(3)
+
+    F_det = np.linalg.det(F)
+    print('\nF det: {}'.format(F_det))
+
+    F = F / F_det
+
+    return F
+
+
+def get_load_case_random_3d_v2(total_time, num_increments, target_strain, rotation=True,
+                               rotation_max_angle=10, rotation_load_case=True):
+
+    all_load_cases = []
+    for total_time_i, num_incs_i, target_strain_i in zip(
+            total_time, num_increments, target_strain):
+
+        # Five stretch components, since it's a symmetric matrix and the
+        # trace must be zero:
+        stretch_comps = (np.random.random((5,)) - 0.5) * target_strain_i
+        stretch = np.zeros((3, 3)) * np.nan
+
+        # Diagonal comps:
+        stretch[[0, 1], [0, 1]] = stretch_comps[:2]
+        stretch[2, 2] = -(stretch[0, 0] + stretch[1, 1])
+
+        # Off-diagonal comps:
+        stretch[[1, 0], [0, 1]] = stretch_comps[2]
+        stretch[[2, 0], [0, 2]] = stretch_comps[3]
+        stretch[[1, 2], [2, 1]] = stretch_comps[4]
+
+        # Add the identity:
+        U = stretch + np.eye(3)
+
+        defgrad = U
+        rot = None
+        if rotation:
+            rot = get_random_rotation_matrix(method='axis_angle',
+                                             max_angle_deg=rotation_max_angle)
+            if not rotation_load_case:
+                defgrad = rot @ U
+                rot = None
+
+        # Ensure defgrad has a unit determinant:
+        defgrad = defgrad / (np.linalg.det(defgrad)**(1/3))
+
+        dg_arr = np.ma.masked_array(defgrad, mask=np.zeros((3, 3), dtype=int))
+        stress_arr = np.ma.masked_array(
+            np.zeros((3, 3), dtype=int),
+            mask=np.ones((3, 3), dtype=int)
+        )
+
+        # ===========
+        # dg_arr.mask[[0, 0, 1], [0, 1, 0]] = 1
+        # stress_arr.mask[[0, 0, 1], [0, 1, 0]] = 0
+        # ===========
+
+        load_case = {
+            'total_time': total_time_i,
+            'num_increments': num_incs_i,
+            'def_grad_aim': dg_arr,
+            'stress': stress_arr,
+            'rotation': rot,
+        }
+        all_load_cases.append(load_case)
+
+    return all_load_cases
+
+
 def write_damask_load_case(path, load_case):
     write_load_case(path, load_case)
 
@@ -742,4 +877,5 @@ TASK_FUNC_MAP.update({
     ('generate_load_case', 'plane_strain'): get_load_case_plane_strain,
     ('generate_load_case', 'random_2d'): get_load_case_random_2d,
     ('generate_load_case', 'random_3d'): get_load_case_random_3d,
+    ('generate_load_case', 'random_3d_v2'): get_load_case_random_3d_v2,
 })
