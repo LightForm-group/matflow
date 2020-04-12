@@ -208,6 +208,9 @@ task_schemas:
       - name: random_3d
         version: 1
         inputs: []
+      - name: random_3d_v2
+        version: 1
+        inputs: []
     outputs:
       - load_case
 
