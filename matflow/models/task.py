@@ -306,7 +306,7 @@ def get_local_inputs(base=None, num_repeats=None, sequences=None):
 
     for idx, input_i in enumerate(inputs_lst):
 
-        if not prev_nest or input_i['nest_idx'] > prev_nest:
+        if (prev_nest is None) or (input_i['nest_idx'] > prev_nest):
             rep_i = int(prev_reps / lengths[idx])
             tile_i = int(total_len / (lengths[idx] * rep_i))
             prev_nest = input_i['nest_idx']
