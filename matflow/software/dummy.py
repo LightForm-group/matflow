@@ -45,6 +45,13 @@ def dummy_input_map_4(path, parameter_2, parameter_6, parameter_7, parameter_9):
         handle.write('parameter_9: {}\n'.format(parameter_9))
 
 
+def dummy_input_map_5(path, parameter_8, parameter_10):
+    with Path(path).open('w') as handle:
+        handle.write('{}\n'.format(randint(0, 1e6)))
+        handle.write('parameter_8: {}\n'.format(parameter_8))
+        handle.write('parameter_10: {}\n'.format(parameter_10))
+
+
 def dummy_output_map_1(path):
 
     with Path(path).open('r') as handle:
@@ -67,6 +74,14 @@ def dummy_output_map_4(path):
         parameter_8 = int(handle.readline().strip())
 
     return parameter_8
+
+
+def dummy_output_map_5(path):
+
+    with Path(path).open('r') as handle:
+        parameter_11 = int(handle.readline().strip())
+
+    return parameter_11
 
 
 def fmt_parameter_1(parameter_1):
@@ -95,7 +110,9 @@ TASK_INPUT_MAP.update({
     ('dummy_task_4', 'method_1', 'software_1'): {
         't4_m1_infile_1': dummy_input_map_4,
     },
-
+    ('dummy_task_5', 'method_1', 'software_1'): {
+        't5_m1_infile_1': dummy_input_map_5,
+    },
 })
 
 TASK_OUTPUT_MAP.update({
@@ -107,6 +124,9 @@ TASK_OUTPUT_MAP.update({
     },
     ('dummy_task_4', 'method_1', 'software_1'): {
         'parameter_8': dummy_output_map_4,
+    },
+    ('dummy_task_5', 'method_1', 'software_1'): {
+        'parameter_11': dummy_output_map_5,
     },
 })
 
