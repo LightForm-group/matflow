@@ -43,10 +43,12 @@ def make_workflow(profile_path, directory=None):
 
     workflow = Workflow(**workflow_dict, stage_directory=stage_dir,
                         profile_str=profile_str)
-    workflow.save_state()
+
+    # TEMP
+    # workflow.save_state()
 
     # Copy profile to workflow directory:
-    workflow.path.joinpath(profile_path).write_bytes(profile_path.read_bytes())
+    # workflow.path.joinpath(profile_path).write_bytes(profile_path.read_bytes())
 
     try:
         pyperclip.copy(workflow.human_id)

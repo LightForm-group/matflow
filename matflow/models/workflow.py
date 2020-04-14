@@ -53,9 +53,10 @@ class Workflow(object):
         self.status = status or Workflow.INIT_STATUS  # | 'waiting' | 'complete'
         self.human_id = human_id or self._make_human_id()
 
-        if not self.path.is_dir() and not viewer:
-            self._write_directories()
-            self._write_hpcflow_workflow()
+        # TEMP:
+        # if not self.path.is_dir() and not viewer:
+        #     self._write_directories()
+        #     self._write_hpcflow_workflow()
 
     def _write_directories(self):
         'Generate task and element directories.'
@@ -197,6 +198,9 @@ class Workflow(object):
 
     def _validate_tasks(self, tasks):
 
+        # print('\n_validate_tasks: validating tasks:')
+        # pprint(tasks)
+
         # TODO: validate sequences dicts somewhere.
 
         task_info_lst = []
@@ -225,7 +229,11 @@ class Workflow(object):
                     base=task.get('base'),
                     num_repeats=task.get('num_repeats'),
                     sequences=task.get('sequences'),
+                    group=task.get('group'),
                 )
+
+            print('\n_validate_tasks: local_inputs:')
+            pprint(local_inputs)
 
             task_info_lst.append({
                 'name': task['name'],
@@ -241,6 +249,9 @@ class Workflow(object):
         task_srt_idx, task_info_lst, elements_idx = check_task_compatibility(
             task_info_lst)
 
+        print('\n_validate_tasks: elements_idx:')
+        pprint(elements_idx)
+
         validated_tasks = []
         for idx, i in enumerate(task_srt_idx):
 
@@ -250,6 +261,8 @@ class Workflow(object):
             task_i.pop('base', None)
             task_i.pop('sequences', None)
             task_i.pop('software', None)
+            task_i.pop('group', None)
+            task_i.pop('group_idx', None)
 
             task_i['nest'] = task_info_lst[idx]['nest']
             task_i['task_idx'] = task_info_lst[idx]['task_idx']
@@ -260,6 +273,9 @@ class Workflow(object):
 
             task_i_obj = Task(**task_i)
             validated_tasks.append(task_i_obj)
+
+        # print('\n_validate_tasks: validated_tasks:')
+        # pprint(validated_tasks)
 
         return validated_tasks, elements_idx
 
@@ -913,6 +929,8 @@ def check_task_compatibility(task_info_lst):
 
     """
 
+    # print('\n')
+
     dependency_idx = get_dependency_idx(task_info_lst)
     check_missing_inputs(task_info_lst, dependency_idx)
 
@@ -928,10 +946,14 @@ def check_task_compatibility(task_info_lst):
     for idx, i in enumerate(task_info_lst):
         i['task_idx'] = idx
 
+    # print(f'\ndependency_idx: {dependency_idx}')
+
     # Note: when considering upstream tasks for a given downstream task, need to nest
     # according to the upstream tasks' `num_elements`, not their `length`.
     elements_idx = []
     for idx, downstream_tsk in enumerate(task_info_lst):
+
+        print(f'\ncheck_task_compatibility: idx: {idx}')
 
         # Do any further downstream tasks depend on this task?
         depended_on = False
@@ -956,14 +978,26 @@ def check_task_compatibility(task_info_lst):
 
         upstream_tasks = [task_info_lst[i] for i in dependency_idx[idx]]
         num_elements = get_task_num_elements(downstream_tsk, upstream_tasks)
+        print(f'check_task_compatibility: num_elements: {num_elements}')
+
         downstream_tsk['num_elements'] = num_elements
 
         task_elems_idx = get_task_elements_idx(downstream_tsk, upstream_tasks)
 
-        params_idx = get_input_elements_idx(task_elems_idx, downstream_tsk, task_info_lst)
+        print(f'check_task_compatibility: task_elems_idx: {task_elems_idx}')
+
+        params_idx, group_idx = get_input_elements_idx(
+            task_elems_idx, downstream_tsk, task_info_lst)
+
+        downstream_tsk['group_idx'] = group_idx
+
+        # print('check_task_compatibility: params_idx:')
+        # pprint(params_idx)
+
         elements_idx.append({
             'num_elements': num_elements,
             'inputs': params_idx,
+            'groups': group_idx
         })
 
     return list(task_srt_idx), task_info_lst, elements_idx
@@ -1109,14 +1143,35 @@ def get_task_elements_idx(downstream_task, upstream_tasks):
 
 def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
 
+    # print('get_input_element_idx: task_elements_idx:')
+    # pprint(task_elements_idx)
+
+    # print('get_input_element_idx: downstream_task:')
+    # pprint(downstream_task)
+
+    # print('get_input_element_idx: task_info_lst:')
+    # pprint(task_info_lst)
+
+    # print(f'get_input_element_idx: downstream_task["local_inputs"]["group_idx"]: '
+    #       f'{downstream_task["local_inputs"]["group_idx"]}')
+
+    group_idx = {}
+    new_group = downstream_task['local_inputs']['group_idx']
+    if new_group:
+        for k, v in new_group.items():
+            group_idx.update({k: v[task_elements_idx[downstream_task['task_idx']]]})
+
     params_idx = {}
     for input_name in downstream_task['inputs']:
         # Find the task_idx for which this input is an output:
         input_task_idx = None
+        i_groups = {}
         for i in task_info_lst:
             if input_name in i['outputs']:
                 input_task_idx = i['task_idx']
                 param_task_idx = input_task_idx
+                i_groups = i['local_inputs']['group_idx'] or {}
+                i_groups.update(i.get('group_idx', {}))
                 break
         if input_task_idx is None:
             input_task_idx = downstream_task['task_idx']
@@ -1132,5 +1187,7 @@ def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
                     'output_idx': task_elements_idx[input_task_idx],
                 }
             })
+            for k, v in i_groups.items():
+                group_idx.update({k: v[task_elements_idx[input_task_idx]]})
 
-    return params_idx
+    return params_idx, group_idx

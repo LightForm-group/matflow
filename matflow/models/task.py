@@ -218,9 +218,6 @@ def combine_base_sequence(sequences, base=None):
 def normalise_local_inputs(base=None, num_repeats=None, sequences=None):
     'Validate and normalise task inputs.'
 
-    if num_repeats is not None and sequences is not None:
-        raise ValueError('Specify one of `num_repeats` of `sequences`.')
-
     if base is None:
         base = {}
     if sequences is None:
@@ -280,9 +277,15 @@ def normalise_local_inputs(base=None, num_repeats=None, sequences=None):
     return inputs_lst
 
 
-def get_local_inputs(base=None, num_repeats=None, sequences=None):
+def get_local_inputs(base=None, num_repeats=None, sequences=None, group=None):
 
     inputs_lst = normalise_local_inputs(base, num_repeats, sequences)
+
+    if num_repeats is None:
+        num_repeats = 1
+
+    # print('get_local_inputs: inputs_lst')
+    # pprint(inputs_lst)
 
     if inputs_lst:
 
@@ -299,10 +302,10 @@ def get_local_inputs(base=None, num_repeats=None, sequences=None):
     else:
         total_len = 1
 
-    inputs_dct = {
-        'length': total_len,
-        'inputs': {},
-    }
+    inputs_dct = {'inputs': {}}
+    group_idx = None
+    if group:
+        group_idx = {group: np.tile(np.arange(num_repeats), (total_len,))}
 
     for idx, input_i in enumerate(inputs_lst):
 
@@ -314,16 +317,33 @@ def get_local_inputs(base=None, num_repeats=None, sequences=None):
             rep_i = prev_reps
             tile_i = prev_tile
 
+        vals_idx = np.tile(np.repeat(np.arange(lengths[idx]), rep_i), tile_i)
+        vals_idx = np.repeat(vals_idx, num_repeats)
+
         inputs_dct['inputs'].update({
             input_i['name']: {
                 'nest_idx': input_i['nest_idx'],
                 'vals': input_i['vals'],
-                'vals_idx': np.tile(np.repeat(np.arange(lengths[idx]), rep_i), tile_i)
+                'vals_idx': vals_idx,
             }
         })
 
+        if 'group' in input_i:
+            if group_idx is not None:
+                # TODO: move this check to `normalise_local_inputs`:
+                msg = ('Specify the `group` key in either one of the sequences, or as a '
+                       'task key, in combination with `num_repeats`.')
+                raise ValueError(msg)
+            group_idx = {input_i['group']: vals_idx}
+
         prev_reps = rep_i
         prev_tile = tile_i
+
+    total_len *= num_repeats
+    inputs_dct.update({
+        'length': total_len,
+        'group_idx': group_idx,
+    })
 
     return inputs_dct
 
