@@ -3,7 +3,7 @@
 import copy
 import unittest
 
-from matflow.models.task import resolve_local_inputs, TaskSchema
+from matflow.models.task import resolve_local_inputs, TaskSchema, get_local_inputs
 from matflow.errors import IncompatibleSequence, TaskSchemaError, TaskParameterError
 
 # TODO: add test that warn is issued when an input is in base but also has a sequence.
@@ -441,6 +441,9 @@ class ResolveLocalInputsTestCase(unittest.TestCase):
     def test_unit_length_sequence(self):
         """Check specifying sequences of length one has the same effect as specifying the 
         parameter in the base dict."""
+
+        # Currently fails due to `base` params being assigned `nest_idx=-1`
+
         sequences = [
             {
                 'name': 'parameter_1',
@@ -451,6 +454,10 @@ class ResolveLocalInputsTestCase(unittest.TestCase):
         base = {
             'parameter_1': 101
         }
-        local_ins_1 = resolve_local_inputs(sequences=sequences)
-        local_ins_2 = resolve_local_inputs(base=base)
+        local_ins_1 = get_local_inputs(sequences=sequences)
+        local_ins_2 = get_local_inputs(base=base)
+
+        print(f'local_ins_1: {local_ins_1}')
+        print(f'local_ins_2: {local_ins_2}')
+
         self.assertTrue(local_ins_1 == local_ins_2)
