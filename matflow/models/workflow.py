@@ -1025,17 +1025,24 @@ def get_dependency_idx(task_info_lst):
     dependency_idx = []
     all_outputs = []
     for task_info in task_info_lst:
-        all_outputs.extend(task_info['outputs'])
+
+        # List outputs with their corresponding task contexts:
+        all_outputs.extend([(i, task_info['context']) for i in task_info['outputs']])
+
+        # Find which tasks this task depends on:
         output_idx = []
         for input_j in [i['name'] for i in task_info['inputs']]:
             for task_idx_k, task_info_k in enumerate(task_info_lst):
-                if input_j in task_info_k['outputs']:
+                if (
+                    (input_j in task_info_k['outputs']) and
+                    (task_info['context'] == task_info_k['context'])
+                ):
                     output_idx.append(task_idx_k)
-        else:
-            dependency_idx.append(output_idx)
+
+        dependency_idx.append(output_idx)
 
     if len(all_outputs) != len(set(all_outputs)):
-        msg = 'Multiple tasks in the workflow have the same output!'
+        msg = 'Multiple tasks in the workflow have the same output and context!'
         raise IncompatibleWorkflow(msg)
 
     # Check for circular dependencies in task inputs/outputs:
