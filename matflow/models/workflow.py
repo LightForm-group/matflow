@@ -1177,12 +1177,16 @@ def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
         input_task_idx = None
         i_groups = {}
         for i in task_info_lst:
-            if input_name in i['outputs']:
+            if (
+                input_name in i['outputs'] and
+                downstream_task['context'] == i['context']
+            ):
                 input_task_idx = i['task_idx']
                 param_task_idx = input_task_idx
                 i_groups = i['local_inputs']['group_idx'] or {}
                 i_groups.update(i.get('group_idx', {}))
                 break
+
         if input_task_idx is None:
             input_task_idx = downstream_task['task_idx']
             params_idx.update({
@@ -1190,6 +1194,7 @@ def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
                     'input_idx': task_elements_idx[input_task_idx],
                 }
             })
+
         else:
             params_idx.update({
                 input_name: {
