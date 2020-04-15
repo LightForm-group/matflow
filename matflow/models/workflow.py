@@ -244,6 +244,7 @@ class Workflow(object):
                 'merge_priority': task.get('merge_priority'),
                 'schema': schema,
                 'local_inputs': local_inputs,
+                'context': task.get('context', ''),
             })
 
         task_srt_idx, task_info_lst, elements_idx = check_task_compatibility(
@@ -1026,6 +1027,12 @@ def get_dependency_idx(task_info_lst):
     all_outputs = []
     for task_info in task_info_lst:
 
+        task_contexts = list(set([i.get('context', '') for i in task_info['inputs']]))
+        if task_info['context'] in task_contexts:
+            msg = ('A task cannot be assigned a context from which one or more of its '
+                   'input parameters are drawn.')
+            raise IncompatibleWorkflow(msg)
+
         # List outputs with their corresponding task contexts:
         all_outputs.extend([(i, task_info['context']) for i in task_info['outputs']])
 
@@ -1033,13 +1040,23 @@ def get_dependency_idx(task_info_lst):
         output_idx = []
         for input_j in [i['name'] for i in task_info['inputs']]:
             for task_idx_k, task_info_k in enumerate(task_info_lst):
+
+                # Consider where specific inputs are taken from specific contexts:
+                for task_context_m in task_contexts:
+                    if (
+                        input_j in task_info_k['outputs'] and
+                        task_context_m == task_info_k['context']
+                    ):
+                        output_idx.append(task_idx_k)
+
+                # Consider other tasks with the same context:
                 if (
-                    (input_j in task_info_k['outputs']) and
-                    (task_info['context'] == task_info_k['context'])
+                    input_j in task_info_k['outputs'] and
+                    task_info['context'] == task_info_k['context']
                 ):
                     output_idx.append(task_idx_k)
 
-        dependency_idx.append(output_idx)
+        dependency_idx.append(list(set(output_idx)))
 
     if len(all_outputs) != len(set(all_outputs)):
         msg = 'Multiple tasks in the workflow have the same output and context!'
@@ -1173,7 +1190,7 @@ def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
     for input_dict in downstream_task['inputs']:
 
         # Find the task_idx for which this input is an output:
-        input_name = input_dict['name']
+        input_name = input_dict.get('alias', input_dict['name'])
         input_task_idx = None
         i_groups = {}
         for i in task_info_lst:

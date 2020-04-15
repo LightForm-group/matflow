@@ -381,10 +381,18 @@ class TaskSchema(object):
     def input_names(self):
         return [i['name'] for i in self.inputs]
 
+    @property
+    def input_aliases(self):
+        return [i.get('alias', i['name']) for i in self.inputs]
+
+    @property
+    def input_contexts(self):
+        return list(set([i.get('context', '') for i in self.inputs]))
+
     def _validate_inputs_outputs(self):
         'Basic checks on inputs and outputs.'
 
-        allowed_inp_specifiers = ['group', 'context']
+        allowed_inp_specifiers = ['group', 'context', 'alias']
         req_inp_keys = ['name']
         allowed_inp_keys = req_inp_keys + allowed_inp_specifiers
         allowed_inp_keys_fmt = ', '.join(['"{}"'.format(i) for i in allowed_inp_keys])
@@ -405,6 +413,11 @@ class TaskSchema(object):
                     for s in specs:
                         s_key, s_val = s.split('=')
                         inp.update({s_key.strip(): s_val.strip()})
+
+                    if 'context' in inp and 'alias' not in inp:
+                        msg = ('Task schema inputs for which a `context` is specified '
+                               'must also be given an `alias`.')
+                        raise TaskSchemaError(msg)
 
             elif not isinstance(inp, dict):
                 raise TypeError('Task schema input must be a str or a dict.')
@@ -451,16 +464,17 @@ class TaskSchema(object):
 
         # Check inputs/outputs named in input/output_maps are in inputs/outputs lists:
         input_map_ins = [j for i in self.input_map for j in i['inputs']]
-        unknown_map_inputs = set(input_map_ins) - set(self.input_names)
+        unknown_map_inputs = set(input_map_ins) - set(self.input_aliases)
 
         output_map_outs = [i['output'] for i in self.output_map]
         unknown_map_outputs = set(output_map_outs) - set(self.outputs)
 
         if unknown_map_inputs:
             bad_ins_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_inputs])
-            msg = 'Input map inputs {} not known by the schema "{}" with inputs: {}.'
+            msg = ('Input map inputs {} not known by the schema "{}" with input '
+                   '(aliases): {}.')
             raise TaskSchemaError(msg.format(
-                bad_ins_map_fmt, self.name, self.input_names))
+                bad_ins_map_fmt, self.name, self.input_aliases))
 
         if unknown_map_outputs:
             bad_outs_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_outputs])
@@ -508,7 +522,7 @@ class Task(object):
                  merge_priority=None, run_options=None, base=None, sequences=None,
                  num_repeats=None, local_inputs=None, inputs=None, outputs=None,
                  schema=None, status=None, pause=False, files=None, resource_usage=None,
-                 stats=True):
+                 stats=True, context=''):
 
         self.name = name
         self.status = status or Task.INIT_STATUS  # | 'paused' | 'complete'
@@ -518,6 +532,7 @@ class Task(object):
         self.merge_priority = merge_priority
         self.software_instance = software_instance
         self.run_options = run_options
+        self.context = context
         self.local_inputs = local_inputs
         self.inputs = inputs
         self.outputs = outputs
@@ -535,6 +550,7 @@ class Task(object):
             f'method={self.method!r}, '
             f'software_instance={self.software_instance!r}, '
             f'run_options={self.run_options!r}, '
+            f'context={self.context!r}, '
             f'schema={self.schema!r}'
             f')'
         )
