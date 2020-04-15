@@ -1013,7 +1013,8 @@ def check_missing_inputs(task_info_lst, dependency_list):
         if deps_idx:
             for j in deps_idx:
                 for output in task_info_lst[j]['outputs']:
-                    if output in task_info['inputs']:
+                    task_inp_names = [i['name'] for i in task_info['inputs']]
+                    if output in task_inp_names:
                         defined_inputs.append(output)
 
         task_info['schema'].check_missing_inputs(defined_inputs)
@@ -1026,7 +1027,7 @@ def get_dependency_idx(task_info_lst):
     for task_info in task_info_lst:
         all_outputs.extend(task_info['outputs'])
         output_idx = []
-        for input_j in task_info['inputs']:
+        for input_j in [i['name'] for i in task_info['inputs']]:
             for task_idx_k, task_info_k in enumerate(task_info_lst):
                 if input_j in task_info_k['outputs']:
                     output_idx.append(task_idx_k)
@@ -1162,8 +1163,10 @@ def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
             group_idx.update({k: v[task_elements_idx[downstream_task['task_idx']]]})
 
     params_idx = {}
-    for input_name in downstream_task['inputs']:
+    for input_dict in downstream_task['inputs']:
+
         # Find the task_idx for which this input is an output:
+        input_name = input_dict['name']
         input_task_idx = None
         i_groups = {}
         for i in task_info_lst:

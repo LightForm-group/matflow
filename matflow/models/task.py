@@ -1,6 +1,7 @@
 """`matflow.models.task.py`"""
 
 import copy
+import re
 from pathlib import Path
 from warnings import warn
 from pprint import pprint
@@ -71,7 +72,6 @@ def get_schema_dict(name, method, software_instance=None):
         out_map = imp_ref.get('output_map', [])
         command_opt = imp_ref.get('commands', [])
 
-    inputs = list(set(inputs))
     outputs = list(set(outputs))
 
     if software_instance:
@@ -377,12 +377,54 @@ class TaskSchema(object):
 
         self._validate_inputs_outputs()
 
+    @property
+    def input_names(self):
+        return [i['name'] for i in self.inputs]
+
     def _validate_inputs_outputs(self):
         'Basic checks on inputs and outputs.'
 
+        allowed_inp_specifiers = ['group', 'context']
+        req_inp_keys = ['name']
+        allowed_inp_keys = req_inp_keys + allowed_inp_specifiers
+        allowed_inp_keys_fmt = ', '.join(['"{}"'.format(i) for i in allowed_inp_keys])
+
+        # Normalise schema inputs:
+        for inp_idx, inp in enumerate(self.inputs):
+
+            if isinstance(inp, str):
+
+                # Parse additional input specifiers:
+                match = re.search(r'([\w-]+)(\[(.*?)\])*', inp)
+                inp_name = match.group(1)
+                inp = {'name': inp_name}
+
+                specifiers_str = match.group(3)
+                if specifiers_str:
+                    specs = specifiers_str.split(',')
+                    for s in specs:
+                        s_key, s_val = s.split('=')
+                        inp.update({s_key.strip(): s_val.strip()})
+
+            elif not isinstance(inp, dict):
+                raise TypeError('Task schema input must be a str or a dict.')
+
+            for r in req_inp_keys:
+                if r not in inp:
+                    msg = f'Task schema input must include key {r}.'
+                    raise TaskSchemaError(msg)
+
+            unknown_inp_keys = set(inp.keys()) - set(allowed_inp_keys)
+            if unknown_inp_keys:
+                msg = (f'Unknown task schema input key: {unknown_inp_keys}. Allowed keys '
+                       f'are: {allowed_inp_keys_fmt}')
+                raise TaskSchemaError(msg)
+
+            self.inputs[inp_idx] = inp
+
         # Check the task does not output an input(!):
         for i in self.outputs:
-            if i in self.inputs:
+            if i in self.input_names:
                 msg = 'Task schema input "{}" cannot also be an output!'
                 raise TaskSchemaError(msg.format(i))
 
@@ -409,7 +451,7 @@ class TaskSchema(object):
 
         # Check inputs/outputs named in input/output_maps are in inputs/outputs lists:
         input_map_ins = [j for i in self.input_map for j in i['inputs']]
-        unknown_map_inputs = set(input_map_ins) - set(self.inputs)
+        unknown_map_inputs = set(input_map_ins) - set(self.input_names)
 
         output_map_outs = [i['output'] for i in self.output_map]
         unknown_map_outputs = set(output_map_outs) - set(self.outputs)
@@ -417,7 +459,8 @@ class TaskSchema(object):
         if unknown_map_inputs:
             bad_ins_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_inputs])
             msg = 'Input map inputs {} not known by the schema "{}" with inputs: {}.'
-            raise TaskSchemaError(msg.format(bad_ins_map_fmt, self.name, self.inputs))
+            raise TaskSchemaError(msg.format(
+                bad_ins_map_fmt, self.name, self.input_names))
 
         if unknown_map_outputs:
             bad_outs_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_outputs])
@@ -427,20 +470,22 @@ class TaskSchema(object):
     def check_surplus_inputs(self, inputs):
         'Check for any inputs that are specified but not required by this schema.'
 
-        surplus_ins = set(inputs) - set(self.inputs)
+        surplus_ins = set(inputs) - set(self.input_names)
         if surplus_ins:
             surplus_ins_fmt = ', '.join(['"{}"'.format(i) for i in surplus_ins])
             msg = 'Input(s) {} not known by the schema "{}" with inputs: {}.'
-            raise TaskParameterError(msg.format(surplus_ins_fmt, self.name, self.inputs))
+            raise TaskParameterError(msg.format(
+                surplus_ins_fmt, self.name, self.input_names))
 
     def check_missing_inputs(self, inputs):
         'Check for any inputs that are required by this schema but not specified.'
 
-        missing_ins = set(self.inputs) - set(inputs)
+        missing_ins = set(self.input_names) - set(inputs)
         if missing_ins:
             missing_ins_fmt = ', '.join(['"{}"'.format(i) for i in missing_ins])
             msg = 'Input(s) {} missing for the schema "{}" with inputs: {}'
-            raise TaskParameterError(msg.format(missing_ins_fmt, self.name, self.inputs))
+            raise TaskParameterError(msg.format(
+                missing_ins_fmt, self.name, self.input_names))
 
     @property
     def is_func(self):
