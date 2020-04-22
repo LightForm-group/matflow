@@ -12,7 +12,7 @@ import numpy as np
 from damask_parse import (read_geom, read_table,
                           write_geom, write_load_case, write_material_config)
 from damask_parse.utils import get_header
-from vecmaths.rotation import get_random_rotation_matrix
+from vecmaths.rotation import get_random_rotation_matrix, axang2rotmat
 
 from matflow import TASK_INPUT_MAP, TASK_OUTPUT_MAP, TASK_FUNC_MAP
 
@@ -212,18 +212,21 @@ def get_load_case_random_2d(total_time, num_increments, normal_direction,
 
 
 def get_load_case_uniaxial(total_time, num_increments, direction, target_strain_rate=None,
-                           target_strain=None):
+                           target_strain=None, rotation=None):
 
     if target_strain is None:
         target_strain = [None] * len(total_time)
     elif target_strain_rate is None:
         target_strain_rate = [None] * len(total_time)
 
+    if rotation is None:
+        rotation is [None] * len(total_time)
+
     # TODO: validate equal lengths of args (or `None`s)
 
     all_load_cases = []
-    for i, j, k, m, d in zip(total_time, num_increments, target_strain_rate,
-                             target_strain, direction):
+    for i, j, k, m, d, rot in zip(total_time, num_increments, target_strain_rate,
+                                  target_strain, direction, rotation):
 
         # Validation:
         msg = 'Specify either `target_strain_rate` or `target_strain`.'
@@ -231,6 +234,9 @@ def get_load_case_uniaxial(total_time, num_increments, direction, target_strain_
             raise ValueError(msg)
         if all([t is not None for t in [k, m]]):
             raise ValueError(msg)
+
+        if rot:
+            rot = axang2rotmat(np.array(rot['axis']), rot['angle_deg'], degrees=True)
 
         dg_uniaxial_val = k or m
 
@@ -323,6 +329,7 @@ def get_load_case_uniaxial(total_time, num_increments, direction, target_strain_
             'def_grad_rate': def_grad_rate,
             'def_grad_aim': def_grad_aim,
             'stress': stress,
+            'rotation': rot,
         }
         all_load_cases.append(load_case)
 
@@ -759,11 +766,15 @@ def get_random_3D_def_grad_v2(magnitude):
 
 
 def get_load_case_random_3d_v2(total_time, num_increments, target_strain, rotation=True,
-                               rotation_max_angle=10, rotation_load_case=True):
+                               rotation_max_angle=10, rotation_load_case=True,
+                               non_random_rotation=None):
+
+    if non_random_rotation is None:
+        non_random_rotation = [None] * len(total_time)
 
     all_load_cases = []
-    for total_time_i, num_incs_i, target_strain_i in zip(
-            total_time, num_increments, target_strain):
+    for total_time_i, num_incs_i, target_strain_i, nr_rot in zip(
+            total_time, num_increments, target_strain, non_random_rotation):
 
         # Five stretch components, since it's a symmetric matrix and the
         # trace must be zero:
@@ -784,12 +795,16 @@ def get_load_case_random_3d_v2(total_time, num_increments, target_strain, rotati
 
         defgrad = U
         rot = None
-        if rotation:
+        if rotation and nr_rot is None:
             rot = get_random_rotation_matrix(method='axis_angle',
                                              max_angle_deg=rotation_max_angle)
             if not rotation_load_case:
                 defgrad = rot @ U
                 rot = None
+
+        if nr_rot:
+            rot = axang2rotmat(np.array(nr_rot['axis']),
+                               nr_rot['angle_deg'], degrees=True)
 
         # Ensure defgrad has a unit determinant:
         defgrad = defgrad / (np.linalg.det(defgrad)**(1/3))
