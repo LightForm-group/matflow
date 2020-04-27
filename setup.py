@@ -55,6 +55,7 @@ setup(
         'pyyaml',
         'numpy',
         'pyperclip',
+        'vecmaths',
     ],
     project_urls={
         'Github': 'https://github.com/Lightform-group/matflow',
