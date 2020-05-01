@@ -7,7 +7,7 @@ from pprint import pprint
 
 import numpy as np
 
-from matflow import CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS
+from matflow import CONFIG, TASK_SCHEMAS
 from matflow.models import CommandGroup, Command
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, nest_lists, combine_list_of_dicts
@@ -488,32 +488,8 @@ class Task(object):
     def software(self):
         return self.software_instance['name']
 
-    @property
-    def is_scheduled(self):
-        if self.schema.is_func:
-            return False
-        else:
-            return self.software_instance['scheduler'] != 'direct'
-
-    def is_remote(self, workflow):
-        return self.resource_name != workflow.resource_name
-
-    @property
-    def resource_name(self):
-        return self.run_options['resource']
-
     def get_task_path(self, workflow_path):
         return workflow_path.joinpath(f'task_{self.task_idx}_{self.name}')
-
-    def get_resource(self, workflow):
-        'Get the Resource associated with this Task.'
-        return workflow.resources[self.resource_name]
-
-    def get_resource_conn(self, workflow):
-        'Get the ResourceConnection associated with this Task.'
-        src_name = workflow.resource_name
-        dst_name = self.resource_name
-        return workflow.resource_conns[(src_name, dst_name)]
 
     def initialise_outputs(self):
         self.outputs = [
