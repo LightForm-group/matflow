@@ -26,11 +26,11 @@ class Workflow(object):
 
     INIT_STATUS = 'pending'
 
-    def __init__(self, tasks, machines, resources, resource_conns, stage_directory=None,
-                 human_id=None, status=None, machine_name=None, human_name=None,
+    def __init__(self, name, tasks, machines, resources, resource_conns,
+                 stage_directory=None, human_id=None, status=None, machine_name=None,
                  extend=None, viewer=False, profile_str=None):
 
-        self.human_name = human_name or ''
+        self.name = name
         self._extend_paths = [str(Path(i).resolve())
                               for i in extend['paths']] if extend else None
         self.extend_nest_idx = extend['nest_idx'] if extend else None
@@ -44,7 +44,7 @@ class Workflow(object):
         try:
             self.resource_name = self._get_resource_name()
         except ValueError:
-            warn(f'Could not find resource name for workflow: {human_name}/{human_id}')
+            warn(f'Could not find resource name for workflow: {name}/{human_id}')
 
         tasks, elements_idx = self._validate_tasks(tasks)
         self.tasks = tasks
@@ -386,8 +386,8 @@ class Workflow(object):
 
     def _make_human_id(self):
         hid = parse_times('%Y-%m-%d-%H%M%S')[0]
-        if self.human_name:
-            hid = self.human_name + '_' + hid
+        if self.name:
+            hid = self.name + '_' + hid
         return hid
 
     @property
