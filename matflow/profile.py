@@ -13,7 +13,7 @@ def parse_workflow_profile(profile_path):
         profile = yaml.safe_load(handle)
 
     req_keys = ['name', 'tasks']
-    good_keys = req_keys
+    good_keys = req_keys + ['extend']
 
     miss_keys = list(set(req_keys) - set(profile.keys()))
     bad_keys = list(set(profile.keys()) - set(good_keys))
