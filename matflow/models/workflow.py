@@ -407,12 +407,12 @@ class Workflow(object):
         return str(self.path)
 
     @property
-    def hdf_path(self):
+    def hdf5_path(self):
         return self.path.joinpath('workflow.hdf5')
 
     def save_state(self, path=None):
         """Save state of workflow to an HDF5 file."""
-        path = Path(path or self.hdf_path)
+        path = Path(path or self.hdf5_path)
         with path.open('w') as handle:
             hickle.dump(to_jsonable(self), handle)
 
