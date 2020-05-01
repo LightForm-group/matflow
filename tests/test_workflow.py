@@ -3,7 +3,6 @@
 import unittest
 from shutil import rmtree
 
-from matflow import TEST_WORKFLOWS_DIR, TEST_WORKING_DIR
 from matflow.api import make_workflow
 from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
                             MissingMergePriority)
@@ -24,12 +23,6 @@ tests for resolve_task_num_elements:
 
 class TaskCompatibilityTestCase(unittest.TestCase):
     'Tests ensuring correct behaviour for incompatible tasks.'
-
-    def tearDown(self):
-        'Remove the generated directories.'
-        for i in TEST_WORKING_DIR.glob('*'):
-            if i.is_dir():
-                rmtree(str(i))
 
     def test_output_non_exclusivity(self):
         """Ensure raises on a workflow that has multiple tasks that include the same
