@@ -10,10 +10,10 @@ import yaml
 
 from hpcflow.api import get_stats as hpcflow_get_stats
 
-from matflow import (CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
+from matflow import (CONFIG, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP,
                      TASK_OUTPUT_FILES_MAP)
-from matflow.models import Task, Machine, Resource, ResourceConnection
+from matflow.models import Task
 from matflow.models.task import (get_schema_dict, combine_base_sequence, TaskSchema,
                                  get_local_inputs)
 from matflow.jsonable import to_jsonable
@@ -26,8 +26,7 @@ class Workflow(object):
 
     INIT_STATUS = 'pending'
 
-    def __init__(self, name, tasks, machines, resources, resource_conns,
-                 stage_directory=None, human_id=None, status=None, machine_name=None,
+    def __init__(self, name, tasks, stage_directory=None, human_id=None, status=None,
                  extend=None, viewer=False, profile_str=None):
 
         self.name = name
@@ -35,16 +34,7 @@ class Workflow(object):
                               for i in extend['paths']] if extend else None
         self.extend_nest_idx = extend['nest_idx'] if extend else None
         self._stage_directory = str(stage_directory)
-        self.machines, self.resources, self.resource_conns = self._init_resources(
-            machines, resources, resource_conns)
-
-        self.machine_name = machine_name or CURRENT_MACHINE
         self.profile_str = profile_str
-
-        try:
-            self.resource_name = self._get_resource_name()
-        except ValueError:
-            warn(f'Could not find resource name for workflow: {name}/{human_id}')
 
         tasks, elements_idx = self._validate_tasks(tasks)
         self.tasks = tasks
@@ -208,7 +198,6 @@ class Workflow(object):
                 if not software_instance:
                     software_instance = self._get_software_instance(
                         task['software'],
-                        task['run_options']['resource'],
                         task['run_options'].get('num_cores', 1),
                     )
                 else:
@@ -284,119 +273,25 @@ class Workflow(object):
     def stage_directory(self):
         return Path(self._stage_directory)
 
-    def _get_software_instance(self, software_name, resource_name, num_cores):
-        """Find a software instance in the software.yml file that matches the software of
-        a given task and a given machine."""
-
-        resource = self.resources[resource_name]
-
-        try:
-            machines = [resource.machine] + [
-                i['machine'] for i in resource.non_cloud_machines]
-        except ValueError:
-            machines = [resource.machine]
-
-        machine_names = [i.name for i in machines]
+    def _get_software_instance(self, software_name, num_cores):
+        """Find a software instance in the software.yml file that matches the software
+        requirements of a given task."""
 
         for soft_inst in SOFTWARE:
 
             if soft_inst['name'] != software_name:
                 continue
 
-            if soft_inst['machine'] in machine_names:
-                core_range = soft_inst['num_cores']
-                all_num_cores = list(range(*core_range)) + [core_range[1]]
-                if num_cores in all_num_cores:
-                    return soft_inst
-
-        msg = (f'Could not find a suitable software instance for software '
-               f'"{software_name}" on machines {machine_names}, using {num_cores} cores.')
-        raise ValueError(msg)
-
-    def _init_resources(self, machines, resources, resource_conns):
-
-        machines_no_sync_client = []
-        machines_sync_client = []
-        for mach_dict in machines.values():
-            if mach_dict.get('sync_client_paths'):
-                machines_sync_client.append(mach_dict)
-            else:
-                machines_no_sync_client.append(mach_dict)
-
-        machines_out = {}
-        for mach_dict in machines_no_sync_client + machines_sync_client:
-            sync_client_paths = [
-                {
-                    'machine': machines_out[i['machine']],
-                    'sync_path': i['sync_path'],
-                }
-                for i in mach_dict.get('sync_client_paths', [])
-            ]
-            machines_out.update({
-                mach_dict['name']: Machine(
-                    name=mach_dict['name'],
-                    os_type=mach_dict['os_type'],
-                    is_dropbox=mach_dict.get('is_dropbox', False),
-                    sync_client_paths=sync_client_paths,
-                )
-            })
-
-        resources_out = {}
-        for res_name, res_dict in resources.items():
-            resources_out.update({
-                res_name: Resource(
-                    name=res_dict['name'],
-                    base_path=res_dict['base_path'],
-                    machine=machines_out[res_dict['machine']],
-                )
-            })
-
-        resource_conns_out = {}
-        for res_conn_key, res_conn_dict in resource_conns.items():
-            resource_conns_out.update({
-                res_conn_key: ResourceConnection(
-                    source=resources_out[res_conn_dict['source']],
-                    destination=resources_out[res_conn_dict['destination']],
-                    hostname=res_conn_dict.get('hostname'),
-                )
-            })
-
-        return machines_out, resources_out, resource_conns_out
-
-    def _get_resource_name(self):
-        'Get name or Workflow stage resource.'
-
-        for resource in self.resources.values():
-            try:
-                non_cloud_mach = resource.non_cloud_machines
-            except ValueError:
-                if (resource.machine.name == self.machine_name and
-                        resource.base_path == self.stage_directory):
-                    return resource.name
-                else:
-                    continue
-            for i in non_cloud_mach:
-                res_base_path = Path(str(resource.base_path).lstrip('\\'))
-                sync_path = Path(i['sync_path']).joinpath(res_base_path)
-                if (i['machine'].name == self.machine_name and
-                        sync_path.resolve() == self.stage_directory.resolve()):
-                    return resource.name
-
-        raise ValueError('Could not find resource name for the Workflow staging area.')
+            core_range = soft_inst['num_cores']
+            all_num_cores = list(range(*core_range)) + [core_range[1]]
+            if num_cores in all_num_cores:
+                return soft_inst
 
     def _make_human_id(self):
         hid = parse_times('%Y-%m-%d-%H%M%S')[0]
         if self.name:
             hid = self.name + '_' + hid
         return hid
-
-    @property
-    def stage_machine(self):
-        return self.machines[self.machine_name]
-
-    @property
-    def stage_resource(self):
-        return self.resources[self.resource_name]
 
     @property
     def path(self):
@@ -434,12 +329,9 @@ class Workflow(object):
 
         obj = {
             'tasks': obj_json['tasks'],
-            'machines': obj_json['machines'],
-            'resources': obj_json['resources'],
-            'resource_conns': obj_json['resource_conns'],
             'stage_directory': obj_json['_stage_directory'],
             'extend': extend,
-            'human_name': obj_json['human_name'],
+            'name': obj_json['name'],
             'human_id': obj_json['human_id'],
             'status': obj_json['status'],
             'profile_str': obj_json['profile_str'],
