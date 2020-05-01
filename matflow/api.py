@@ -58,10 +58,10 @@ def make_workflow(profile_path, directory=None):
     return workflow
 
 
-def load_workflow(directory, viewer=False, full_path=False):
+def load_workflow(directory, full_path=False):
 
     path = Path(directory or '').resolve()
-    workflow = Workflow.load_state(path, viewer, full_path)
+    workflow = Workflow.load_state(path, full_path)
 
     return workflow
 

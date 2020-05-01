@@ -308,7 +308,7 @@ class Workflow(object):
             hickle.dump(to_jsonable(self), handle)
 
     @classmethod
-    def load_state(cls, path, viewer=False, full_path=False):
+    def load_state(cls, path, full_path=False):
         """Load state of workflow from an HDF5 file."""
         path = Path(path)
         if not full_path:
