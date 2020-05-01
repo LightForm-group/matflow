@@ -27,7 +27,7 @@ class Workflow(object):
     INIT_STATUS = 'pending'
 
     def __init__(self, name, tasks, stage_directory=None, human_id=None, status=None,
-                 extend=None, viewer=False, profile_str=None):
+                 extend=None, profile_str=None):
 
         self.name = name
         self._extend_paths = [str(Path(i).resolve())
@@ -43,14 +43,10 @@ class Workflow(object):
         self.status = status or Workflow.INIT_STATUS  # | 'waiting' | 'complete'
         self.human_id = human_id or self._make_human_id()
 
-        if not self.path.is_dir() and not viewer:
-            self._write_directories()
-            self._write_hpcflow_workflow()
-
-    def _write_directories(self):
+    def write_directories(self):
         'Generate task and element directories.'
 
-        self.path.mkdir()
+        self.path.mkdir(exist_ok=False)
 
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
@@ -64,7 +60,7 @@ class Workflow(object):
                 task_elem_path = task_path.joinpath(str(zeropad(i, num_elems - 1)))
                 task_elem_path.mkdir()
 
-    def _write_hpcflow_workflow(self):
+    def write_hpcflow_workflow(self):
         'Generate an hpcflow workflow file to execute this workflow.'
 
         command_groups = []
@@ -336,8 +332,6 @@ class Workflow(object):
             'status': obj_json['status'],
             'profile_str': obj_json['profile_str'],
         }
-        if viewer:
-            obj.update({'viewer': True})
 
         return cls(**obj)
 

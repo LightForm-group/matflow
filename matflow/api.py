@@ -16,18 +16,19 @@ from matflow.models import Workflow
 
 
 def make_workflow(profile_path, directory=None):
-    """Generate a new Workflow.
+    """Generate a new Workflow from a profile file.
 
     Parameters
     ----------
     profile : str or Path
+        Path to the profile file.
     directory : str or Path, optional
         The directory in which the Workflow will be generated. By default, this
         is the working (i.e. invoking) directory.    
 
     Returns
     -------
-    Workflow
+    workflow : Workflow
 
     """
 
@@ -38,16 +39,17 @@ def make_workflow(profile_path, directory=None):
     with profile_path.open('r') as handle:
         profile_str = handle.read()
 
-    # print('workflow_dict:')
-    # pprint(workflow_dict)
-
     workflow = Workflow(**workflow_dict, stage_directory=stage_dir,
                         profile_str=profile_str)
+
+    workflow.write_directories()
+    workflow.write_hpcflow_workflow()
     workflow.save_state()
 
     # Copy profile to workflow directory:
     workflow.path.joinpath(profile_path).write_bytes(profile_path.read_bytes())
 
+    # Copy workflow human_id to clipboard, if supported:
     try:
         pyperclip.copy(workflow.human_id)
     except:
