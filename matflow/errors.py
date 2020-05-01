@@ -20,3 +20,7 @@ class TaskSchemaError(Exception):
 
 class TaskParameterError(Exception):
     'For incorrectly parametrised tasks.'
+
+
+class ProfileError(Exception):
+    'For malformed profile file data.'
