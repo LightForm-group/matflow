@@ -25,6 +25,19 @@ from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
 
 class Workflow(object):
 
+    __slots__ = [
+        '_id',
+        '_human_id',
+        '_profile_str',
+        '_is_from_file',
+        '_name',
+        '_extend_paths',
+        '_extend_nest_idx',
+        '_stage_directory',
+        '_tasks',
+        '_elements_idx',
+    ]
+
     def __init__(self, name, tasks, stage_directory=None, extend=None):
 
         self._id = None             # Assigned once by set_ids()
@@ -131,7 +144,7 @@ class Workflow(object):
             raise ValueError(f'IDs are already set for workflow. ID is: "{self.id}"; '
                              f'human ID is "{self.human_id}".')
         else:
-            self._hid = self.name_safe + '_' + parse_times('%Y-%m-%d-%H%M%S')[0]
+            self._human_id = self.name_safe + '_' + parse_times('%Y-%m-%d-%H%M%S')[0]
             self._id = secrets.token_hex(15)
 
     @property
