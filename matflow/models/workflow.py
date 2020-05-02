@@ -38,13 +38,14 @@ class Workflow(object):
         '_elements_idx',
     ]
 
-    def __init__(self, name, tasks, stage_directory=None, extend=None):
+    def __init__(self, name, tasks, stage_directory=None, extend=None,
+                 __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
         self._profile_str = None    # Assigned once in `profile_str` setter
-        self._is_from_file = False  # Assigned True when loading from HDF5 file
 
+        self._is_from_file = __is_from_file
         self._name = name
         self._extend_paths = [str(Path(i).resolve())
                               for i in extend['paths']] if extend else None
@@ -363,7 +364,7 @@ class Workflow(object):
         """Save state of workflow to an HDF5 file."""
         path = Path(path or self.hdf5_path)
         with path.open('w') as handle:
-            hickle.dump(to_jsonable(self), handle)
+            hickle.dump(to_jsonable(self, exclude=['_is_from_file']), handle)
 
     @classmethod
     def load_state(cls, path, full_path=False):
@@ -388,12 +389,11 @@ class Workflow(object):
             'extend': extend,
         }
 
-        workflow = cls(**obj)
+        workflow = cls(**obj, __is_from_file=True)
 
         workflow.profile_str = obj_json['profile_str']
         workflow._human_id = obj_json['human_id']
         workflow._id = obj_json['id']
-        workflow._is_from_file = True  # disregard the value from the HDF5 file.
 
         return workflow
 
