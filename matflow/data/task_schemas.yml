@@ -83,6 +83,71 @@ task_schemas:
                   - [--infile1, t2_m1_infile_1]
                   - [--infile2, t2_m1_infile_1]
 
+  - name: dummy_task_2b
+    outputs:
+      - parameter_4
+    methods:
+      - name: method_1
+        inputs:
+          - parameter_2[group=group_A]
+          - parameter_3
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                  - parameter_2
+                  - parameter_3
+                file: t2b_m1_infile_1
+            commands:
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, t2b_m1_infile_1]
+                  - [--infile2, t2b_m1_infile_1]
+
+  - name: dummy_task_2c
+    outputs:
+      - parameter_5
+    methods:
+      - name: method_1
+        inputs:
+          - parameter_3
+          - parameter_4
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                - parameter_3
+                - parameter_4
+                file: t2c_m1_infile_1
+            commands:
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, t2c_m1_infile_1]
+                  - [--infile2, t2c_m1_infile_1]    
+
+  - name: dummy_task_3b
+    outputs:
+      - parameter_7
+    methods:
+      - name: method_1
+        inputs:
+          - parameter_2[group=G1,alias=parameter_2_G1]
+          - parameter_5
+          - parameter_6
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                - parameter_2_G1
+                - parameter_5
+                - parameter_6
+                file: t3b_m1_infile_1
+            commands:
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, t3b_m1_infile_1]
+                  - [--infile2, t3b_m1_infile_1]   
+
   - name: dummy_task_3
     outputs:
       - parameter_6
@@ -137,10 +202,8 @@ task_schemas:
 
   - name: dummy_task_5
     inputs:
-      - parameter_8
-      - parameter_10  
-    input_groups:
-      parameter_8: my_group
+      - parameter_8[group=my_group]
+      - parameter_10
     outputs:
       - parameter_11
     methods:
@@ -161,6 +224,87 @@ task_schemas:
                 options:
                   - [--infile1, t5_m1_infile_1]
                   - [--infile2, t5_m1_infile_1]
+
+  - name: dummy_task_5b
+    notes: >
+      For a task that takes inputs from given contexts like this, it may be assigned a
+      context so long as it is not the same as any of the contexts from which it draws its
+      inputs (otherwise it would not link to all of its inputs correctly).
+    inputs:
+      - parameter_8[context=context_A,alias=parameter_8A]
+      - parameter_8[context=context_B,alias=parameter_8B]
+    outputs:
+      - parameter_11
+    methods:
+      - name: method_1
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                - parameter_8A
+                - parameter_8B
+                file: t5b_m1_infile_1
+            output_map:
+              - files:
+                  - outfile.txt
+                output: parameter_11
+            commands:
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, t5b_m1_infile_1]
+                  - [--infile2, t5b_m1_infile_1]      
+                  
+  - name: dummy_task_5c
+    inputs:
+      - parameter_8[context=context_A,alias=parameter_8A_group,group=group_A]
+      - parameter_8[context=context_B,alias=parameter_8B_group,group=group_B]
+      - parameter_10
+    outputs:
+      - parameter_11
+    methods:
+      - name: method_1
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                  - parameter_8A_group
+                  - parameter_8B_group
+                  - parameter_10
+                file: t5c_m1_infile_1
+            output_map:
+              - files:
+                  - outfile.txt
+                output: parameter_11
+            commands:
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, t5c_m1_infile_1]
+                  - [--infile2, t5c_m1_infile_1]                   
+
+  - name: dummy_task_6
+    inputs:
+      - parameter_11
+      - parameter_12
+    outputs:
+      - parameter_13
+    methods:
+      - name: method_1
+        implementations:
+          - name: software_1
+            input_map:
+              - inputs:
+                - parameter_11
+                - parameter_12
+                file: t6_m1_infile_1
+            output_map:
+              - files:
+                  - outfile.txt
+                output: parameter_13
+            commands:
+              - command: hpcflow dummy doSomething
+                options:
+                  - [--infile1, t6_m1_infile_1]
+                  - [--infile2, t6_m1_infile_1]
 
   - name: estimate_ODF
     version: 1
@@ -391,11 +535,11 @@ task_schemas:
   - name: fit_yield_function
     version: 1
     inputs:
-      - load_response
+      - load_response[context=multiaxial,group=yield_function_fit]
+      - load_response[context=uniaxial]
       - yield_function_name
       - yield_function_fixed_parameters      
-      - yield_function_initial_parameters    
-      - load_response[load_type=uniaxial]
+      - yield_function_initial_parameters      
     outputs:
       - fitted_yield_function
     methods:

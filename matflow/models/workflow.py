@@ -84,13 +84,14 @@ class Workflow(object):
 
             task_path_rel = str(task.get_task_path(self.path).name)
 
-            # `input_vars` are those inputs that appear in the commands:
+            # `input_vars` are those inputs that appear directly in the commands:
             fmt_commands, input_vars = task.schema.command_group.get_formatted_commands(
                 task.local_inputs['inputs'].keys())
 
             cmd_line_inputs = {}
             for local_in_name, local_in in task.local_inputs['inputs'].items():
                 if local_in_name in input_vars:
+                    # TODO: We currently only consider input_vars for local inputs.
 
                     # Expand values for intra-task nesting:
                     values = [local_in['vals'][i] for i in local_in['vals_idx']]
@@ -201,8 +202,6 @@ class Workflow(object):
         # print('\n_validate_tasks: validating tasks:')
         # pprint(tasks)
 
-        # TODO: validate sequences dicts somewhere.
-
         task_info_lst = []
         software_instances = []
         for task in tasks:
@@ -227,9 +226,9 @@ class Workflow(object):
             if local_inputs is None:
                 local_inputs = get_local_inputs(
                     base=task.get('base'),
-                    num_repeats=task.get('num_repeats'),
+                    repeats=task.get('repeats'),
                     sequences=task.get('sequences'),
-                    group=task.get('group'),
+                    groups=task.get('groups'),
                 )
 
             print('\n_validate_tasks: local_inputs:')
@@ -237,13 +236,13 @@ class Workflow(object):
 
             task_info_lst.append({
                 'name': task['name'],
-                'inputs': schema.inputs,
-                'outputs': schema.outputs,
+                'inputs': schema.inputs,  # input names
+                'outputs': schema.outputs,  # output names
                 'length': local_inputs['length'],
                 'nest': task.get('nest'),
                 'merge_priority': task.get('merge_priority'),
-                'schema': schema,
-                'local_inputs': local_inputs,
+                'schema': schema,  # only used by `check_missing_inputs`
+                'local_inputs': local_inputs,  # used for `group_idx`
                 'context': task.get('context', ''),
             })
 
@@ -262,7 +261,7 @@ class Workflow(object):
             task_i.pop('base', None)
             task_i.pop('sequences', None)
             task_i.pop('software', None)
-            task_i.pop('group', None)
+            task_i.pop('groups', None)
             task_i.pop('group_idx', None)
 
             task_i['nest'] = task_info_lst[idx]['nest']
@@ -979,7 +978,7 @@ def check_task_compatibility(task_info_lst):
 
         upstream_tasks = [task_info_lst[i] for i in dependency_idx[idx]]
         num_elements = get_task_num_elements(downstream_tsk, upstream_tasks)
-        print(f'check_task_compatibility: num_elements: {num_elements}')
+        print(f'\ncheck_task_compatibility: num_elements: {num_elements}')
 
         downstream_tsk['num_elements'] = num_elements
 
@@ -989,6 +988,8 @@ def check_task_compatibility(task_info_lst):
 
         params_idx, group_idx = get_input_elements_idx(
             task_elems_idx, downstream_tsk, task_info_lst)
+
+        # print(f'check_task_compatibility: group_idx: {group_idx}')
 
         downstream_tsk['group_idx'] = group_idx
 
@@ -1001,10 +1002,23 @@ def check_task_compatibility(task_info_lst):
             'groups': group_idx
         })
 
+    elements_idx = collapse_element_groups(elements_idx, task_info_lst)
+
     return list(task_srt_idx), task_info_lst, elements_idx
 
 
 def check_missing_inputs(task_info_lst, dependency_list):
+    """Check for missing inputs in the task.
+
+    Parameters
+    ----------
+    task_info_lst : list of dict
+        Each dict must have keys:
+            schema : TaskSchema
+            local_input_names : list of str
+                List of the locally defined inputs for the task.
+
+    """
 
     for deps_idx, task_info in zip(dependency_list, task_info_lst):
 
@@ -1022,13 +1036,26 @@ def check_missing_inputs(task_info_lst, dependency_list):
 
 
 def get_dependency_idx(task_info_lst):
+    """Find the dependencies between tasks.
+
+    Parameters
+    ----------
+    task_info_lst : list of dict
+        Each dict must have keys:
+            context : str
+            schema : TaskSchema
+    """
 
     dependency_idx = []
     all_outputs = []
     for task_info in task_info_lst:
 
         task_contexts = list(set([i.get('context', '') for i in task_info['inputs']]))
-        if task_info['context'] in task_contexts:
+        # print(f'task_contexts: {task_contexts}')
+
+        # TODO: Currently, this is triggered only if the task context is non-default (''),
+        # is this best?
+        if task_info['context'] and task_info['context'] in task_contexts:
             msg = ('A task cannot be assigned a context from which one or more of its '
                    'input parameters are drawn.')
             raise IncompatibleWorkflow(msg)
@@ -1076,6 +1103,30 @@ def get_dependency_idx(task_info_lst):
 
 
 def get_task_num_elements(downstream_task, upstream_tasks):
+    """Given a task and all upstream tasks before it, get how many elements it has.
+
+    Parameters
+    ----------
+    downstream_task : dict
+        Must contain the following keys:
+            name : str
+            length : int
+    upstream_tasks : list of dict
+        Each dict must contain the following keys:
+            name : str
+            merge_priority : int ???
+            nest : bool
+            num_elements : int
+    """
+
+    # print('downstream_task:')
+    # pprint(downstream_task)
+
+    input_groups = [i['group'] for i in downstream_task['inputs'] if i.get('group')]
+    print(f'input_groups: {input_groups}')
+
+    # print('upstream_tasks:')
+    # pprint(upstream_tasks)
 
     num_elements = downstream_task['length']
 
@@ -1100,6 +1151,19 @@ def get_task_num_elements(downstream_task, upstream_tasks):
 
         for i in merging_order:
             task_to_merge = upstream_tasks[i]
+
+            # print('task_to_merge')
+            # pprint(task_to_merge)
+
+            merging_group_idx = task_to_merge['local_inputs']['group_idx']
+            print(f'merging_group_idx: {merging_group_idx}')
+
+            merging_num_elems = 1
+            for group_name, group_idx in merging_group_idx.items():
+                if group_name in input_groups:
+                    # Get number of unique group indices
+                    merging_num_elems *= len(np.unique(group_idx))
+
             if task_to_merge['nest']:
                 num_elements *= task_to_merge['num_elements']
             else:
@@ -1174,13 +1238,14 @@ def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
     # print('get_input_element_idx: downstream_task:')
     # pprint(downstream_task)
 
-    # print('get_input_element_idx: task_info_lst:')
+    # print('\nget_input_element_idx: task_info_lst:')
     # pprint(task_info_lst)
 
     # print(f'get_input_element_idx: downstream_task["local_inputs"]["group_idx"]: '
     #       f'{downstream_task["local_inputs"]["group_idx"]}')
 
     group_idx = {}
+    # Add group idx from newly defined group:
     new_group = downstream_task['local_inputs']['group_idx']
     if new_group:
         for k, v in new_group.items():
@@ -1191,17 +1256,26 @@ def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
 
         # Find the task_idx for which this input is an output:
         input_name = input_dict.get('alias', input_dict['name'])
+
+        # print(f'finding task idx for input_name: {input_name}')
+
         input_task_idx = None
         i_groups = {}
         for i in task_info_lst:
+            # print(f'checking task for outputs matching input: {input_name}. '
+            #       f'task context: {i["context"]}, '
+            #       f'input context: {input_dict.get("context")}')
             if (
-                input_name in i['outputs'] and
-                downstream_task['context'] == i['context']
+                input_dict['name'] in i['outputs'] and
+                downstream_task.get('context') == i['context']
             ):
                 input_task_idx = i['task_idx']
                 param_task_idx = input_task_idx
-                i_groups = i['local_inputs']['group_idx'] or {}
+                i_groups.update(i['local_inputs']['group_idx'] or {})
                 i_groups.update(i.get('group_idx', {}))
+
+                # print(f'found input_task_idx: {input_task_idx}')
+
                 break
 
         if input_task_idx is None:
@@ -1219,7 +1293,38 @@ def get_input_elements_idx(task_elements_idx, downstream_task, task_info_lst):
                     'output_idx': task_elements_idx[input_task_idx],
                 }
             })
+            # Add group idx from upstream tasks on which this task depends:
+            # print(f'i_groups: {i_groups}')
             for k, v in i_groups.items():
                 group_idx.update({k: v[task_elements_idx[input_task_idx]]})
 
     return params_idx, group_idx
+
+
+def collapse_element_groups(elements_idx, task_info_lst):
+    'Collapse element groups where they are consumed in the elements index.'
+
+    # print('\nelements_idx')
+    # pprint(elements_idx, indent=4)
+
+    task_info_lst_sub = [
+        {k: v for k, v in i.items() if k in ['local_inputs', 'inputs']}
+        for i in task_info_lst
+    ]
+
+    # print('\ntask_info_lst_sub')
+    # pprint(task_info_lst_sub, indent=4)
+
+    new_elements_idx = []
+    for idx, (elems_idx, task_info) in enumerate(zip(elements_idx, task_info_lst_sub)):
+
+        pass
+        # print(f'idx: {idx}\n-------------')
+
+        # print('elems_idx:')
+        # pprint(elems_idx)
+
+        # print('\ntask_info:')
+        # pprint(task_info)
+
+    return elements_idx

@@ -103,7 +103,6 @@ def resolve_local_inputs(base=None, num_repeats=None, sequences=None):
     """Transform `base` and `sequences` into `input` list."""
 
     # TODO: delete this function.
-    # TODO: shouldn't need to specify nest_idx if only one sequence.
 
     # print('\nbase:')
     # pprint(base)
@@ -215,7 +214,7 @@ def combine_base_sequence(sequences, base=None):
     return nested_seq_all
 
 
-def normalise_local_inputs(base=None, num_repeats=None, sequences=None):
+def normalise_local_inputs(base=None, sequences=None):
     'Validate and normalise task inputs.'
 
     if base is None:
@@ -277,15 +276,12 @@ def normalise_local_inputs(base=None, num_repeats=None, sequences=None):
     return inputs_lst
 
 
-def get_local_inputs(base=None, num_repeats=None, sequences=None, group=None):
+def get_local_inputs(base=None, repeats=None, sequences=None, groups=None):
 
-    inputs_lst = normalise_local_inputs(base, num_repeats, sequences)
+    inputs_lst = normalise_local_inputs(base, sequences)
 
-    if num_repeats is None:
-        num_repeats = 1
-
-    # print('get_local_inputs: inputs_lst')
-    # pprint(inputs_lst)
+    if repeats is None:
+        repeats = 1
 
     if inputs_lst:
 
@@ -303,9 +299,6 @@ def get_local_inputs(base=None, num_repeats=None, sequences=None, group=None):
         total_len = 1
 
     inputs_dct = {'inputs': {}}
-    group_idx = None
-    if group:
-        group_idx = {group: np.tile(np.arange(num_repeats), (total_len,))}
 
     for idx, input_i in enumerate(inputs_lst):
 
@@ -318,8 +311,10 @@ def get_local_inputs(base=None, num_repeats=None, sequences=None, group=None):
             tile_i = prev_tile
 
         vals_idx = np.tile(np.repeat(np.arange(lengths[idx]), rep_i), tile_i)
-        vals_idx = np.repeat(vals_idx, num_repeats)
+        vals_idx = np.repeat(vals_idx, repeats)
+        repeats_idx = np.tile(np.arange(repeats), (total_len,))
 
+        inputs_dct['repeats_idx'] = repeats_idx
         inputs_dct['inputs'].update({
             input_i['name']: {
                 'nest_idx': input_i['nest_idx'],
@@ -327,19 +322,41 @@ def get_local_inputs(base=None, num_repeats=None, sequences=None, group=None):
                 'vals_idx': vals_idx,
             }
         })
-
-        if 'group' in input_i:
-            if group_idx is not None:
-                # TODO: move this check to `normalise_local_inputs`:
-                msg = ('Specify the `group` key in either one of the sequences, or as a '
-                       'task key, in combination with `num_repeats`.')
-                raise ValueError(msg)
-            group_idx = {input_i['group']: vals_idx}
-
         prev_reps = rep_i
         prev_tile = tile_i
 
-    total_len *= num_repeats
+    group_idx = {}
+    if groups:
+
+        allowed_grp = list(inputs_dct['inputs'].keys()) + ['repeats']
+        allowed_grp_fmt = ', '.join([f'"{i}"' for i in allowed_grp])
+
+        for group_name, group_params_lst in groups.items():
+
+            if not group_params_lst:
+                group_idx.update({group_name: np.zeros(total_len, dtype=int)})
+
+            else:
+
+                for param_name in group_params_lst:
+                    if param_name not in allowed_grp:
+                        msg = (f'Parameter "{param_name}" cannot be grouped, because it '
+                               f'has no specified values. Allowed group values are: '
+                               f'{allowed_grp_fmt}.')
+                        raise ValueError(msg)
+
+                combined_arr = []
+                for i in group_params_lst:
+                    if i != 'repeats':
+                        combined_arr.append(inputs_dct['inputs'][i]['vals_idx'])
+                    else:
+                        combined_arr.append(inputs_dct['repeats_idx'])
+
+                combined_arr = np.vstack(combined_arr)
+                _, group_i_idx = np.unique(combined_arr, axis=1, return_inverse=True)
+                group_idx.update({group_name: group_i_idx})
+
+    total_len *= repeats
     inputs_dct.update({
         'length': total_len,
         'group_idx': group_idx,
@@ -414,7 +431,7 @@ class TaskSchema(object):
                         s_key, s_val = s.split('=')
                         inp.update({s_key.strip(): s_val.strip()})
 
-                    if 'context' in inp and 'alias' not in inp:
+                    if 'context' in inp and inp['context'] and 'alias' not in inp:
                         msg = ('Task schema inputs for which a `context` is specified '
                                'must also be given an `alias`.')
                         raise TaskSchemaError(msg)
@@ -426,6 +443,10 @@ class TaskSchema(object):
                 if r not in inp:
                     msg = f'Task schema input must include key {r}.'
                     raise TaskSchemaError(msg)
+
+            if 'context' not in inp:
+                # Add default parameter context:
+                inp['context'] = None
 
             unknown_inp_keys = set(inp.keys()) - set(allowed_inp_keys)
             if unknown_inp_keys:
@@ -520,7 +541,7 @@ class Task(object):
 
     def __init__(self, name, method, software_instance, task_idx, nest=None,
                  merge_priority=None, run_options=None, base=None, sequences=None,
-                 num_repeats=None, local_inputs=None, inputs=None, outputs=None,
+                 repeats=None, local_inputs=None, inputs=None, outputs=None,
                  schema=None, status=None, pause=False, files=None, resource_usage=None,
                  stats=True, context=''):
 

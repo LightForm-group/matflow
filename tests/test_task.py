@@ -461,3 +461,22 @@ class ResolveLocalInputsTestCase(unittest.TestCase):
         print(f'local_ins_2: {local_ins_2}')
 
         self.assertTrue(local_ins_1 == local_ins_2)
+
+    def test_sequence_repeats(self):
+
+        sequences = [
+            {
+                'name': 'parameter_1',
+                'nest_idx': 0,
+                'vals': [101, 102],
+            },
+            {
+                'repeats': 2,
+            }
+        ]
+        local_ins = get_local_inputs(sequences=sequences)['inputs']
+
+        # Expand `vals_idx`:
+        local_ins = {k: np.array(v['vals'])[v['vals_idx']] for k, v in local_ins.items()}
+
+        print(f'local_ins: {local_ins}')

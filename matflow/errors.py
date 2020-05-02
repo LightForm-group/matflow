@@ -14,6 +14,14 @@ class IncompatibleSequence(Exception):
     'For task sequence definitions that are not logically consistent.'
 
 
+class SequenceError(Exception):
+    'For malformed sequence definitions.'
+
+
+class TaskError(Exception):
+    'For malformed task definitions.'
+
+
 class TaskSchemaError(Exception):
     'For nonsensical task schema definitions.'
 
