@@ -10,10 +10,10 @@ import yaml
 
 from hpcflow.api import get_stats as hpcflow_get_stats
 
-from matflow import (CONFIG, CURRENT_MACHINE, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
+from matflow import (CONFIG, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP,
                      TASK_OUTPUT_FILES_MAP)
-from matflow.models import Task, Machine, Resource, ResourceConnection
+from matflow.models import Task
 from matflow.models.task import (get_schema_dict, combine_base_sequence, TaskSchema,
                                  get_local_inputs)
 from matflow.jsonable import to_jsonable
@@ -26,42 +26,166 @@ class Workflow(object):
 
     INIT_STATUS = 'pending'
 
-    def __init__(self, tasks, machines, resources, resource_conns, stage_directory=None,
-                 human_id=None, status=None, machine_name=None, human_name=None,
-                 extend=None, viewer=False, profile_str=None):
+    def __init__(self, name, tasks, stage_directory=None, human_id=None, status=None,
+                 extend=None, profile_str=None):
 
-        self.human_name = human_name or ''
+        self._name = name
+        self._profile_str = profile_str
         self._extend_paths = [str(Path(i).resolve())
                               for i in extend['paths']] if extend else None
-        self.extend_nest_idx = extend['nest_idx'] if extend else None
+        self._extend_nest_idx = extend['nest_idx'] if extend else None
         self._stage_directory = str(stage_directory)
-        self.machines, self.resources, self.resource_conns = self._init_resources(
-            machines, resources, resource_conns)
-
-        self.machine_name = machine_name or CURRENT_MACHINE
-        self.profile_str = profile_str
-
-        try:
-            self.resource_name = self._get_resource_name()
-        except ValueError:
-            warn(f'Could not find resource name for workflow: {human_name}/{human_id}')
 
         tasks, elements_idx = self._validate_tasks(tasks)
-        self.tasks = tasks
+        self._tasks = tasks
         self._elements_idx = elements_idx
 
-        self.status = status or Workflow.INIT_STATUS  # | 'waiting' | 'complete'
-        self.human_id = human_id or self._make_human_id()
+        self._status = status or Workflow.INIT_STATUS  # | 'waiting' | 'complete'
+        self._human_id = human_id or self._make_human_id()
 
-        # TEMP:
-        # if not self.path.is_dir() and not viewer:
-        #     self._write_directories()
-        #     self._write_hpcflow_workflow()
+    def _validate_tasks(self, tasks):
 
-    def _write_directories(self):
+        # TODO: validate sequences dicts somewhere.
+
+        task_info_lst = []
+        software_instances = []
+        for task in tasks:
+
+            software_instance = task.get('software_instance')
+            if task.get('software'):
+                if not software_instance:
+                    software_instance = self._get_software_instance(
+                        task['software'],
+                        task['run_options'].get('num_cores', 1),
+                    )
+                else:
+                    software_instance['num_cores'] = [
+                        int(i) for i in software_instance['num_cores']]
+
+            software_instances.append(software_instance)
+            schema_dict = get_schema_dict(task['name'], task['method'], software_instance)
+            schema = TaskSchema(**schema_dict)
+
+            local_inputs = task.get('local_inputs')
+            if local_inputs is None:
+                local_inputs = get_local_inputs(
+                    base=task.get('base'),
+                    num_repeats=task.get('num_repeats'),
+                    sequences=task.get('sequences'),
+                )
+
+            task_info_lst.append({
+                'name': task['name'],
+                'inputs': schema.inputs,
+                'outputs': schema.outputs,
+                'length': local_inputs['length'],
+                'nest': task.get('nest'),
+                'merge_priority': task.get('merge_priority'),
+                'schema': schema,
+                'local_inputs': local_inputs,
+            })
+
+        task_srt_idx, task_info_lst, elements_idx = check_task_compatibility(
+            task_info_lst)
+
+        validated_tasks = []
+        for idx, i in enumerate(task_srt_idx):
+
+            # Reorder and instantiate task
+            task_i = tasks[i]
+
+            task_i.pop('base', None)
+            task_i.pop('sequences', None)
+            task_i.pop('software', None)
+
+            task_i['nest'] = task_info_lst[idx]['nest']
+            task_i['task_idx'] = task_info_lst[idx]['task_idx']
+            task_i['merge_priority'] = task_info_lst[idx]['merge_priority']
+            task_i['software_instance'] = software_instances[idx]
+            task_i['schema'] = task_info_lst[idx]['schema']
+            task_i['local_inputs'] = task_info_lst[idx]['local_inputs']
+
+            task_i_obj = Task(**task_i)
+            validated_tasks.append(task_i_obj)
+
+        return validated_tasks, elements_idx
+
+    def _get_software_instance(self, software_name, num_cores):
+        """Find a software instance in the software.yml file that matches the software
+        requirements of a given task."""
+
+        for soft_inst in SOFTWARE:
+
+            if soft_inst['name'] != software_name:
+                continue
+
+            core_range = soft_inst['num_cores']
+            all_num_cores = list(range(*core_range)) + [core_range[1]]
+            if num_cores in all_num_cores:
+                return soft_inst
+
+    def _make_human_id(self):
+        hid = parse_times('%Y-%m-%d-%H%M%S')[0]
+        if self.name:
+            hid = self.name + '_' + hid
+        return hid
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def profile_str(self):
+        'Get, as a string, the profile file that was used to construct this workflow.'
+        return self._profile_str
+
+    @property
+    def tasks(self):
+        return self._tasks
+
+    @property
+    def human_id(self):
+        return self._human_id
+
+    @property
+    def status(self):
+        return self._status
+
+    @property
+    def elements_idx(self):
+        return self._elements_idx
+
+    @property
+    def extend_paths(self):
+        if self._extend_paths:
+            return [Path(i) for i in self._extend_paths]
+        else:
+            return None
+
+    @property
+    def extend_nest_idx(self):
+        return self._extend_nest_idx
+
+    @property
+    def stage_directory(self):
+        return Path(self._stage_directory)
+
+    @property
+    def path(self):
+        return Path(self.stage_directory, self.human_id)
+
+    @property
+    def path_str(self):
+        return str(self.path)
+
+    @property
+    def hdf5_path(self):
+        return self.path.joinpath('workflow.hdf5')
+
+    def write_directories(self):
         'Generate task and element directories.'
 
-        self.path.mkdir()
+        self.path.mkdir(exist_ok=False)
 
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
@@ -75,7 +199,7 @@ class Workflow(object):
                 task_elem_path = task_path.joinpath(str(zeropad(i, num_elems - 1)))
                 task_elem_path.mkdir()
 
-    def _write_hpcflow_workflow(self):
+    def write_hpcflow_workflow(self):
         'Generate an hpcflow workflow file to execute this workflow.'
 
         command_groups = []
@@ -197,243 +321,20 @@ class Workflow(object):
         with self.path.joinpath('1.hf.yml').open('w') as handle:
             yaml.safe_dump(hf_data, handle)
 
-    def _validate_tasks(self, tasks):
-
-        # print('\n_validate_tasks: validating tasks:')
-        # pprint(tasks)
-
-        task_info_lst = []
-        software_instances = []
-        for task in tasks:
-
-            software_instance = task.get('software_instance')
-            if task.get('software'):
-                if not software_instance:
-                    software_instance = self._get_software_instance(
-                        task['software'],
-                        task['run_options']['resource'],
-                        task['run_options'].get('num_cores', 1),
-                    )
-                else:
-                    software_instance['num_cores'] = [
-                        int(i) for i in software_instance['num_cores']]
-
-            software_instances.append(software_instance)
-            schema_dict = get_schema_dict(task['name'], task['method'], software_instance)
-            schema = TaskSchema(**schema_dict)
-
-            local_inputs = task.get('local_inputs')
-            if local_inputs is None:
-                local_inputs = get_local_inputs(
-                    base=task.get('base'),
-                    repeats=task.get('repeats'),
-                    sequences=task.get('sequences'),
-                    groups=task.get('groups'),
-                )
-
-            print('\n_validate_tasks: local_inputs:')
-            pprint(local_inputs)
-
-            task_info_lst.append({
-                'name': task['name'],
-                'inputs': schema.inputs,  # input names
-                'outputs': schema.outputs,  # output names
-                'length': local_inputs['length'],
-                'nest': task.get('nest'),
-                'merge_priority': task.get('merge_priority'),
-                'schema': schema,  # only used by `check_missing_inputs`
-                'local_inputs': local_inputs,  # used for `group_idx`
-                'context': task.get('context', ''),
-            })
-
-        task_srt_idx, task_info_lst, elements_idx = check_task_compatibility(
-            task_info_lst)
-
-        print('\n_validate_tasks: elements_idx:')
-        pprint(elements_idx)
-
-        validated_tasks = []
-        for idx, i in enumerate(task_srt_idx):
-
-            # Reorder and instantiate task
-            task_i = tasks[i]
-
-            task_i.pop('base', None)
-            task_i.pop('sequences', None)
-            task_i.pop('software', None)
-            task_i.pop('groups', None)
-            task_i.pop('group_idx', None)
-
-            task_i['nest'] = task_info_lst[idx]['nest']
-            task_i['task_idx'] = task_info_lst[idx]['task_idx']
-            task_i['merge_priority'] = task_info_lst[idx]['merge_priority']
-            task_i['software_instance'] = software_instances[idx]
-            task_i['schema'] = task_info_lst[idx]['schema']
-            task_i['local_inputs'] = task_info_lst[idx]['local_inputs']
-
-            task_i_obj = Task(**task_i)
-            validated_tasks.append(task_i_obj)
-
-        # print('\n_validate_tasks: validated_tasks:')
-        # pprint(validated_tasks)
-
-        return validated_tasks, elements_idx
-
     def get_extended_workflows(self):
         if self.extend_paths:
             return [Workflow.load_state(i.parent) for i in self.extend_paths]
         else:
             return None
 
-    @property
-    def elements_idx(self):
-        return self._elements_idx
-
-    @property
-    def extend_paths(self):
-        if self._extend_paths:
-            return [Path(i) for i in self._extend_paths]
-        else:
-            return None
-
-    @property
-    def stage_directory(self):
-        return Path(self._stage_directory)
-
-    def _get_software_instance(self, software_name, resource_name, num_cores):
-        """Find a software instance in the software.yml file that matches the software of
-        a given task and a given machine."""
-
-        resource = self.resources[resource_name]
-
-        try:
-            machines = [resource.machine] + [
-                i['machine'] for i in resource.non_cloud_machines]
-        except ValueError:
-            machines = [resource.machine]
-
-        machine_names = [i.name for i in machines]
-
-        for soft_inst in SOFTWARE:
-
-            if soft_inst['name'] != software_name:
-                continue
-
-            if soft_inst['machine'] in machine_names:
-                core_range = soft_inst['num_cores']
-                all_num_cores = list(range(*core_range)) + [core_range[1]]
-                if num_cores in all_num_cores:
-                    return soft_inst
-
-        msg = (f'Could not find a suitable software instance for software '
-               f'"{software_name}" on machines {machine_names}, using {num_cores} cores.')
-        raise ValueError(msg)
-
-    def _init_resources(self, machines, resources, resource_conns):
-
-        machines_no_sync_client = []
-        machines_sync_client = []
-        for mach_dict in machines.values():
-            if mach_dict.get('sync_client_paths'):
-                machines_sync_client.append(mach_dict)
-            else:
-                machines_no_sync_client.append(mach_dict)
-
-        machines_out = {}
-        for mach_dict in machines_no_sync_client + machines_sync_client:
-            sync_client_paths = [
-                {
-                    'machine': machines_out[i['machine']],
-                    'sync_path': i['sync_path'],
-                }
-                for i in mach_dict.get('sync_client_paths', [])
-            ]
-            machines_out.update({
-                mach_dict['name']: Machine(
-                    name=mach_dict['name'],
-                    os_type=mach_dict['os_type'],
-                    is_dropbox=mach_dict.get('is_dropbox', False),
-                    sync_client_paths=sync_client_paths,
-                )
-            })
-
-        resources_out = {}
-        for res_name, res_dict in resources.items():
-            resources_out.update({
-                res_name: Resource(
-                    name=res_dict['name'],
-                    base_path=res_dict['base_path'],
-                    machine=machines_out[res_dict['machine']],
-                )
-            })
-
-        resource_conns_out = {}
-        for res_conn_key, res_conn_dict in resource_conns.items():
-            resource_conns_out.update({
-                res_conn_key: ResourceConnection(
-                    source=resources_out[res_conn_dict['source']],
-                    destination=resources_out[res_conn_dict['destination']],
-                    hostname=res_conn_dict.get('hostname'),
-                )
-            })
-
-        return machines_out, resources_out, resource_conns_out
-
-    def _get_resource_name(self):
-        'Get name or Workflow stage resource.'
-
-        for resource in self.resources.values():
-            try:
-                non_cloud_mach = resource.non_cloud_machines
-            except ValueError:
-                if (resource.machine.name == self.machine_name and
-                        resource.base_path == self.stage_directory):
-                    return resource.name
-                else:
-                    continue
-            for i in non_cloud_mach:
-                res_base_path = Path(str(resource.base_path).lstrip('\\'))
-                sync_path = Path(i['sync_path']).joinpath(res_base_path)
-                if (i['machine'].name == self.machine_name and
-                        sync_path.resolve() == self.stage_directory.resolve()):
-                    return resource.name
-
-        raise ValueError('Could not find resource name for the Workflow staging area.')
-
-    def _make_human_id(self):
-        hid = parse_times('%Y-%m-%d-%H%M%S')[0]
-        if self.human_name:
-            hid = self.human_name + '_' + hid
-        return hid
-
-    @property
-    def stage_machine(self):
-        return self.machines[self.machine_name]
-
-    @property
-    def stage_resource(self):
-        return self.resources[self.resource_name]
-
-    @property
-    def path(self):
-        return Path(self.stage_directory, self.human_id)
-
-    @property
-    def path_str(self):
-        return str(self.path)
-
-    @property
-    def hdf_path(self):
-        return self.path.joinpath('workflow.hdf5')
-
     def save_state(self, path=None):
         """Save state of workflow to an HDF5 file."""
-        path = Path(path or self.hdf_path)
+        path = Path(path or self.hdf5_path)
         with path.open('w') as handle:
             hickle.dump(to_jsonable(self), handle)
 
     @classmethod
-    def load_state(cls, path, viewer=False, full_path=False):
+    def load_state(cls, path, full_path=False):
         """Load state of workflow from an HDF5 file."""
         path = Path(path)
         if not full_path:
@@ -450,18 +351,13 @@ class Workflow(object):
 
         obj = {
             'tasks': obj_json['tasks'],
-            'machines': obj_json['machines'],
-            'resources': obj_json['resources'],
-            'resource_conns': obj_json['resource_conns'],
             'stage_directory': obj_json['_stage_directory'],
             'extend': extend,
-            'human_name': obj_json['human_name'],
+            'name': obj_json['name'],
             'human_id': obj_json['human_id'],
             'status': obj_json['status'],
             'profile_str': obj_json['profile_str'],
         }
-        if viewer:
-            obj.update({'viewer': True})
 
         return cls(**obj)
 

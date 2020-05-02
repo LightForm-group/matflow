@@ -50,7 +50,7 @@ setup(
         'matflow': package_data,
     },
     install_requires=[
-        'click==7.0',
+        'click>7.0',
         'hickle',
         'pyyaml',
         'numpy',
