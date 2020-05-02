@@ -4,6 +4,11 @@ Default command line argument formatters for each primitive data type.
 
 """
 
+
+def list_formatter(lst):
+    return ' '.join([f'{i}' for i in lst])
+
+
 DEFAULT_FORMATTERS = {
     str: lambda x: x,
     int: lambda number: str(number),
@@ -13,6 +18,3 @@ DEFAULT_FORMATTERS = {
     tuple: list_formatter,
 }
 
-
-def list_formatter(lst):
-    return ' '.join([f'{i}' for i in lst])
