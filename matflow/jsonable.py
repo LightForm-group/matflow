@@ -16,20 +16,18 @@ NATIVE_TYPES = (
 )
 
 
-def to_jsonable(obj, attr=None, parent=None, idx=None):
-
-    # print(f'\njsonifying object: {obj} of type: {type(obj)}')
+def to_jsonable(obj, attr=None, parent=None, idx=None, exclude=None):
 
     if isinstance(obj, list):
         obj_json = []
         for item_idx, item in enumerate(obj):
-            obj_json.append(to_jsonable(item, attr, obj, item_idx))
+            obj_json.append(to_jsonable(item, attr, obj, item_idx, exclude))
 
     elif isinstance(obj, dict):
         obj_json = {}
         for dct_key, dct_val in obj.items():
             obj_json.update(
-                {dct_key: to_jsonable(dct_val, attr, obj, dct_key)})
+                {dct_key: to_jsonable(dct_val, attr, obj, dct_key, exclude)})
 
     elif isinstance(obj, set):
         msg = ('`set` data type is not yet supported by JSONable.')
@@ -44,10 +42,12 @@ def to_jsonable(obj, attr=None, parent=None, idx=None):
             obj_json = obj.to_jsonable()
         else:
             obj_json = {}
-            # print(f'obj: {obj}')
-            for attr, value in obj.__dict__.items():
+            all_attrs = getattr(obj, '__dict__', getattr(obj, '__slots__'))
+            for attr, value in all_attrs.items():
+                if attr in (exclude or []):
+                    continue
                 obj_json.update({
-                    attr: to_jsonable(value, attr, obj)
+                    attr: to_jsonable(value, attr, obj, exclude)
                 })
 
     return obj_json
