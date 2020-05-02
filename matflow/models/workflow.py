@@ -426,7 +426,7 @@ class Workflow(object):
 
     def get_extended_workflows(self):
         if self.extend_paths:
-            return [Workflow.load_state(i.parent) for i in self.extend_paths]
+            return [Workflow.load(i, full_path=True) for i in self.extend_paths]
         else:
             return None
 
@@ -1018,7 +1018,7 @@ class Workflow(object):
 
         task.files = files
 
-        self.save_state()
+        self.save()
 
     @requires_path_exists
     @increments_version
@@ -1085,7 +1085,7 @@ class Workflow(object):
 
         task.outputs = outputs
 
-        self.save_state()
+        self.save()
 
 
 def check_task_compatibility(task_info_lst):

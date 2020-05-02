@@ -45,7 +45,7 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
     if write_dirs:
         workflow.write_directories()
         workflow.write_hpcflow_workflow()
-        workflow.save_state()
+        workflow.save()
 
         # Copy profile to workflow directory:
         workflow.path.joinpath(profile_path).write_bytes(profile_path.read_bytes())
@@ -62,7 +62,7 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
 def load_workflow(directory, full_path=False):
 
     path = Path(directory or '').resolve()
-    workflow = Workflow.load_state(path, full_path)
+    workflow = Workflow.load(path, full_path)
 
     return workflow
 
