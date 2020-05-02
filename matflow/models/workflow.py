@@ -1,4 +1,5 @@
 import copy
+import functools
 import secrets
 from pathlib import Path
 from pprint import pprint
@@ -21,6 +22,26 @@ from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, zeropad
 from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
                             MissingMergePriority, MissingSoftware)
+
+
+def requires_ids(func):
+    'Workflow method decorator to raise if IDs are not assigned.'
+    @functools.wraps(func)
+    def func_wrap(self, *args, **kwargs):
+        if not self.id:
+            raise ValueError('Run `set_ids()` before using this method.')
+        return func(self, *args, **kwargs)
+    return func_wrap
+
+
+def requires_path_exists(func):
+    'Workflow method decorator to raise if workflow path does not exist as a directory.'
+    @functools.wraps(func)
+    def func_wrap(self, *args, **kwargs):
+        if not self.path_exists:
+            raise ValueError('Run `write_directories` before using this method.')
+        return func(self, *args, **kwargs)
+    return func_wrap
 
 
 class Workflow(object):
@@ -205,11 +226,26 @@ class Workflow(object):
         return Path(self._stage_directory)
 
     @property
+    def path_exists(self):
+        'Does the Workflow project directory exist on this machine?'
+        try:
+            path = self.path
+        except ValueError:
+            return False
+        if path.is_dir():
+            return True
+        else:
+            return False
+
+    @property
+    @requires_ids
     def path(self):
+        'Get the full path of the Workflow project as a Path.'
         return Path(self.stage_directory, self.human_id)
 
     @property
     def path_str(self):
+        'Get the full path of the Workflow project as a string.'
         return str(self.path)
 
     @property
@@ -233,6 +269,7 @@ class Workflow(object):
                 task_elem_path = task_path.joinpath(str(zeropad(i, num_elems - 1)))
                 task_elem_path.mkdir()
 
+    @requires_path_exists
     def write_hpcflow_workflow(self):
         'Generate an hpcflow workflow file to execute this workflow.'
 
@@ -360,6 +397,7 @@ class Workflow(object):
         else:
             return None
 
+    @requires_path_exists
     def save_state(self, path=None):
         """Save state of workflow to an HDF5 file."""
         path = Path(path or self.hdf5_path)
@@ -708,6 +746,7 @@ class Workflow(object):
         # Reassign task inputs:
         cur_task.inputs = expanded_ins
 
+    @requires_path_exists
     def prepare_task(self, task_idx):
         'Prepare inputs and run input maps.'
 
@@ -777,6 +816,7 @@ class Workflow(object):
 
         self.save_state()
 
+    @requires_path_exists
     def process_task(self, task_idx):
         'Process outputs from an executed task: run output map and save outputs.'
 
