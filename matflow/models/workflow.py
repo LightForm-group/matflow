@@ -129,13 +129,17 @@ class Workflow(object):
 
     def _make_human_id(self):
         hid = parse_times('%Y-%m-%d-%H%M%S')[0]
-        if self.name:
-            hid = self.name + '_' + hid
+        hid = self.name_safe + '_' + hid
         return hid
 
     @property
     def name(self):
         return self._name
+
+    @property
+    def name_safe(self):
+        'Get name without spaces'
+        return self.name.replace(' ', '_')
 
     @property
     def profile_str(self):
