@@ -15,6 +15,7 @@ from hpcflow.api import get_stats as hpcflow_get_stats
 from matflow import (CONFIG, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP,
                      TASK_OUTPUT_FILES_MAP, __version__)
+from matflow.command_formatters import DEFAULT_FORMATTERS
 from matflow.models.task import Task, TaskSchema, get_schema_dict, get_local_inputs
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, zeropad
@@ -329,13 +330,11 @@ class Workflow(object):
                     fmt_func = None
                     if fmt_func_scope:
                         fmt_func = fmt_func_scope.get(local_in_name)
-
                     if not fmt_func:
-                        # Apply some default formatting.
-                        if isinstance(values[0], list):
-                            def fmt_func(x): return ' '.join(['{}'.format(i) for i in x])
-                        else:
-                            def fmt_func(x): return '{}'.format(x)
+                        fmt_func = DEFAULT_FORMATTERS.get(
+                            type(values[0]),
+                            lambda x: str(x)
+                        )
 
                     values_fmt = [fmt_func(i) for i in values]
 
@@ -425,7 +424,7 @@ class Workflow(object):
 
     def get_extended_workflows(self):
         if self.extend_paths:
-            return [Workflow.load_state(i.parent) for i in self.extend_paths]
+            return [Workflow.load(i, full_path=True) for i in self.extend_paths]
         else:
             return None
 
@@ -706,7 +705,7 @@ class Workflow(object):
 
         task.files = files
 
-        self.save_state()
+        self.save()
 
     @requires_path_exists
     @increments_version
@@ -773,7 +772,7 @@ class Workflow(object):
 
         task.outputs = outputs
 
-        self.save_state()
+        self.save()
 
 
 def check_task_compatibility(task_info_lst):
