@@ -1,6 +1,6 @@
 """`matflow.command_formatters.py`
 
-Default formatters for each primitive data type.
+Default command line argument formatters for each primitive data type.
 
 """
 
