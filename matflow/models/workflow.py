@@ -398,15 +398,22 @@ class Workflow(object):
             return None
 
     @requires_path_exists
-    def save_state(self, path=None):
-        """Save state of workflow to an HDF5 file."""
+    def save(self, path=None):
+        """Save workflow to an HDF5 file.
+
+        Parameters
+        ----------
+        path : str or Path, optional
+            If specified, must be the full path (including file name) where the workflow
+            file should be saved.
+        """
         path = Path(path or self.hdf5_path)
         with path.open('w') as handle:
             hickle.dump(to_jsonable(self, exclude=['_is_from_file']), handle)
 
     @classmethod
-    def load_state(cls, path, full_path=False):
-        """Load state of workflow from an HDF5 file."""
+    def load(cls, path, full_path=False):
+        """Load workflow from an HDF5 file."""
         path = Path(path)
         if not full_path:
             path = path.joinpath('workflow.hdf5')
