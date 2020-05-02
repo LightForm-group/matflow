@@ -33,14 +33,12 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
     """
 
     profile_path = Path(profile_path)
-    stage_dir = Path(directory or '').resolve()
     workflow_dict = parse_workflow_profile(profile_path)
 
     with profile_path.open('r') as handle:
         profile_str = handle.read()
 
-    workflow = Workflow(**workflow_dict, stage_directory=stage_dir)
-
+    workflow = Workflow(**workflow_dict, stage_directory=directory)
     workflow.profile_str = profile_str
     workflow.set_ids()
 

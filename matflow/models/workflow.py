@@ -49,7 +49,7 @@ class Workflow(object):
         self._extend_paths = [str(Path(i).resolve())
                               for i in extend['paths']] if extend else None
         self._extend_nest_idx = extend['nest_idx'] if extend else None
-        self._stage_directory = str(stage_directory)
+        self._stage_directory = str(Path(stage_directory or '').resolve())
 
         tasks, elements_idx = self._validate_tasks(tasks)
         self._tasks = tasks
