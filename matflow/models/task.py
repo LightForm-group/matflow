@@ -112,6 +112,9 @@ def normalise_local_inputs(base=None, sequences=None):
     if sequences is None:
         sequences = []
 
+    if not isinstance(sequences, list):
+        raise SequenceError('`sequences` must be a list.')
+
     nest_req = True if len(sequences) > 1 else False
 
     req_seq_keys = ['name', 'vals']
@@ -133,22 +136,27 @@ def normalise_local_inputs(base=None, sequences=None):
             bad_keys_fmt = ', '.join([f'"{i}"' for i in bad_keys])
             raise SequenceError(f'Unknown keys from sequence definition: {bad_keys_fmt}.')
 
-        num_vals = len(seq['vals'])
+        if not isinstance(seq['vals'], list):
+            raise SequenceError(f'Sequence "{seq["name"]}" `vals` must be a list.')
+
+        if 'nest_idx' in seq:
+            if not isinstance(seq['nest_idx'], int) or (seq['nest_idx'] < 0):
+                msg = (f'`nest_idx` must be a positive integer or zero for sequence '
+                       f'"{seq["name"]}"')
+                raise SequenceError(msg)
+
         if nest_req:
             if 'nest_idx' not in seq:
-                msg = '`nest_idx` is required for sequence "{}"'
-                raise SequenceError(msg.format(seq['name']))
-            else:
-                if seq['nest_idx'] < 0:
-                    msg = (f'`nest_idx` must be a positive integer or zero for '
-                           f'sequence "{seq["name"]}"')
-                    raise SequenceError(msg)
+                msg = f'`nest_idx` is required for sequence "{seq["name"]}".'
+                raise SequenceError(msg)
         else:
-            # Set a default `nest_idx`:
-            seq['nest_idx'] = 0
+            if 'nest_idx' in seq:
+                warn(f'`nest_idx` is not required for sequence "{seq["name"]}.')
+            seq['nest_idx'] = 0  # set a default
 
         nest = seq['nest_idx']
 
+        num_vals = len(seq['vals'])
         if prev_num_vals and nest == prev_nest:
             # For same nest_idx, sequences must have the same lengths:
             if num_vals != prev_num_vals:
