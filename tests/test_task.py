@@ -3,8 +3,13 @@
 import copy
 import unittest
 
-from matflow.models.task import resolve_local_inputs, TaskSchema, get_local_inputs
-from matflow.errors import IncompatibleSequence, TaskSchemaError, TaskParameterError
+from matflow.models.task import TaskSchema, normalise_local_inputs, get_local_inputs
+from matflow.errors import (
+    IncompatibleSequence,
+    TaskSchemaError,
+    TaskParameterError,
+    SequenceError,
+)
 
 # TODO: add test that warn is issued when an input is in base but also has a sequence.
 
@@ -77,406 +82,233 @@ class TaskParameterTestCase(unittest.TestCase):
             schema.check_missing_inputs(['parameter_2'])
 
 
-class ResolveLocalInputsTestCase(unittest.TestCase):
-    'Tests on generating sequences with `resolve_local_inputs`.'
+class GetLocalInputsTestCase(unittest.TestCase):
+    'Tests on generating local inputs with `get_local_inputs`.'
 
     # TODO: also do some explicit checks that input values are propagated properly.
 
     def test_base_only(self):
         'Check expected output for no sequences.'
-        base = {
-            'parameter_1': 101,
-        }
-        local_ins = resolve_local_inputs(base=base)
-        local_ins_exp = [
-            {
-                'parameter_1': 101,
-            }
-        ]
+        base = {'p1': 101}
+        local_ins = get_local_inputs({}, base=base)['inputs']
+        local_ins_exp = {'p1': {'vals': [101], 'vals_idx': [0]}}
         self.assertTrue(local_ins == local_ins_exp)
 
     def test_base_and_sequence(self):
         'Check expected output for base and one sequence.'
-
-        # TODO: currently fails since nest_idx is (wrongly) always required.
-
-        base = {
-            'parameter_1': 101,
+        base = {'p1': 101}
+        sequences = [{'name': 'p2', 'vals': [201, 202]}]
+        local_ins = get_local_inputs({}, base=base, sequences=sequences)['inputs']
+        local_ins_exp = {
+            'p1': {'vals': [101], 'vals_idx': [0, 0]},
+            'p2': {'vals': [201, 202], 'vals_idx': [0, 1]},
         }
-        sequences = [
-            {
-                'name': 'parameter_2',
-                'vals': [201, 202],
-            }
-        ]
-        local_ins = resolve_local_inputs(base=base, sequences=sequences)
-        local_ins_exp = [
-            {
-                'parameter_1': 101,
-                'parameter_2': 201,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 202,
-            },
-        ]
         self.assertTrue(local_ins == local_ins_exp)
 
     def test_base_and_multi_nested_sequences(self):
         'Check expected output for base and two nested sequences.'
-        base = {
-            'parameter_1': 101,
-        }
+        base = {'p1': 101}
         sequences = [
-            {
-                'name': 'parameter_2',
-                'vals': [201, 202],
-                'nest_idx': 0,
-            },
-            {
-                'name': 'parameter_3',
-                'vals': [301, 302, 303],
-                'nest_idx': 1,
-            },
+            {'name': 'p2', 'vals': [201, 202], 'nest_idx': 0},
+            {'name': 'p3', 'vals': [301, 302, 303], 'nest_idx': 1},
         ]
-        local_ins = resolve_local_inputs(base=base, sequences=sequences)
-        local_ins_exp = [
-            {
-                'parameter_1': 101,
-                'parameter_2': 201,
-                'parameter_3': 301,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 201,
-                'parameter_3': 302,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 201,
-                'parameter_3': 303,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 202,
-                'parameter_3': 301,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 202,
-                'parameter_3': 302,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 202,
-                'parameter_3': 303,
-            },
-        ]
+        local_ins = get_local_inputs({}, base=base, sequences=sequences)['inputs']
+        local_ins_exp = {
+            'p1': {'vals': [101], 'vals_idx': [0, 0, 0, 0, 0, 0]},
+            'p2': {'vals': [201, 202], 'vals_idx': [0, 0, 0, 1, 1, 1]},
+            'p3': {'vals': [301, 302, 303], 'vals_idx': [0, 1, 2, 0, 1, 2]},
+        }
         self.assertTrue(local_ins == local_ins_exp)
 
     def test_base_and_multi_merged_sequences(self):
         'Check expected output for base and two merged sequences.'
-        base = {
-            'parameter_1': 101,
-        }
+        base = {'p1': 101}
         sequences = [
-            {
-                'name': 'parameter_2',
-                'vals': [201, 202],
-                'nest_idx': 0,
-            },
-            {
-                'name': 'parameter_3',
-                'vals': [301, 302],
-                'nest_idx': 0,
-            },
+            {'name': 'p2', 'vals': [201, 202], 'nest_idx': 0},
+            {'name': 'p3', 'vals': [301, 302], 'nest_idx': 0},
         ]
-        local_ins = resolve_local_inputs(base=base, sequences=sequences)
-        local_ins_exp = [
-            {
-                'parameter_1': 101,
-                'parameter_2': 201,
-                'parameter_3': 301,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 202,
-                'parameter_3': 302,
-            },
-        ]
+        local_ins = get_local_inputs({}, base=base, sequences=sequences)['inputs']
+        local_ins_exp = {
+            'p1': {'vals': [101], 'vals_idx': [0, 0]},
+            'p2': {'vals': [201, 202], 'vals_idx': [0, 1]},
+            'p3': {'vals': [301, 302], 'vals_idx': [0, 1]},
+        }
         self.assertTrue(local_ins == local_ins_exp)
 
     def test_base_and_merged_and_nested_sequences(self):
         'Check expected output for base and two merged sequences.'
-        base = {
-            'parameter_1': 101,
-        }
+        base = {'p1': 101}
         sequences = [
-            {
-                'name': 'parameter_2',
-                'vals': [201, 202],
-                'nest_idx': 0,
-            },
-            {
-                'name': 'parameter_3',
-                'vals': [301, 302],
-                'nest_idx': 0,
-            },
-            {
-                'name': 'parameter_4',
-                'vals': [401, 402, 403],
-                'nest_idx': 1,
-            },
+            {'name': 'p2', 'vals': [201, 202], 'nest_idx': 0},
+            {'name': 'p3', 'vals': [301, 302], 'nest_idx': 0},
+            {'name': 'p4', 'vals': [401, 402, 403], 'nest_idx': 1},
         ]
-        local_ins = resolve_local_inputs(base=base, sequences=sequences)
-        local_ins_exp = [
-            {
-                'parameter_1': 101,
-                'parameter_2': 201,
-                'parameter_3': 301,
-                'parameter_4': 401,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 201,
-                'parameter_3': 301,
-                'parameter_4': 402,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 201,
-                'parameter_3': 301,
-                'parameter_4': 403,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 202,
-                'parameter_3': 302,
-                'parameter_4': 401,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 202,
-                'parameter_3': 302,
-                'parameter_4': 402,
-            },
-            {
-                'parameter_1': 101,
-                'parameter_2': 202,
-                'parameter_3': 302,
-                'parameter_4': 403,
-            },
-        ]
+        local_ins = get_local_inputs({}, base=base, sequences=sequences)['inputs']
+        local_ins_exp = {
+            'p1': {'vals': [101], 'vals_idx': [0, 0, 0, 0, 0, 0]},
+            'p2': {'vals': [201, 202], 'vals_idx': [0, 0, 0, 1, 1, 1]},
+            'p3': {'vals': [301, 302], 'vals_idx': [0, 0, 0, 1, 1, 1]},
+            'p4': {'vals': [401, 402, 403], 'vals_idx': [0, 1, 2, 0, 1, 2]},
+        }
         self.assertTrue(local_ins == local_ins_exp)
 
     def test_raise_on_missing_nest_idx(self):
         """Check raises when more than one sequence, but nest_idx is missing from any
         sequence."""
+        sequences = [
+            {'name': 'p2', 'vals': [201, 202], 'nest_idx': 0},
+            {'name': 'p3', 'vals': [301, 302]},
+        ]
+        with self.assertRaises(SequenceError):
+            get_local_inputs({}, sequences=sequences)
 
-    def test_raise_on_bad_sequence_vals_type(self):
-        'i.e. not a list.'
-        pass
+    def test_raise_on_bad_sequence_vals_type_str(self):
+        'Test raises when sequence vals is a string.'
+        sequences = [{'name': 'p1', 'vals': '120'}]
+        with self.assertRaises(SequenceError):
+            get_local_inputs({}, sequences=sequences)
+
+    def test_raise_on_bad_sequence_vals_type_number(self):
+        'Test raises when sequence vals is a number.'
+        sequences = [{'name': 'p1', 'vals': 120}]
+        with self.assertRaises(SequenceError):
+            get_local_inputs({}, sequences=sequences)
 
     def test_raise_on_bad_sequences_type(self):
-        'i.e. not a list.'
-        pass
+        'Test raises when sequences is not a list.'
+        sequences = {'name': 'p1', 'vals': [1, 2]}
+        with self.assertRaises(SequenceError):
+            get_local_inputs({}, sequences=sequences)
 
     def test_warn_on_unrequired_nest_idx(self):
-        pass
+        'Test warning on unrequired nest idx.'
+        sequences = [{'name': 'p1', 'vals': [101, 102], 'nest_idx': 0}]
+        with self.assertWarns(Warning):
+            get_local_inputs({}, sequences=sequences)
+
+    def test_raise_on_bad_sequence_keys(self):
+        'Test raises when a sequence has unknown keys.'
+        sequences = [{'name': 'p1', 'vals': [101, 102], 'bad_key': 4}]
+        with self.assertRaises(SequenceError):
+            get_local_inputs({}, sequences=sequences)
+
+    def test_raise_on_missing_sequence_keys(self):
+        'Test raises when a sequence has missing keys.'
+        sequences = [{'vals': [101, 102]}]
+        with self.assertRaises(SequenceError):
+            get_local_inputs({}, sequences=sequences)
 
     def test_raise_on_bad_nest_idx_float(self):
         'Check raises on non-integer (float) nest index for any sequence.'
         sequences = [
-            {
-                'name': 'parameter_1',
-                'nest_idx': 1.0,
-                'vals': [101, 102],
-            },
+            {'name': 'p1', 'nest_idx': 1.0, 'vals': [101, 102]},
         ]
-        with self.assertRaises(ValueError):
-            _ = resolve_local_inputs(sequences=sequences)
+        with self.assertRaises(SequenceError):
+            normalise_local_inputs(sequences=sequences)
 
     def test_raise_on_bad_nest_idx_string(self):
         'Check raises on non-integer (str) nest index for any sequence.'
         sequences = [
-            {
-                'name': 'parameter_1',
-                'nest_idx': '0',
-                'vals': [101, 102],
-            },
+            {'name': 'p1', 'nest_idx': '0', 'vals': [101, 102]},
         ]
-        with self.assertRaises(ValueError):
-            _ = resolve_local_inputs(sequences=sequences)
+        with self.assertRaises(SequenceError):
+            normalise_local_inputs(sequences=sequences)
 
     def test_raise_on_bad_nest_idx_list(self):
-        'Check raises on non-integer (str) nest index for any sequence.'
+        'Check raises on non-integer (list) nest index for any sequence.'
         sequences = [
-            {
-                'name': 'parameter_1',
-                'nest_idx': [1, 0],
-                'vals': [101, 102],
-            },
+            {'name': 'p1', 'nest_idx': [1, 0], 'vals': [101, 102]},
         ]
-        with self.assertRaises(ValueError):
-            _ = resolve_local_inputs(sequences=sequences)
+        with self.assertRaises(SequenceError):
+            normalise_local_inputs(sequences=sequences)
 
     def test_equivalent_relative_nesting_idx(self):
         'Check the actual value of `nest_idx` is inconsequential.'
         sequences_1 = [
-            {
-                'name': 'parameter_1',
-                'nest_idx': 0,
-                'vals': [101, 102, 103],
-            },
-            {
-                'name': 'parameter_2',
-                'nest_idx': 1,
-                'vals': [201, 202],
-            },
+            {'name': 'p1', 'nest_idx': 0, 'vals': [101, 102, 103]},
+            {'name': 'p2', 'nest_idx': 1, 'vals': [201, 202]},
         ]
         sequences_2 = copy.deepcopy(sequences_1)
         sequences_2[0]['nest_idx'] = 105
         sequences_2[1]['nest_idx'] = 2721
 
-        local_ins_1 = resolve_local_inputs(sequences=sequences_1)
-        local_ins_2 = resolve_local_inputs(sequences=sequences_2)
+        local_ins_1 = get_local_inputs({}, sequences=sequences_1)['inputs']
+        local_ins_2 = get_local_inputs({}, sequences=sequences_2)['inputs']
 
         self.assertTrue(local_ins_1 == local_ins_2)
 
     def test_correct_number_of_local_inputs_all_nesting(self):
+        'Check the correct number of elements for a given input.'
         sequences = [
-            {
-                'name': 'parameter_1',
-                'nest_idx': 0,
-                'vals': [101, 102, 103],
-            },
-            {
-                'name': 'parameter_2',
-                'nest_idx': 1,
-                'vals': [201, 202],
-            },
+            {'name': 'p1', 'nest_idx': 0, 'vals': [101, 102, 103]},
+            {'name': 'p2', 'nest_idx': 1, 'vals': [201, 202]},
         ]
-        local_ins = resolve_local_inputs(sequences=sequences)
-        self.assertTrue(len(local_ins) == 6)
+        local_ins = get_local_inputs({}, sequences=sequences)['inputs']
+        self.assertTrue(len(local_ins['p1']['vals_idx']) == 6)
+
+    def test_all_inputs_local_inputs_size(self):
+        'Check all inputs have the same number of elements.'
+        sequences = [
+            {'name': 'p1', 'nest_idx': 0, 'vals': [101, 102, 103]},
+            {'name': 'p2', 'nest_idx': 1, 'vals': [201, 202]},
+        ]
+        local_ins = get_local_inputs({}, sequences=sequences)['inputs']
+        self.assertTrue(
+            len(local_ins['p1']['vals_idx']) == len(local_ins['p2']['vals_idx'])
+        )
 
     def test_correct_number_of_local_inputs_all_merge(self):
+        'Check the correct number of local inputs for merging three sequences.'
         sequences = [
-            {
-                'name': 'parameter_1',
-                'nest_idx': 3,
-                'vals': [101, 102],
-            },
-            {
-                'name': 'parameter_2',
-                'nest_idx': 3,
-                'vals': [201, 202],
-            },
-            {
-                'name': 'parameter_3',
-                'nest_idx': 3,
-                'vals': [301, 302],
-            },
+            {'name': 'p1', 'nest_idx': 3, 'vals': [101, 102]},
+            {'name': 'p2', 'nest_idx': 3, 'vals': [201, 202]},
+            {'name': 'p3', 'nest_idx': 3, 'vals': [301, 302]},
         ]
-        local_ins = resolve_local_inputs(sequences=sequences)
-        self.assertTrue(len(local_ins) == 2)
+        local_ins = get_local_inputs({}, sequences=sequences)['inputs']
+        self.assertTrue(
+            len(local_ins['p1']['vals_idx']) ==
+            len(local_ins['p2']['vals_idx']) ==
+            len(local_ins['p3']['vals_idx']) == 2
+        )
 
     def test_correct_number_of_local_inputs_one_merge(self):
-        # TODO: need to test merge order?
-
+        'Check the correct number of local inputs for merging/nesting three sequences.'
         sequences = [
-            {
-                'name': 'parameter_1',
-                'nest_idx': 3,
-                'vals': [101, 102],
-            },
-            {
-                'name': 'parameter_2',
-                'nest_idx': 4,
-                'vals': [201, 202],
-            },
-            {
-                'name': 'parameter_3',
-                'nest_idx': 4,
-                'vals': [301, 302],
-            },
+            {'name': 'p1', 'nest_idx': 3, 'vals': [101, 102]},
+            {'name': 'p2', 'nest_idx': 4, 'vals': [201, 202]},
+            {'name': 'p3', 'nest_idx': 4, 'vals': [301, 302]},
         ]
-        local_ins = resolve_local_inputs(sequences=sequences)
-        self.assertTrue(len(local_ins) == 2)
+        local_ins = get_local_inputs({}, sequences=sequences)['inputs']
+        self.assertTrue(
+            len(local_ins['p1']['vals_idx']) ==
+            len(local_ins['p2']['vals_idx']) ==
+            len(local_ins['p3']['vals_idx']) == 4
+        )
 
     def test_base_is_merged_into_sequence(self):
         'Check the base dict is merged into a sequence.'
-        base = {
-            'parameter_1': 101
-        }
-        sequences = [
-            {
-                'name': 'parameter_2',
-                'nest_idx': 0,
-                'vals': [201, 202],
-            },
-        ]
-        local_ins = resolve_local_inputs(base=base, sequences=sequences)
+        base = {'p1': 101}
+        sequences = [{'name': 'p2', 'nest_idx': 0, 'vals': [201, 202]}]
+        local_ins = get_local_inputs({}, base=base, sequences=sequences)['inputs']
         self.assertTrue(
-            local_ins[0]['parameter_1'] == 101 and
-            local_ins[1]['parameter_1'] == 101
+            local_ins['p1']['vals_idx'] == [0, 0] and
+            local_ins['p2']['vals_idx'] == [0, 1]
         )
 
     def test_raise_on_incompatible_nesting(self):
         'Test error raised on logically inconsistent Task sequence.'
         sequences = [
-            {
-                'name': 'parameter_1',
-                'nest_idx': 0,
-                'vals': [101, 102],
-            },
-            {
-                'name': 'parameter_2',
-                'nest_idx': 0,
-                'vals': [201],
-            },
+            {'name': 'p1', 'nest_idx': 0, 'vals': [101, 102]},
+            {'name': 'p2', 'nest_idx': 0, 'vals': [201]},
         ]
         with self.assertRaises(IncompatibleSequence):
-            _ = resolve_local_inputs(sequences=sequences)
+            get_local_inputs({}, sequences=sequences)
 
     def test_unit_length_sequence(self):
         """Check specifying sequences of length one has the same effect as specifying the 
         parameter in the base dict."""
-
-        # Currently fails due to `base` params being assigned `nest_idx=-1`
-
-        sequences = [
-            {
-                'name': 'parameter_1',
-                'nest_idx': 0,
-                'vals': [101],
-            },
-        ]
-        base = {
-            'parameter_1': 101
-        }
-        local_ins_1 = get_local_inputs(sequences=sequences)
-        local_ins_2 = get_local_inputs(base=base)
-
-        print(f'local_ins_1: {local_ins_1}')
-        print(f'local_ins_2: {local_ins_2}')
-
+        base = {'p1': 101}
+        sequences = [{'name': 'p1', 'nest_idx': 0, 'vals': [101]}]
+        local_ins_1 = get_local_inputs({}, sequences=sequences)['inputs']
+        local_ins_2 = get_local_inputs({}, base=base)['inputs']
         self.assertTrue(local_ins_1 == local_ins_2)
-
-    def test_sequence_repeats(self):
-
-        sequences = [
-            {
-                'name': 'parameter_1',
-                'nest_idx': 0,
-                'vals': [101, 102],
-            },
-            {
-                'repeats': 2,
-            }
-        ]
-        local_ins = get_local_inputs(sequences=sequences)['inputs']
-
-        # Expand `vals_idx`:
-        local_ins = {k: np.array(v['vals'])[v['vals_idx']] for k, v in local_ins.items()}
-
-        print(f'local_ins: {local_ins}')
