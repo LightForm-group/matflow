@@ -14,14 +14,19 @@ from hpcflow.api import get_stats as hpcflow_get_stats
 
 from matflow import (CONFIG, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP,
-                     TASK_OUTPUT_FILES_MAP)
+                     TASK_OUTPUT_FILES_MAP, __version__)
 from matflow.models import Task
 from matflow.models.task import (get_schema_dict, combine_base_sequence, TaskSchema,
                                  get_local_inputs)
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, zeropad
-from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
-                            MissingMergePriority, MissingSoftware)
+from matflow.errors import (
+    IncompatibleWorkflow,
+    IncompatibleTaskNesting,
+    MissingMergePriority,
+    MissingSoftware,
+    WorkflowPersistenceError
+)
 
 
 def requires_ids(func):
@@ -44,6 +49,17 @@ def requires_path_exists(func):
     return func_wrap
 
 
+def increments_version(func):
+    """Workflow method decorator to increment the workflow version when a method is
+    successfully invoked."""
+    @functools.wraps(func)
+    def func_wrap(self, *args, **kwargs):
+        ret = func(self, *args, **kwargs)
+        self._version += 1
+        return ret
+    return func_wrap
+
+
 class Workflow(object):
 
     __slots__ = [
@@ -57,6 +73,8 @@ class Workflow(object):
         '_stage_directory',
         '_tasks',
         '_elements_idx',
+        '_matflow_version',
+        '_version',
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extend=None,
@@ -76,6 +94,12 @@ class Workflow(object):
         tasks, elements_idx = self._validate_tasks(tasks)
         self._tasks = tasks
         self._elements_idx = elements_idx
+
+        self._matflow_version = None
+        self._version = None
+        if not self.is_from_file:
+            self._matflow_version = __version__
+            self._version = 0
 
     def _validate_tasks(self, tasks):
 
@@ -250,8 +274,17 @@ class Workflow(object):
 
     @property
     def hdf5_path(self):
-        return self.path.joinpath('workflow.hdf5')
+        return self.path.joinpath(f'workflow_v{self.version:03}.hdf5')
 
+    @property
+    def matflow_version(self):
+        return self._matflow_version
+
+    @property
+    def version(self):
+        return self._version
+
+    @increments_version
     def write_directories(self):
         'Generate task and element directories.'
 
@@ -397,28 +430,189 @@ class Workflow(object):
         else:
             return None
 
+    @classmethod
+    def get_existing_workflow_files(cls, directory):
+        """Get the ID and versions of any workflow files with a directory.
+
+        Parameters
+        ----------
+        directory : str or Path
+            Directory in which to search for workflow files.
+
+        Returns
+        -------
+        existing_files : dict of dict
+            A dict whose keys are the full file paths (Path objects) to any parseable
+            workflow files, and whose keys are dicts with keys: "id" and "version".
+
+        """
+
+        directory = Path(directory)
+        if not directory.is_dir():
+            raise TypeError('`directory` is not an existing directory!')
+
+        existing_files = {}
+        for i in directory.glob('*'):
+            if i.is_file():
+                try:
+                    with i.open() as handle:
+                        hickle.load(handle)
+                except OSError:
+                    continue
+                try:
+                    wkflow = cls.load(i, full_path=True)
+                    id_, version = wkflow.id, wkflow.version
+                except:
+                    continue
+
+                existing_files.update({i: {'id': id_, 'version': version}})
+
+        return existing_files
+
     @requires_path_exists
-    def save(self, path=None):
+    def save(self, path=None, keep_previous_versions=False):
         """Save workflow to an HDF5 file.
 
         Parameters
         ----------
         path : str or Path, optional
             If specified, must be the full path (including file name) where the workflow
-            file should be saved.
+            file should be saved. By default, `None`, in which case the `hdf5_path`
+            attribute will be used as the full path.
+        keep_previous_versions : bool, optional
+            If False, all workflow files with the same ID and lower (or equal) version
+            numbers in the same directory as the save location will be deleted. By
+            default, False. If True, no existing workflow files in the save directory
+            will be deleted.
+
+        Notes
+        -----
+        - A warning is issued if an existing workflow file exists with the same ID and
+          version. The file will be removed if `keep_previous_versions=False`.
+
+        Raises
+        ------
+        WorkflowPersistenceError 
+            If saving was not successful.
+
         """
+
         path = Path(path or self.hdf5_path)
-        with path.open('w') as handle:
-            hickle.dump(to_jsonable(self, exclude=['_is_from_file']), handle)
+        save_dir = path.parent
+
+        if not keep_previous_versions:
+            remove_tag = f'.remove_{secrets.token_hex(8)}'
+
+            same_IDs = {k: v
+                        for k, v in self.get_existing_workflow_files(save_dir).items()
+                        if v['id'] == self.id}
+
+            to_delete = {k: v for k, v in same_IDs.items()
+                         if v['version'] <= self.version}
+
+            if self.version in [i['version'] for i in to_delete.keys()]:
+                warn('A saved workflow with the same ID and version already exists in '
+                     'this directory. This will be removed.')
+
+            # Mark older versions for deletion:
+            for del_path_i in to_delete.keys():
+                tagged_name = del_path_i.with_name(del_path_i.name + remove_tag)
+                del_path_i.rename(tagged_name)
+
+        if path.exists():
+            msg = f'Workflow cannot be saved to a path that already exists: "{path}".'
+            raise WorkflowPersistenceError(msg)
+
+        err_msg = None
+        try:
+            obj_json = to_jsonable(self, exclude=['_is_from_file'])
+            try:
+                with path.open('w') as handle:
+                    hickle.dump(obj_json, handle)
+            except:
+                err_msg = f'Failed to save workflow to path: "{path}".'
+        except:
+            err_msg = 'Failed to convert Workflow object to `hickle`-compatible dict.'
+
+        if err_msg:
+            if not keep_previous_versions:
+                # Revert older versions back to original file names (don't delete):
+                for del_path_i in to_delete.keys():
+                    tagged_name = del_path_i.with_name(del_path_i.name + remove_tag)
+                    tagged_name.rename(del_path_i)
+
+                del to_delete
+            raise WorkflowPersistenceError(err_msg)
+
+        else:
+            if not keep_previous_versions:
+                # Delete older versions (same ID):
+                for del_path_i in to_delete.keys():
+                    tagged_name = del_path_i.with_name(del_path_i.name + remove_tag)
+                    tagged_name.unlink(missing_ok=False)
 
     @classmethod
-    def load(cls, path, full_path=False):
-        """Load workflow from an HDF5 file."""
+    def load(cls, path, full_path=False, version=None):
+        """Load workflow from an HDF5 file.
+
+        Parameters
+        ----------
+        path : str or Path
+            Either the directory in which to search for a suitable workflow file (if
+            `full_path=False`), or the full path to a workflow file (if `full_path=True`).
+            If multiple workflow files with distinct IDs exist in the loading directory,
+            an exception is raised. If multiple versions exist (with the same ID), the 
+            workflow with the largest version number is loaded, by default, unless
+            `version` is specified.
+        full_path : bool, optional
+            Determines whether `path` is a full workflow file path or a directory path.
+            By default, False.
+        version : int, optional
+            Has effect if `full_path=False`. If specified, a workflow with the specified
+            version will be loaded, if it exists, otherwise an exception will be raised.
+            Not specified by default.
+
+        Returns
+        -------
+        workflow : Workflow
+
+        """
+
         path = Path(path)
-        if not full_path:
-            path = path.joinpath('workflow.hdf5')
-        with path.open() as handle:
-            obj_json = hickle.load(handle)
+
+        if full_path:
+            if not path.is_file():
+                raise OSError(f'Workflow file does not exist: "{path}".')
+        else:
+            existing = cls.get_existing_workflow_files(path)
+            all_IDs = set([v['id'] for v in existing.values()])
+            if len(all_IDs) > 1:
+                msg = (f'Saved workflows with multiple distinct IDs exist in the loading'
+                       f' directory "{path}". Specify `path` as the full path to the '
+                       f'workflow file, and set `full_path=True`.')
+                raise WorkflowPersistenceError(msg)
+            else:
+                if version:
+                    if not isinstance(version, int):
+                        raise TypeError('Specify `version` as an integer.')
+                    # Load this specific version:
+                    paths = [k for k, v in existing.items() if v['version'] == version]
+                    if not paths:
+                        msg = (f'Workflow with version number "{version}" not found in '
+                               f'the loading directory: "{path}".')
+                        raise WorkflowPersistenceError(msg)
+                    else:
+                        path = paths[0]
+                else:
+                    # Get full path of workflow file with the largest version number:
+                    path = sorted(existing.items(), key=lambda i: i[1]['version'])[-1][0]
+
+        try:
+            with path.open() as handle:
+                obj_json = hickle.load(handle)
+        except:
+            msg = f'Could not load workflow file with `hickle`: "{path}".'
+            raise WorkflowPersistenceError(msg)
 
         extend = None
         if obj_json['_extend_paths']:
@@ -439,6 +633,8 @@ class Workflow(object):
         workflow.profile_str = obj_json['profile_str']
         workflow._human_id = obj_json['human_id']
         workflow._id = obj_json['id']
+        workflow._matflow_version = obj_json['matflow_version']
+        workflow._version = obj_json['version']
 
         return workflow
 
@@ -754,6 +950,7 @@ class Workflow(object):
         cur_task.inputs = expanded_ins
 
     @requires_path_exists
+    @increments_version
     def prepare_task(self, task_idx):
         'Prepare inputs and run input maps.'
 
@@ -824,6 +1021,7 @@ class Workflow(object):
         self.save_state()
 
     @requires_path_exists
+    @increments_version
     def process_task(self, task_idx):
         'Process outputs from an executed task: run output map and save outputs.'
 

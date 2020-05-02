@@ -28,3 +28,7 @@ class ProfileError(Exception):
 
 class MissingSoftware(Exception):
     'For specified software that cannot be satisfied.'
+
+
+class WorkflowPersistenceError(Exception):
+    'For problems related to saving and loading the persistent HDF5 files.'
