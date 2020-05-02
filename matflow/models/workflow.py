@@ -15,6 +15,7 @@ from hpcflow.api import get_stats as hpcflow_get_stats
 from matflow import (CONFIG, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
                      TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP,
                      TASK_OUTPUT_FILES_MAP, __version__)
+from matflow.command_formatters import DEFAULT_FORMATTERS
 from matflow.models import Task
 from matflow.models.task import (get_schema_dict, combine_base_sequence, TaskSchema,
                                  get_local_inputs)
@@ -330,13 +331,11 @@ class Workflow(object):
                     fmt_func = None
                     if fmt_func_scope:
                         fmt_func = fmt_func_scope.get(local_in_name)
-
                     if not fmt_func:
-                        # Apply some default formatting.
-                        if isinstance(values[0], list):
-                            def fmt_func(x): return ' '.join(['{}'.format(i) for i in x])
-                        else:
-                            def fmt_func(x): return '{}'.format(x)
+                        fmt_func = DEFAULT_FORMATTERS.get(
+                            type(values[0]),
+                            lambda x: str(x)
+                        )
 
                     values_fmt = [fmt_func(i) for i in values]
 
