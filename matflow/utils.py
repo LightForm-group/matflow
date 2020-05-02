@@ -2,6 +2,7 @@
 
 import collections
 import copy
+import itertools
 import numpy as np
 import random
 import time
@@ -124,3 +125,23 @@ def nest_lists(my_list):
                 my_list[col_idx][sub_list_idx])
 
     return out
+
+
+def repeat(lst, reps):
+    'Repeat 1D list elements.'
+    return list(itertools.chain.from_iterable(itertools.repeat(x, reps) for x in lst))
+
+
+def tile(lst, tiles):
+    'Tile a 1D list.'
+    return lst * tiles
+
+
+def index(lst, idx):
+    'Get elements of a list.'
+    return [lst[i] for i in idx]
+
+
+def arange(size):
+    'Get 1D list of increasing integers.'
+    return list(range(size))

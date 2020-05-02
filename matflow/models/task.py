@@ -11,8 +11,13 @@ import numpy as np
 from matflow import CONFIG, TASK_SCHEMAS
 from matflow.models import CommandGroup, Command
 from matflow.jsonable import to_jsonable
-from matflow.utils import parse_times, nest_lists, combine_list_of_dicts
-from matflow.errors import IncompatibleSequence, TaskSchemaError, TaskParameterError
+from matflow.utils import tile, repeat, arange
+from matflow.errors import (
+    SequenceError,
+    IncompatibleSequence,
+    TaskSchemaError,
+    TaskParameterError
+)
 
 
 def get_schema_dict(name, method, software_instance=None):
@@ -100,7 +105,7 @@ def get_schema_dict(name, method, software_instance=None):
 
 
 def normalise_local_inputs(base=None, sequences=None):
-    'Validate and normalise task inputs.'
+    'Validate and normalise sequences and task inputs for a given task.'
 
     if base is None:
         base = {}
@@ -109,29 +114,35 @@ def normalise_local_inputs(base=None, sequences=None):
 
     nest_req = True if len(sequences) > 1 else False
 
+    req_seq_keys = ['name', 'vals']
+    allowed_seq_keys = req_seq_keys + ['nest_idx']
+
     prev_num_vals = None
     prev_nest = None
     inputs_lst = []
     for seq in sequences:
 
-        if 'name' not in seq:
-            msg = '`name` key is required for sequence.'
-            raise ValueError(msg)
+        miss_keys = list(set(req_seq_keys) - set(seq.keys()))
+        if miss_keys:
+            miss_keys_fmt = ', '.join([f'"{i}"' for i in miss_keys])
+            msg = f'Missing keys from sequence definition: {miss_keys_fmt}.'
+            raise SequenceError(msg)
 
-        if 'vals' not in seq:
-            msg = '`vals` is required for sequence "{}"'
-            raise ValueError(msg.format(seq['name']))
-        else:
-            num_vals = len(seq['vals'])
+        bad_keys = list(set(seq.keys()) - set(allowed_seq_keys))
+        if bad_keys:
+            bad_keys_fmt = ', '.join([f'"{i}"' for i in bad_keys])
+            raise SequenceError(f'Unknown keys from sequence definition: {bad_keys_fmt}.')
 
+        num_vals = len(seq['vals'])
         if nest_req:
             if 'nest_idx' not in seq:
                 msg = '`nest_idx` is required for sequence "{}"'
-                raise ValueError(msg.format(seq['name']))
+                raise SequenceError(msg.format(seq['name']))
             else:
                 if seq['nest_idx'] < 0:
-                    msg = '`nest_idx` must be a positive integer or zero for sequence "{}"'
-                    raise ValueError(msg.format(seq['name']))
+                    msg = (f'`nest_idx` must be a positive integer or zero for '
+                           f'sequence "{seq["name"]}"')
+                    raise SequenceError(msg)
         else:
             # Set a default `nest_idx`:
             seq['nest_idx'] = 0
@@ -141,9 +152,9 @@ def normalise_local_inputs(base=None, sequences=None):
         if prev_num_vals and nest == prev_nest:
             # For same nest_idx, sequences must have the same lengths:
             if num_vals != prev_num_vals:
-                msg = ('Sequence "{}" shares a `nest_idx` with another sequence but has '
-                       'a different number of values.')
-                raise ValueError(msg.format(seq['name']))
+                msg = (f'Sequence "{seq["name"]}" shares a `nest_idx` with another '
+                       f'sequence but has a different number of values.')
+                raise IncompatibleSequence(msg)
 
         prev_num_vals = num_vals
         prev_nest = nest
@@ -161,15 +172,12 @@ def normalise_local_inputs(base=None, sequences=None):
     return inputs_lst
 
 
-def get_local_inputs(base=None, repeats=None, sequences=None, groups=None):
+def get_local_inputs(schema_inputs, base=None, num_repeats=1, sequences=None,
+                     nest=True, merge_priority=None, groups=None):
 
     inputs_lst = normalise_local_inputs(base, sequences)
 
-    if repeats is None:
-        repeats = 1
-
     if inputs_lst:
-
         lengths = [len(i['vals']) for i in inputs_lst]
         total_len = len(inputs_lst[0]['vals'])
         for idx, i in enumerate(inputs_lst[1:], 1):
@@ -183,7 +191,7 @@ def get_local_inputs(base=None, repeats=None, sequences=None, groups=None):
     else:
         total_len = 1
 
-    inputs_dct = {'inputs': {}}
+    local_ins = {'inputs': {}}
 
     for idx, input_i in enumerate(inputs_lst):
 
@@ -195,14 +203,14 @@ def get_local_inputs(base=None, repeats=None, sequences=None, groups=None):
             rep_i = prev_reps
             tile_i = prev_tile
 
-        vals_idx = np.tile(np.repeat(np.arange(lengths[idx]), rep_i), tile_i)
-        vals_idx = np.repeat(vals_idx, repeats)
-        repeats_idx = np.tile(np.arange(repeats), (total_len,))
+        vals_idx = tile(repeat(arange(lengths[idx]), rep_i), tile_i)
+        vals_idx = repeat(vals_idx, num_repeats)
+        repeats_idx = tile(arange(num_repeats), total_len)
 
-        inputs_dct['repeats_idx'] = repeats_idx
-        inputs_dct['inputs'].update({
+        local_ins['repeats_idx'] = repeats_idx
+        local_ins['inputs'].update({
             input_i['name']: {
-                'nest_idx': input_i['nest_idx'],
+                # 'nest_idx': input_i['nest_idx'],
                 'vals': input_i['vals'],
                 'vals_idx': vals_idx,
             }
@@ -210,44 +218,34 @@ def get_local_inputs(base=None, repeats=None, sequences=None, groups=None):
         prev_reps = rep_i
         prev_tile = tile_i
 
-    group_idx = {}
-    if groups:
+    allowed_grp = list(schema_inputs.keys()) + ['repeats']
+    allowed_grp_fmt = ', '.join([f'"{i}"' for i in allowed_grp])
 
-        allowed_grp = list(inputs_dct['inputs'].keys()) + ['repeats']
-        allowed_grp_fmt = ', '.join([f'"{i}"' for i in allowed_grp])
+    def_group = {'default': {'nest': nest, 'group_by': allowed_grp}}
+    if merge_priority:
+        def_group.update({'merge_priority': merge_priority})
 
-        for group_name, group_params_lst in groups.items():
+    user_groups = {}
+    for group_name, group in (groups or {}).items():
 
-            if not group_params_lst:
-                group_idx.update({group_name: np.zeros(total_len, dtype=int)})
+        if 'group_by' not in group:
+            raise ValueError(f'Missing `group_by` key in group {group_name}.')
 
-            else:
+        for param in group['group_by']:
+            if param not in allowed_grp:
+                msg = (f'Parameter "{param}" cannot be grouped, because it '
+                       f'has no specified values. Allowed group values are: '
+                       f'{allowed_grp_fmt}.')
+                raise ValueError(msg)
 
-                for param_name in group_params_lst:
-                    if param_name not in allowed_grp:
-                        msg = (f'Parameter "{param_name}" cannot be grouped, because it '
-                               f'has no specified values. Allowed group values are: '
-                               f'{allowed_grp_fmt}.')
-                        raise ValueError(msg)
+        user_groups.update({f'user_group_{group_name}': group})
 
-                combined_arr = []
-                for i in group_params_lst:
-                    if i != 'repeats':
-                        combined_arr.append(inputs_dct['inputs'][i]['vals_idx'])
-                    else:
-                        combined_arr.append(inputs_dct['repeats_idx'])
+    all_groups = {**def_group, **user_groups}
 
-                combined_arr = np.vstack(combined_arr)
-                _, group_i_idx = np.unique(combined_arr, axis=1, return_inverse=True)
-                group_idx.update({group_name: group_i_idx})
+    local_ins['groups'] = all_groups
+    local_ins['length'] = total_len
 
-    total_len *= repeats
-    inputs_dct.update({
-        'length': total_len,
-        'group_idx': group_idx,
-    })
-
-    return inputs_dct
+    return local_ins
 
 
 class TaskSchema(object):
