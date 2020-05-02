@@ -67,14 +67,14 @@ class TaskParameterTestCase(unittest.TestCase):
             )
             schema.check_surplus_inputs(['parameter_3'])
 
-    # def test_raise_on_missing_input(self):
-    #     with self.assertRaises(TaskParameterError):
-    #         schema = TaskSchema(
-    #             'schema1',
-    #             inputs=['parameter_1', 'parameter_2'],
-    #             outputs=['parameter_3'],
-    #         )
-    #         schema.check_surplus_inputs(['parameter_2'])
+    def test_raise_on_missing_input(self):
+        with self.assertRaises(TaskParameterError):
+            schema = TaskSchema(
+                'schema1',
+                inputs=['parameter_1', 'parameter_2'],
+                outputs=['parameter_3'],
+            )
+            schema.check_missing_inputs(['parameter_2'])
 
 
 class ResolveLocalInputsTestCase(unittest.TestCase):
