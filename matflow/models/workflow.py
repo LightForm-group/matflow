@@ -19,7 +19,7 @@ from matflow.models.task import (get_schema_dict, combine_base_sequence, TaskSch
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, zeropad
 from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
-                            MissingMergePriority)
+                            MissingMergePriority, MissingSoftware)
 
 
 class Workflow(object):
@@ -123,6 +123,9 @@ class Workflow(object):
             all_num_cores = list(range(*core_range)) + [core_range[1]]
             if num_cores in all_num_cores:
                 return soft_inst
+
+        raise MissingSoftware(f'Could not find suitable software "{software_name}", with'
+                              f'`num_cores={num_cores}`')
 
     def _make_human_id(self):
         hid = parse_times('%Y-%m-%d-%H%M%S')[0]
