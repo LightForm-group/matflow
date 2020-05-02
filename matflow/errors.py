@@ -32,3 +32,7 @@ class TaskParameterError(Exception):
 
 class ProfileError(Exception):
     'For malformed profile file data.'
+
+
+class MissingSoftware(Exception):
+    'For specified software that cannot be satisfied.'

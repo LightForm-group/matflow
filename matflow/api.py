@@ -15,7 +15,7 @@ from matflow.profile import parse_workflow_profile
 from matflow.models import Workflow
 
 
-def make_workflow(profile_path, directory=None):
+def make_workflow(profile_path, directory=None, write_dirs=True):
     """Generate a new Workflow from a profile file.
 
     Parameters
@@ -39,21 +39,24 @@ def make_workflow(profile_path, directory=None):
     with profile_path.open('r') as handle:
         profile_str = handle.read()
 
-    workflow = Workflow(**workflow_dict, stage_directory=stage_dir,
-                        profile_str=profile_str)
+    workflow = Workflow(**workflow_dict, stage_directory=stage_dir)
 
-    workflow.write_directories()
-    workflow.write_hpcflow_workflow()
-    workflow.save_state()
+    workflow.profile_str = profile_str
+    workflow.set_ids()
 
-    # Copy profile to workflow directory:
-    # workflow.path.joinpath(profile_path).write_bytes(profile_path.read_bytes())
+    if write_dirs:
+        workflow.write_directories()
+        workflow.write_hpcflow_workflow()
+        workflow.save_state()
 
-    # Copy workflow human_id to clipboard, if supported:
-    try:
-        pyperclip.copy(workflow.human_id)
-    except:
-        pass
+        # Copy profile to workflow directory:
+        workflow.path.joinpath(profile_path).write_bytes(profile_path.read_bytes())
+
+        # Copy workflow human_id to clipboard, if supported:
+        try:
+            pyperclip.copy(workflow.human_id)
+        except:
+            pass
 
     return workflow
 

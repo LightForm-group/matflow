@@ -1,4 +1,5 @@
 import copy
+import secrets
 from pathlib import Path
 from pprint import pprint
 from subprocess import run, PIPE
@@ -19,18 +20,19 @@ from matflow.models.task import (get_schema_dict, combine_base_sequence, TaskSch
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, zeropad
 from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
-                            MissingMergePriority)
+                            MissingMergePriority, MissingSoftware)
 
 
 class Workflow(object):
 
-    INIT_STATUS = 'pending'
+    def __init__(self, name, tasks, stage_directory=None, extend=None):
 
-    def __init__(self, name, tasks, stage_directory=None, human_id=None, status=None,
-                 extend=None, profile_str=None):
+        self._id = None             # Assigned once by set_ids()
+        self._human_id = None       # Assigned once by set_ids()
+        self._profile_str = None    # Assigned once in `profile_str` setter
+        self._is_from_file = False  # Assigned True when loading from HDF5 file
 
         self._name = name
-        self._profile_str = profile_str
         self._extend_paths = [str(Path(i).resolve())
                               for i in extend['paths']] if extend else None
         self._extend_nest_idx = extend['nest_idx'] if extend else None
@@ -39,9 +41,6 @@ class Workflow(object):
         tasks, elements_idx = self._validate_tasks(tasks)
         self._tasks = tasks
         self._elements_idx = elements_idx
-
-        self._status = status or Workflow.INIT_STATUS  # | 'waiting' | 'complete'
-        self._human_id = human_id or self._make_human_id()
 
     def _validate_tasks(self, tasks):
 
@@ -124,32 +123,53 @@ class Workflow(object):
             if num_cores in all_num_cores:
                 return soft_inst
 
-    def _make_human_id(self):
-        hid = parse_times('%Y-%m-%d-%H%M%S')[0]
-        if self.name:
-            hid = self.name + '_' + hid
-        return hid
+        raise MissingSoftware(f'Could not find suitable software "{software_name}", with'
+                              f' `num_cores={num_cores}`.')
+
+    def set_ids(self):
+        if self._id:
+            raise ValueError(f'IDs are already set for workflow. ID is: "{self.id}"; '
+                             f'human ID is "{self.human_id}".')
+        else:
+            self._hid = self.name_safe + '_' + parse_times('%Y-%m-%d-%H%M%S')[0]
+            self._id = secrets.token_hex(15)
 
     @property
-    def name(self):
-        return self._name
-
-    @property
-    def profile_str(self):
-        'Get, as a string, the profile file that was used to construct this workflow.'
-        return self._profile_str
-
-    @property
-    def tasks(self):
-        return self._tasks
+    def id(self):
+        return self._id
 
     @property
     def human_id(self):
         return self._human_id
 
     @property
-    def status(self):
-        return self._status
+    def is_from_file(self):
+        return self._is_from_file
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def name_safe(self):
+        'Get name without spaces'
+        return self.name.replace(' ', '_')
+
+    @property
+    def profile_str(self):
+        'Get, as a string, the profile file that was used to construct this workflow.'
+        return self._profile_str
+
+    @profile_str.setter
+    def profile_str(self, profile_str):
+        if self._profile_str:
+            raise ValueError(f'`profile_str` is already set for the workflow')
+        else:
+            self._profile_str = profile_str
+
+    @property
+    def tasks(self):
+        return self._tasks
 
     @property
     def elements_idx(self):
@@ -350,16 +370,20 @@ class Workflow(object):
             }
 
         obj = {
+            'name': obj_json['name'],
             'tasks': obj_json['tasks'],
             'stage_directory': obj_json['_stage_directory'],
             'extend': extend,
-            'name': obj_json['name'],
-            'human_id': obj_json['human_id'],
-            'status': obj_json['status'],
-            'profile_str': obj_json['profile_str'],
         }
 
-        return cls(**obj)
+        workflow = cls(**obj)
+
+        workflow.profile_str = obj_json['profile_str']
+        workflow._human_id = obj_json['human_id']
+        workflow._id = obj_json['id']
+        workflow._is_from_file = True  # disregard the value from the HDF5 file.
+
+        return workflow
 
     def proceed(self):
         'Start or continue the Workflow task execution.'
