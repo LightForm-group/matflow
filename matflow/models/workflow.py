@@ -125,7 +125,7 @@ class Workflow(object):
                 return soft_inst
 
         raise MissingSoftware(f'Could not find suitable software "{software_name}", with'
-                              f'`num_cores={num_cores}`')
+                              f' `num_cores={num_cores}`.')
 
     def _make_human_id(self):
         hid = parse_times('%Y-%m-%d-%H%M%S')[0]
