@@ -432,7 +432,7 @@ class Workflow(object):
 
     @classmethod
     def get_existing_workflow_files(cls, directory):
-        """Get the ID and versions of any workflow files with a directory.
+        """Get the ID and versions of any workflow files within a directory.
 
         Parameters
         ----------
