@@ -1,3 +1,9 @@
+"""matflow.models.workflow.py
+
+Module containing the Workflow class and some functions used to decorate Workflow methods.
+
+"""
+
 import copy
 import functools
 import secrets
@@ -9,23 +15,24 @@ from warnings import warn
 import hickle
 import numpy as np
 import yaml
-
 from hpcflow.api import get_stats as hpcflow_get_stats
 
-from matflow import (CONFIG, SOFTWARE, TASK_SCHEMAS, TASK_INPUT_MAP,
-                     TASK_OUTPUT_MAP, TASK_FUNC_MAP, COMMAND_LINE_ARG_MAP,
-                     TASK_OUTPUT_FILES_MAP, __version__)
+from matflow import (
+    TASK_INPUT_MAP,
+    TASK_OUTPUT_MAP,
+    COMMAND_LINE_ARG_MAP,
+    TASK_OUTPUT_FILES_MAP,
+    __version__,
+)
 from matflow.command_formatters import DEFAULT_FORMATTERS
-from matflow.models.task import Task, TaskSchema, get_schema_dict, get_local_inputs
-from matflow.jsonable import to_jsonable
-from matflow.utils import parse_times, zeropad
 from matflow.errors import (
-    IncompatibleWorkflow,
     IncompatibleTaskNesting,
     MissingMergePriority,
-    MissingSoftware,
     WorkflowPersistenceError
 )
+from matflow.jsonable import to_jsonable
+from matflow.utils import parse_times, zeropad
+from matflow.models.construction import init_tasks
 
 
 def requires_ids(func):
@@ -59,88 +66,6 @@ def increments_version(func):
     return func_wrap
 
 
-def get_dependency_idx(task_info_lst):
-    """Find the dependencies between tasks.
-
-    Parameters
-    ----------
-    task_info_lst : list of dict
-        Each dict must have keys:
-            context : str
-            schema : TaskSchema
-
-    Returns
-    -------
-    dependency_idx : list of list of int
-        Each element, which corresponds to a given task in `task_info_list`, 
-        lists the task indices upon which the given task depends.
-
-    Notes
-    -----
-    - Two conditions must be met for a task (the downstream task) to be recorded
-      as depending on another (upstream) task: 
-          1) one of the downstream task's input parameters must be one of the
-             upstream task's output parameters;
-          2) EITHER:
-              - One of the downstream task's input parameters shares a context
-                with the upstream task, OR
-              - The upstream and downstream task share the same context, and,
-                for any downstream task input parameter, the parameter context
-                is `None`.             
-
-    """
-
-    dependency_idx = []
-    all_outputs = []
-    for task_info in task_info_lst:
-
-        downstream_context = task_info['context']
-        schema_inputs = task_info['schema'].inputs
-        schema_outputs = task_info['schema'].outputs
-
-        # List outputs with their corresponding task contexts:
-        all_outputs.extend([(i, downstream_context) for i in schema_outputs])
-
-        # Find which tasks this task depends on:
-        output_idx = []
-        for input_j in schema_inputs:
-
-            param_name = input_j['name']
-            param_context = input_j['context']
-
-            for task_idx_k, task_info_k in enumerate(task_info_lst):
-
-                if param_name not in task_info_k['schema'].outputs:
-                    continue
-
-                upstream_context = task_info_k['context']
-                if (
-                    param_context == upstream_context or (
-                        (upstream_context == downstream_context) and
-                        (param_context is None)
-                    )
-                ):
-                    output_idx.append(task_idx_k)
-
-        dependency_idx.append(list(set(output_idx)))
-
-    if len(all_outputs) != len(set(all_outputs)):
-        msg = 'Multiple tasks in the workflow have the same output and context!'
-        raise IncompatibleWorkflow(msg)
-
-    # Check for circular dependencies in task inputs/outputs:
-    all_deps = []
-    for idx, deps in enumerate(dependency_idx):
-        for i in deps:
-            all_deps.append(tuple(sorted([idx, i])))
-
-    if len(all_deps) != len(set(all_deps)):
-        msg = 'Workflow tasks are circularly dependent!'
-        raise IncompatibleWorkflow(msg)
-
-    return dependency_idx
-
-
 class Workflow(object):
 
     __slots__ = [
@@ -159,7 +84,7 @@ class Workflow(object):
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extend=None,
-                 __is_from_file=False):
+                 check_integrity=True, __is_from_file=False, ):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
@@ -172,7 +97,7 @@ class Workflow(object):
         self._extend_nest_idx = extend['nest_idx'] if extend else None
         self._stage_directory = str(Path(stage_directory or '').resolve())
 
-        tasks, elements_idx = self._validate_tasks(tasks)
+        tasks, elements_idx = init_tasks(tasks, self.is_from_file, check_integrity)
         self._tasks = tasks
         self._elements_idx = elements_idx
 
@@ -181,90 +106,6 @@ class Workflow(object):
         if not self.is_from_file:
             self._matflow_version = __version__
             self._version = 0
-
-    def _validate_tasks(self, tasks):
-
-        # TODO: validate sequences dicts somewhere.
-
-        task_info_lst = []
-        software_instances = []
-        for task in tasks:
-
-            software_instance = task.get('software_instance')
-            if task.get('software'):
-                if not software_instance:
-                    software_instance = self._get_software_instance(
-                        task['software'],
-                        task['run_options'].get('num_cores', 1),
-                    )
-                else:
-                    software_instance['num_cores'] = [
-                        int(i) for i in software_instance['num_cores']]
-
-            software_instances.append(software_instance)
-            schema_dict = get_schema_dict(task['name'], task['method'], software_instance)
-            schema = TaskSchema(**schema_dict)
-
-            local_inputs = task.get('local_inputs')
-            if local_inputs is None:
-                local_inputs = get_local_inputs(
-                    base=task.get('base'),
-                    num_repeats=task.get('num_repeats'),
-                    sequences=task.get('sequences'),
-                )
-
-            task_info_lst.append({
-                'name': task['name'],
-                'inputs': schema.inputs,
-                'outputs': schema.outputs,
-                'length': local_inputs['length'],
-                'nest': task.get('nest'),
-                'merge_priority': task.get('merge_priority'),
-                'schema': schema,
-                'local_inputs': local_inputs,
-            })
-
-        task_srt_idx, task_info_lst, elements_idx = check_task_compatibility(
-            task_info_lst)
-
-        validated_tasks = []
-        for idx, i in enumerate(task_srt_idx):
-
-            # Reorder and instantiate task
-            task_i = tasks[i]
-
-            task_i.pop('base', None)
-            task_i.pop('sequences', None)
-            task_i.pop('software', None)
-
-            task_i['nest'] = task_info_lst[idx]['nest']
-            task_i['task_idx'] = task_info_lst[idx]['task_idx']
-            task_i['merge_priority'] = task_info_lst[idx]['merge_priority']
-            task_i['software_instance'] = software_instances[idx]
-            task_i['schema'] = task_info_lst[idx]['schema']
-            task_i['local_inputs'] = task_info_lst[idx]['local_inputs']
-
-            task_i_obj = Task(**task_i)
-            validated_tasks.append(task_i_obj)
-
-        return validated_tasks, elements_idx
-
-    def _get_software_instance(self, software_name, num_cores):
-        """Find a software instance in the software.yml file that matches the software
-        requirements of a given task."""
-
-        for soft_inst in SOFTWARE:
-
-            if soft_inst['name'] != software_name:
-                continue
-
-            core_range = soft_inst['num_cores']
-            all_num_cores = list(range(*core_range)) + [core_range[1]]
-            if num_cores in all_num_cores:
-                return soft_inst
-
-        raise MissingSoftware(f'Could not find suitable software "{software_name}", with'
-                              f' `num_cores={num_cores}`.')
 
     def set_ids(self):
         if self._id:
@@ -632,7 +473,7 @@ class Workflow(object):
                     tagged_name.unlink(missing_ok=False)
 
     @classmethod
-    def load(cls, path, full_path=False, version=None):
+    def load(cls, path, full_path=False, version=None, check_integrity=True):
         """Load workflow from an HDF5 file.
 
         Parameters
@@ -651,6 +492,9 @@ class Workflow(object):
             Has effect if `full_path=False`. If specified, a workflow with the specified
             version will be loaded, if it exists, otherwise an exception will be raised.
             Not specified by default.
+        check_integrity : bool, optional
+            If True, do some checks that the loaded information makes sense. True by
+            default.
 
         Returns
         -------
@@ -708,7 +552,7 @@ class Workflow(object):
             'extend': extend,
         }
 
-        workflow = cls(**obj, __is_from_file=True)
+        workflow = cls(**obj, __is_from_file=True, check_integrity=check_integrity)
 
         workflow.profile_str = obj_json['profile_str']
         workflow._human_id = obj_json['human_id']
@@ -861,7 +705,7 @@ def check_task_compatibility(task_info_lst):
     'Check workflow has no incompatible tasks.'
 
     """
-    TODO: 
+    TODO:
         * enforce restriction: any given output from one task may only be used as
             input in _one_ other task.
         * When considering nesting, specify `nest: True | False` on the outputting
@@ -951,34 +795,6 @@ def check_task_compatibility(task_info_lst):
     elements_idx = collapse_element_groups(elements_idx, task_info_lst)
 
     return list(task_srt_idx), task_info_lst, elements_idx
-
-
-def check_missing_inputs(task_info_lst, dependency_list):
-    """Check for missing inputs in the task.
-
-    Parameters
-    ----------
-    task_info_lst : list of dict
-        Each dict must have keys:
-            schema : TaskSchema
-            local_input_names : list of str
-                List of the locally defined inputs for the task.
-
-    """
-
-    for deps_idx, task_info in zip(dependency_list, task_info_lst):
-
-        defined_inputs = list(task_info['local_inputs']['inputs'].keys())
-        task_info['schema'].check_surplus_inputs(defined_inputs)
-
-        if deps_idx:
-            for j in deps_idx:
-                for output in task_info_lst[j]['outputs']:
-                    task_inp_names = [i['name'] for i in task_info['inputs']]
-                    if output in task_inp_names:
-                        defined_inputs.append(output)
-
-        task_info['schema'].check_missing_inputs(defined_inputs)
 
 
 def get_task_num_elements(downstream_task, upstream_tasks):
@@ -1074,7 +890,7 @@ def get_task_elements_idx(downstream_task, upstream_tasks):
     -------
     task_elements_idx : dict of (int: list)
         Dict whose keys are task indices (`task_idx`) and whose values are 1D lists
-        corresponding to the element indices from upstream task outputs (or the 
+        corresponding to the element indices from upstream task outputs (or the
         downstream task local inputs) for each task.
 
     """
