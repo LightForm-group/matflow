@@ -427,32 +427,69 @@ class TaskSchema(object):
 
 
 class Task(object):
+    """
+
+    Notes
+    -----
+    As with `Workflow`, this class is "locked down" quite tightly by using `__slots__` and
+    properties. This is to help with maintaining integrity of the workflow between
+    save/load cycles.
+
+    """
 
     INIT_STATUS = 'pending'
 
-    def __init__(self, name, method, software_instance, task_idx, nest=None,
-                 merge_priority=None, run_options=None, base=None, sequences=None,
-                 repeats=None, local_inputs=None, inputs=None, outputs=None,
-                 schema=None, status=None, pause=False, files=None, resource_usage=None,
-                 stats=True, context=''):
+    __slots__ = [
+        '_name',
+        '_method',
+        '_software_instance',
+        '_task_idx',
+        '_run_options',
+        '_status',
+        '_stats',
+        '_context',
+        '_local_inputs',
+        '_inputs',
+        '_outputs',
+        '_schema',
+        '_files',
+        '_resource_usage',
+        '_base',
+        '_sequences',
+        '_repeats',
+        '_groups',
+        '_nest',
+        '_merge_priority',
+    ]
 
-        self.name = name
-        self.status = status or Task.INIT_STATUS  # | 'paused' | 'complete'
-        self.method = method
-        self.task_idx = task_idx
-        self.nest = nest
-        self.merge_priority = merge_priority
-        self.software_instance = software_instance
-        self.run_options = run_options
-        self.context = context
-        self.local_inputs = local_inputs
-        self.inputs = inputs
-        self.outputs = outputs
-        self.pause = pause
-        self.schema = schema
-        self.files = files
-        self.resource_usage = resource_usage
-        self.stats = stats
+    def __init__(self, name, method, software_instance, task_idx, run_options=None,
+                 status=None, stats=True, context='', local_inputs=None, inputs=None,
+                 outputs=None, schema=None, files=None, resource_usage=None,
+                 base=None, sequences=None, repeats=None, groups=None, nest=None,
+                 merge_priority=None):
+
+        self._name = name
+        self._method = method
+        self._software_instance = software_instance
+        self._task_idx = task_idx
+        self._run_options = run_options
+        self._status = status or Task.INIT_STATUS  # | 'paused' | 'complete'
+        self._stats = stats
+        self._context = context
+        self._local_inputs = local_inputs
+        self._inputs = inputs
+        self._outputs = outputs
+        self._schema = schema
+        self._files = files
+        self._resource_usage = resource_usage
+
+        # Saved for completeness, and to allow regeneration of `local_inputs`:
+        self._base = base
+        self._sequences = sequences
+        self._repeats = repeats
+        self._groups = groups
+        self._nest = nest
+        self._merge_priority = merge_priority
 
     def __repr__(self):
         out = (
@@ -472,6 +509,86 @@ class Task(object):
         return self.local_inputs['length']
 
     @property
+    def name(self):
+        return self._name
+
+    @property
+    def method(self):
+        return self._method
+
+    @property
+    def software_instance(self):
+        return self._software_instance
+
+    @property
+    def task_idx(self):
+        return self._task_idx
+
+    @property
+    def run_options(self):
+        return self._run_options
+
+    @property
+    def status(self):
+        return self._status
+
+    @property
+    def stats(self):
+        return self._stats
+
+    @property
+    def context(self):
+        return self._context
+
+    @property
+    def local_inputs(self):
+        return self._local_inputs
+
+    @property
+    def inputs(self):
+        return self._inputs
+
+    @property
+    def outputs(self):
+        return self._outputs
+
+    @property
+    def schema(self):
+        return self._schema
+
+    @property
+    def files(self):
+        return self._files
+
+    @property
+    def resource_usage(self):
+        return self._resource_usage
+
+    @property
+    def base(self):
+        return self._base
+
+    @property
+    def sequences(self):
+        return self._sequences
+
+    @property
+    def repeats(self):
+        return self._repeats
+
+    @property
+    def groups(self):
+        return self._groups
+
+    @property
+    def nest(self):
+        return self._nest
+
+    @property
+    def merge_priority(self):
+        return self._merge_priority
+
+    @property
     def name_friendly(self):
         'Capitalise and remove underscores'
         name = '{}{}'.format(self.name[0].upper(), self.name[1:]).replace('_', ' ')
@@ -483,4 +600,3 @@ class Task(object):
 
     def get_task_path(self, workflow_path):
         return workflow_path.joinpath(f'task_{self.task_idx}_{self.name}')
-
