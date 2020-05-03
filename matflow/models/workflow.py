@@ -59,6 +59,88 @@ def increments_version(func):
     return func_wrap
 
 
+def get_dependency_idx(task_info_lst):
+    """Find the dependencies between tasks.
+
+    Parameters
+    ----------
+    task_info_lst : list of dict
+        Each dict must have keys:
+            context : str
+            schema : TaskSchema
+
+    Returns
+    -------
+    dependency_idx : list of list of int
+        Each element, which corresponds to a given task in `task_info_list`, 
+        lists the task indices upon which the given task depends.
+
+    Notes
+    -----
+    - Two conditions must be met for a task (the downstream task) to be recorded
+      as depending on another (upstream) task: 
+          1) one of the downstream task's input parameters must be one of the
+             upstream task's output parameters;
+          2) EITHER:
+              - One of the downstream task's input parameters shares a context
+                with the upstream task, OR
+              - The upstream and downstream task share the same context, and,
+                for any downstream task input parameter, the parameter context
+                is `None`.             
+
+    """
+
+    dependency_idx = []
+    all_outputs = []
+    for task_info in task_info_lst:
+
+        downstream_context = task_info['context']
+        schema_inputs = task_info['schema'].inputs
+        schema_outputs = task_info['schema'].outputs
+
+        # List outputs with their corresponding task contexts:
+        all_outputs.extend([(i, downstream_context) for i in schema_outputs])
+
+        # Find which tasks this task depends on:
+        output_idx = []
+        for input_j in schema_inputs:
+
+            param_name = input_j['name']
+            param_context = input_j['context']
+
+            for task_idx_k, task_info_k in enumerate(task_info_lst):
+
+                if param_name not in task_info_k['schema'].outputs:
+                    continue
+
+                upstream_context = task_info_k['context']
+                if (
+                    param_context == upstream_context or (
+                        (upstream_context == downstream_context) and
+                        (param_context is None)
+                    )
+                ):
+                    output_idx.append(task_idx_k)
+
+        dependency_idx.append(list(set(output_idx)))
+
+    if len(all_outputs) != len(set(all_outputs)):
+        msg = 'Multiple tasks in the workflow have the same output and context!'
+        raise IncompatibleWorkflow(msg)
+
+    # Check for circular dependencies in task inputs/outputs:
+    all_deps = []
+    for idx, deps in enumerate(dependency_idx):
+        for i in deps:
+            all_deps.append(tuple(sorted([idx, i])))
+
+    if len(all_deps) != len(set(all_deps)):
+        msg = 'Workflow tasks are circularly dependent!'
+        raise IncompatibleWorkflow(msg)
+
+    return dependency_idx
+
+
 class Workflow(object):
 
     __slots__ = [
@@ -897,73 +979,6 @@ def check_missing_inputs(task_info_lst, dependency_list):
                         defined_inputs.append(output)
 
         task_info['schema'].check_missing_inputs(defined_inputs)
-
-
-def get_dependency_idx(task_info_lst):
-    """Find the dependencies between tasks.
-
-    Parameters
-    ----------
-    task_info_lst : list of dict
-        Each dict must have keys:
-            context : str
-            schema : TaskSchema
-    """
-
-    dependency_idx = []
-    all_outputs = []
-    for task_info in task_info_lst:
-
-        task_contexts = list(set([i.get('context', '') for i in task_info['inputs']]))
-        # print(f'task_contexts: {task_contexts}')
-
-        # TODO: Currently, this is triggered only if the task context is non-default (''),
-        # is this best?
-        if task_info['context'] and task_info['context'] in task_contexts:
-            msg = ('A task cannot be assigned a context from which one or more of its '
-                   'input parameters are drawn.')
-            raise IncompatibleWorkflow(msg)
-
-        # List outputs with their corresponding task contexts:
-        all_outputs.extend([(i, task_info['context']) for i in task_info['outputs']])
-
-        # Find which tasks this task depends on:
-        output_idx = []
-        for input_j in [i['name'] for i in task_info['inputs']]:
-            for task_idx_k, task_info_k in enumerate(task_info_lst):
-
-                # Consider where specific inputs are taken from specific contexts:
-                for task_context_m in task_contexts:
-                    if (
-                        input_j in task_info_k['outputs'] and
-                        task_context_m == task_info_k['context']
-                    ):
-                        output_idx.append(task_idx_k)
-
-                # Consider other tasks with the same context:
-                if (
-                    input_j in task_info_k['outputs'] and
-                    task_info['context'] == task_info_k['context']
-                ):
-                    output_idx.append(task_idx_k)
-
-        dependency_idx.append(list(set(output_idx)))
-
-    if len(all_outputs) != len(set(all_outputs)):
-        msg = 'Multiple tasks in the workflow have the same output and context!'
-        raise IncompatibleWorkflow(msg)
-
-    # Check for circular dependencies in task inputs/outputs:
-    all_deps = []
-    for idx, deps in enumerate(dependency_idx):
-        for i in deps:
-            all_deps.append(tuple(sorted([idx, i])))
-
-    if len(all_deps) != len(set(all_deps)):
-        msg = 'Workflow tasks are circularly dependent!'
-        raise IncompatibleWorkflow(msg)
-
-    return dependency_idx
 
 
 def get_task_num_elements(downstream_task, upstream_tasks):
