@@ -24,7 +24,6 @@ from matflow import (
     TASK_OUTPUT_FILES_MAP,
     __version__,
 )
-from matflow.command_formatters import DEFAULT_FORMATTERS
 from matflow.errors import (
     IncompatibleTaskNesting,
     MissingMergePriority,
@@ -32,6 +31,7 @@ from matflow.errors import (
 )
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, zeropad
+from matflow.models.command import DEFAULT_FORMATTERS
 from matflow.models.construction import init_tasks
 
 
