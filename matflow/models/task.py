@@ -96,6 +96,10 @@ class TaskSchema(object):
                 # Add default parameter context:
                 inp['context'] = None
 
+            if 'group' not in inp:
+                # Add default group:
+                inp['group'] = 'default'
+
             unknown_inp_keys = set(inp.keys()) - set(allowed_inp_keys)
             if unknown_inp_keys:
                 msg = (f'Unknown task schema input key: {unknown_inp_keys}. Allowed keys '
