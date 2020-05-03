@@ -9,6 +9,20 @@ from subprocess import run, PIPE
 from pprint import pprint
 
 
+def list_formatter(lst):
+    return ' '.join([f'{i}' for i in lst])
+
+
+DEFAULT_FORMATTERS = {
+    str: lambda x: x,
+    int: lambda number: str(number),
+    float: lambda number: f'{number:.6f}',
+    list: list_formatter,
+    set: list_formatter,
+    tuple: list_formatter,
+}
+
+
 class CommandGroup(object):
     """Class to represent a group of commands to be executed within a particular
     environment. Three environment types will eventually be supported: using
