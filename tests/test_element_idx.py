@@ -2,8 +2,8 @@
 
 import unittest
 
-from matflow.models.task import TaskSchema, get_local_inputs
-from matflow.models.workflow import get_dependency_idx
+from matflow.models import TaskSchema
+from matflow.models.construction import get_dependency_idx, get_local_inputs
 
 TEST_DATA = {
     'test_1': {
@@ -445,7 +445,7 @@ class ElementIdxTestCase(unittest.TestCase):
 
             for idx, task in enumerate(tasks):
                 loc_ins = get_local_inputs(
-                    schemas[task['name']]['inputs'],
+                    list(schemas[task['name']]['inputs'].keys()),
                     base=task.get('base'),
                     sequences=task.get('sequences'),
                     num_repeats=task.get('repeats', 1),

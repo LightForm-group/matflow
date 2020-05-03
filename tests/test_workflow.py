@@ -2,10 +2,13 @@
 
 import unittest
 
-from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
-                            MissingMergePriority)
-from matflow.models.task import TaskSchema
-from matflow.models.workflow import get_dependency_idx
+from matflow.errors import (
+    IncompatibleWorkflow,
+    IncompatibleTaskNesting,
+    MissingMergePriority
+)
+from matflow.models import TaskSchema
+from matflow.models.construction import get_dependency_idx
 
 """
 tests for inputs/outputs_idx:

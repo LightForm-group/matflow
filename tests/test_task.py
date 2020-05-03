@@ -3,7 +3,8 @@
 import copy
 import unittest
 
-from matflow.models.task import TaskSchema, normalise_local_inputs, get_local_inputs
+from matflow.models import TaskSchema
+from matflow.models.construction import normalise_local_inputs, get_local_inputs
 from matflow.errors import (
     IncompatibleSequence,
     TaskSchemaError,
@@ -115,43 +116,43 @@ class GetLocalInputsExceptionTestCase(unittest.TestCase):
             {'name': 'p3', 'vals': [301, 302]},
         ]
         with self.assertRaises(SequenceError):
-            get_local_inputs({}, sequences=sequences)
+            get_local_inputs([], sequences=sequences)
 
     def test_raise_on_bad_sequence_vals_type_str(self):
         'Test raises when sequence vals is a string.'
         sequences = [{'name': 'p1', 'vals': '120'}]
         with self.assertRaises(SequenceError):
-            get_local_inputs({}, sequences=sequences)
+            get_local_inputs([], sequences=sequences)
 
     def test_raise_on_bad_sequence_vals_type_number(self):
         'Test raises when sequence vals is a number.'
         sequences = [{'name': 'p1', 'vals': 120}]
         with self.assertRaises(SequenceError):
-            get_local_inputs({}, sequences=sequences)
+            get_local_inputs([], sequences=sequences)
 
     def test_raise_on_bad_sequences_type(self):
         'Test raises when sequences is not a list.'
         sequences = {'name': 'p1', 'vals': [1, 2]}
         with self.assertRaises(SequenceError):
-            get_local_inputs({}, sequences=sequences)
+            get_local_inputs([], sequences=sequences)
 
     def test_warn_on_unrequired_nest_idx(self):
         'Test warning on unrequired nest idx.'
         sequences = [{'name': 'p1', 'vals': [101, 102], 'nest_idx': 0}]
         with self.assertWarns(Warning):
-            get_local_inputs({}, sequences=sequences)
+            get_local_inputs([], sequences=sequences)
 
     def test_raise_on_bad_sequence_keys(self):
         'Test raises when a sequence has unknown keys.'
         sequences = [{'name': 'p1', 'vals': [101, 102], 'bad_key': 4}]
         with self.assertRaises(SequenceError):
-            get_local_inputs({}, sequences=sequences)
+            get_local_inputs([], sequences=sequences)
 
     def test_raise_on_missing_sequence_keys(self):
         'Test raises when a sequence has missing keys.'
         sequences = [{'vals': [101, 102]}]
         with self.assertRaises(SequenceError):
-            get_local_inputs({}, sequences=sequences)
+            get_local_inputs([], sequences=sequences)
 
     def test_raise_on_incompatible_nesting(self):
         'Test error raised on logically inconsistent Task sequence.'
@@ -160,7 +161,7 @@ class GetLocalInputsExceptionTestCase(unittest.TestCase):
             {'name': 'p2', 'nest_idx': 0, 'vals': [201]},
         ]
         with self.assertRaises(IncompatibleSequence):
-            get_local_inputs({}, sequences=sequences)
+            get_local_inputs([], sequences=sequences)
 
 
 class GetLocalInputsInputsTestCase(unittest.TestCase):
@@ -169,7 +170,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
     def test_base_only(self):
         'Check expected output for no sequences.'
         base = {'p1': 101}
-        local_ins = get_local_inputs({}, base=base)['inputs']
+        local_ins = get_local_inputs([], base=base)['inputs']
         local_ins_exp = {'p1': {'vals': [101], 'vals_idx': [0]}}
         self.assertTrue(local_ins == local_ins_exp)
 
@@ -177,7 +178,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         'Check expected output for base and one sequence.'
         base = {'p1': 101}
         sequences = [{'name': 'p2', 'vals': [201, 202]}]
-        local_ins = get_local_inputs({}, base=base, sequences=sequences)['inputs']
+        local_ins = get_local_inputs([], base=base, sequences=sequences)['inputs']
         local_ins_exp = {
             'p1': {'vals': [101], 'vals_idx': [0, 0]},
             'p2': {'vals': [201, 202], 'vals_idx': [0, 1]},
@@ -191,7 +192,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
             {'name': 'p2', 'vals': [201, 202], 'nest_idx': 0},
             {'name': 'p3', 'vals': [301, 302, 303], 'nest_idx': 1},
         ]
-        local_ins = get_local_inputs({}, base=base, sequences=sequences)['inputs']
+        local_ins = get_local_inputs([], base=base, sequences=sequences)['inputs']
         local_ins_exp = {
             'p1': {'vals': [101], 'vals_idx': [0, 0, 0, 0, 0, 0]},
             'p2': {'vals': [201, 202], 'vals_idx': [0, 0, 0, 1, 1, 1]},
@@ -206,7 +207,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
             {'name': 'p2', 'vals': [201, 202], 'nest_idx': 0},
             {'name': 'p3', 'vals': [301, 302], 'nest_idx': 0},
         ]
-        local_ins = get_local_inputs({}, base=base, sequences=sequences)['inputs']
+        local_ins = get_local_inputs([], base=base, sequences=sequences)['inputs']
         local_ins_exp = {
             'p1': {'vals': [101], 'vals_idx': [0, 0]},
             'p2': {'vals': [201, 202], 'vals_idx': [0, 1]},
@@ -222,7 +223,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
             {'name': 'p3', 'vals': [301, 302], 'nest_idx': 0},
             {'name': 'p4', 'vals': [401, 402, 403], 'nest_idx': 1},
         ]
-        local_ins = get_local_inputs({}, base=base, sequences=sequences)['inputs']
+        local_ins = get_local_inputs([], base=base, sequences=sequences)['inputs']
         local_ins_exp = {
             'p1': {'vals': [101], 'vals_idx': [0, 0, 0, 0, 0, 0]},
             'p2': {'vals': [201, 202], 'vals_idx': [0, 0, 0, 1, 1, 1]},
@@ -241,8 +242,8 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         sequences_2[0]['nest_idx'] = 105
         sequences_2[1]['nest_idx'] = 2721
 
-        local_ins_1 = get_local_inputs({}, sequences=sequences_1)['inputs']
-        local_ins_2 = get_local_inputs({}, sequences=sequences_2)['inputs']
+        local_ins_1 = get_local_inputs([], sequences=sequences_1)['inputs']
+        local_ins_2 = get_local_inputs([], sequences=sequences_2)['inputs']
 
         self.assertTrue(local_ins_1 == local_ins_2)
 
@@ -252,7 +253,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
             {'name': 'p1', 'nest_idx': 0, 'vals': [101, 102, 103]},
             {'name': 'p2', 'nest_idx': 1, 'vals': [201, 202]},
         ]
-        local_ins = get_local_inputs({}, sequences=sequences)['inputs']
+        local_ins = get_local_inputs([], sequences=sequences)['inputs']
         self.assertTrue(len(local_ins['p1']['vals_idx']) == 6)
 
     def test_all_inputs_local_inputs_size(self):
@@ -261,7 +262,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
             {'name': 'p1', 'nest_idx': 0, 'vals': [101, 102, 103]},
             {'name': 'p2', 'nest_idx': 1, 'vals': [201, 202]},
         ]
-        local_ins = get_local_inputs({}, sequences=sequences)['inputs']
+        local_ins = get_local_inputs([], sequences=sequences)['inputs']
         self.assertTrue(
             len(local_ins['p1']['vals_idx']) == len(local_ins['p2']['vals_idx'])
         )
@@ -273,7 +274,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
             {'name': 'p2', 'nest_idx': 3, 'vals': [201, 202]},
             {'name': 'p3', 'nest_idx': 3, 'vals': [301, 302]},
         ]
-        local_ins = get_local_inputs({}, sequences=sequences)['inputs']
+        local_ins = get_local_inputs([], sequences=sequences)['inputs']
         self.assertTrue(
             len(local_ins['p1']['vals_idx']) ==
             len(local_ins['p2']['vals_idx']) ==
@@ -287,7 +288,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
             {'name': 'p2', 'nest_idx': 4, 'vals': [201, 202]},
             {'name': 'p3', 'nest_idx': 4, 'vals': [301, 302]},
         ]
-        local_ins = get_local_inputs({}, sequences=sequences)['inputs']
+        local_ins = get_local_inputs([], sequences=sequences)['inputs']
         self.assertTrue(
             len(local_ins['p1']['vals_idx']) ==
             len(local_ins['p2']['vals_idx']) ==
@@ -298,7 +299,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         'Check the base dict is merged into a sequence.'
         base = {'p1': 101}
         sequences = [{'name': 'p2', 'nest_idx': 0, 'vals': [201, 202]}]
-        local_ins = get_local_inputs({}, base=base, sequences=sequences)['inputs']
+        local_ins = get_local_inputs([], base=base, sequences=sequences)['inputs']
         self.assertTrue(
             local_ins['p1']['vals_idx'] == [0, 0] and
             local_ins['p2']['vals_idx'] == [0, 1]
@@ -309,8 +310,8 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         parameter in the base dict."""
         base = {'p1': 101}
         sequences = [{'name': 'p1', 'nest_idx': 0, 'vals': [101]}]
-        local_ins_1 = get_local_inputs({}, sequences=sequences)['inputs']
-        local_ins_2 = get_local_inputs({}, base=base)['inputs']
+        local_ins_1 = get_local_inputs([], sequences=sequences)['inputs']
+        local_ins_2 = get_local_inputs([], base=base)['inputs']
         self.assertTrue(local_ins_1 == local_ins_2)
 
 
