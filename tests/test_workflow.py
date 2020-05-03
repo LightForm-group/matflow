@@ -1,9 +1,7 @@
 """Module containing unit tests on Workflow initialisation."""
 
 import unittest
-from shutil import rmtree
 
-from matflow.api import make_workflow
 from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
                             MissingMergePriority)
 from matflow.models.task import TaskSchema
@@ -155,52 +153,60 @@ class TaskDependencyTestCase(unittest.TestCase):
         dep_idx_exp = [[], [], [0, 1]]
         self.assertTrue(dep_idx == dep_idx_exp)
 
-
-class TaskCompatibilityTestCase(unittest.TestCase):
-    'Tests ensuring correct behaviour for incompatible tasks.'
-
-    def test_output_non_exclusivity(self):
-        """Ensure raises on a workflow that has multiple tasks that include the same
-        output."""
-        task_compat_props = [
+    def test_raise_on_output_non_exclusivity(self):
+        'Test raises on multiple tasks that include the same output (and context).'
+        task_lst = [
             {
-                'name': '',
-                'inputs': ['parameter_1'],
-                'length': 1,
-                'nest_idx': 0,
-                'outputs': ['parameter_2'],
+                'context': '',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p1', 'context': None},
+                        {'name': 'p2', 'context': None},
+                    ],
+                    'outputs': ['p3'],
+                },
             },
             {
-                'name': '',
-                'inputs': ['parameter_1'],
-                'length': 1,
-                'nest_idx': 0,
-                'outputs': ['parameter_2'],
-            },
-        ]
-        with self.assertRaises(IncompatibleWorkflow):
-            check_task_compatibility(task_compat_props)
-
-    def test_circular_reference(self):
-        """Ensure raises on a workflow whose Tasks are circularly referential."""
-        task_compat_props = [
-            {
-                'name': '',
-                'inputs': ['parameter_1'],
-                'length': 1,
-                'nest_idx': 0,
-                'outputs': ['parameter_2'],
-            },
-            {
-                'name': '',
-                'inputs': ['parameter_2'],
-                'length': 1,
-                'nest_idx': 0,
-                'outputs': ['parameter_1'],
+                'context': '',
+                'schema': {
+                    'name': 'two',
+                    'inputs': [
+                        {'name': 'p4', 'context': None},
+                    ],
+                    'outputs': ['p3'],
+                },
             },
         ]
         with self.assertRaises(IncompatibleWorkflow):
-            check_task_compatibility(task_compat_props)
+            get_dependency_idx(init_schemas(task_lst))
+
+    def test_raise_on_circular_reference(self):
+        'Test raises on circularly referential Tasks.'
+        task_lst = [
+            {
+                'context': '',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p1', 'context': None},
+                    ],
+                    'outputs': ['p2'],
+                },
+            },
+            {
+                'context': '',
+                'schema': {
+                    'name': 'two',
+                    'inputs': [
+                        {'name': 'p2', 'context': None},
+                    ],
+                    'outputs': ['p1'],
+                },
+            },
+        ]
+        with self.assertRaises(IncompatibleWorkflow):
+            get_dependency_idx(init_schemas(task_lst))
 
 
 class TaskNestingTestCase(unittest.TestCase):
