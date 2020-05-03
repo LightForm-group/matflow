@@ -6,7 +6,8 @@ from shutil import rmtree
 from matflow.api import make_workflow
 from matflow.errors import (IncompatibleWorkflow, IncompatibleTaskNesting,
                             MissingMergePriority)
-from matflow.models.workflow import check_task_compatibility
+from matflow.models.task import TaskSchema
+from matflow.models.workflow import get_dependency_idx
 
 """
 tests for inputs/outputs_idx:
@@ -19,6 +20,140 @@ tests for resolve_task_num_elements:
 - check works when no upstream tasks
 
 """
+
+
+def init_schemas(task_lst):
+    'Construct TaskSchema objects for TaskDependencyTestCase tests.'
+    for idx, i in enumerate(task_lst):
+        task_lst[idx]['schema'] = TaskSchema(**i['schema'])
+    return task_lst
+
+
+class TaskDependencyTestCase(unittest.TestCase):
+    'Tests on `get_dependency_idx`'
+
+    def test_single_dependency(self):
+        'Test correct dependency index for a single task dependency.'
+        task_lst = [
+            {
+                'context': '',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p1', 'context': None},
+                        {'name': 'p2', 'context': None},
+                    ],
+                    'outputs': ['p3'],
+                },
+            },
+            {
+                'context': '',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p3', 'context': None},
+                        {'name': 'p4', 'context': None},
+                    ],
+                    'outputs': ['p5'],
+                },
+            },
+        ]
+        dep_idx = get_dependency_idx(init_schemas(task_lst))
+        dep_idx_exp = [[], [0]]
+        self.assertTrue(dep_idx == dep_idx_exp)
+
+    def test_single_dependency_two_contexts(self):
+        'Test single dependencies for two parallel contexts.'
+        task_lst = [
+            {
+                'context': 'context_A',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p1', 'context': None},
+                        {'name': 'p2', 'context': None},
+                    ],
+                    'outputs': ['p3'],
+                },
+            },
+            {
+                'context': 'context_A',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p3', 'context': None},
+                        {'name': 'p4', 'context': None},
+                    ],
+                    'outputs': ['p5'],
+                },
+            },
+            {
+                'context': 'context_B',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p1', 'context': None},
+                        {'name': 'p2', 'context': None},
+                    ],
+                    'outputs': ['p3'],
+                },
+            },
+            {
+                'context': 'context_B',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p3', 'context': None},
+                        {'name': 'p4', 'context': None},
+                    ],
+                    'outputs': ['p5'],
+                },
+            },
+        ]
+        dep_idx = get_dependency_idx(init_schemas(task_lst))
+        dep_idx_exp = [[], [0], [], [2]]
+        self.assertTrue(dep_idx == dep_idx_exp)
+
+    def test_two_dependencies(self):
+        'Test where a task depends on two tasks.'
+        task_lst = [
+            {
+                'context': 'contextA',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p1', 'context': None},
+                        {'name': 'p2', 'context': None},
+                    ],
+                    'outputs': ['p3', 'p4'],
+                },
+            },
+            {
+                'context': 'contextB',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p1', 'context': None},
+                        {'name': 'p2', 'context': None},
+                    ],
+                    'outputs': ['p3', 'p4'],
+                },
+            },
+            {
+                'context': '',
+                'schema': {
+                    'name': 'one',
+                    'inputs': [
+                        {'name': 'p3', 'context': 'contextA'},
+                        {'name': 'p4', 'context': 'contextB'},
+                    ],
+                    'outputs': ['p5'],
+                },
+            },
+        ]
+        dep_idx = get_dependency_idx(init_schemas(task_lst))
+        dep_idx_exp = [[], [], [0, 1]]
+        self.assertTrue(dep_idx == dep_idx_exp)
 
 
 class TaskCompatibilityTestCase(unittest.TestCase):
