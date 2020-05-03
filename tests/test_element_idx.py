@@ -431,7 +431,7 @@ def init_schemas(task_lst):
     return task_lst
 
 
-class ElementIdxTestCase(unittest.TestCase):
+class ElementIdxFullTestCase(unittest.TestCase):
     'Check each step in generating elements indices is successful.'
 
     def test_local_inputs(self):
