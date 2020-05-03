@@ -484,8 +484,3 @@ class Task(object):
     def get_task_path(self, workflow_path):
         return workflow_path.joinpath(f'task_{self.task_idx}_{self.name}')
 
-    def initialise_outputs(self):
-        self.outputs = [
-            {key: None for key in self.schema.outputs}
-            for _ in range(len(self.local_inputs))
-        ]
