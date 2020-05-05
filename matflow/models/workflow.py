@@ -654,7 +654,6 @@ class Workflow(object):
     @save_workflow
     @increments_version
     @requires_path_exists
-    @increments_version
     def process_task(self, task_idx):
         'Process outputs from an executed task: run output map and save outputs.'
 
