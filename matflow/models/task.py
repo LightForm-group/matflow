@@ -299,6 +299,12 @@ class Task(object):
     def status(self):
         return self._status
 
+    @status.setter
+    def status(self, status):
+        'Set task status'
+        # TODO validate, maybe with enum.
+        self._status = status
+
     @property
     def stats(self):
         return self._stats
@@ -315,9 +321,23 @@ class Task(object):
     def inputs(self):
         return self._inputs
 
+    @inputs.setter
+    def inputs(self, inputs):
+        'Set the task inputs (i.e. from `Workflow.prepare_task`).'
+        if not isinstance(inputs, list) or not isinstance(inputs[0], dict):
+            raise ValueError('Inputs must be a list of dict.')
+        self._inputs = inputs
+
     @property
     def outputs(self):
         return self._outputs
+
+    @outputs.setter
+    def outputs(self, outputs):
+        'Set the task outputs (i.e. from `Workflow.process_task`).'
+        if not isinstance(outputs, list) or not isinstance(outputs[0], dict):
+            raise ValueError('Outputs must be a list of dict.')
+        self._outputs = outputs
 
     @property
     def schema(self):
@@ -327,9 +347,20 @@ class Task(object):
     def files(self):
         return self._files
 
+    @files.setter
+    def files(self, files):
+        'Set the task files (i.e. from `Workflow.prepare_task`).'
+        if not isinstance(files, list) or not isinstance(files[0], dict):
+            raise ValueError('Files must be a list of dict.')
+        self._files = files
+
     @property
     def resource_usage(self):
         return self._resource_usage
+
+    @resource_usage.setter
+    def resource_usage(self, resource_usage):
+        self._resource_usage = resource_usage
 
     @property
     def base(self):
