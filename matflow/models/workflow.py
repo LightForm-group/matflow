@@ -453,10 +453,11 @@ class Workflow(object):
             try:
                 with path.open('w') as handle:
                     hickle.dump(obj_json, handle)
-            except:
-                err_msg = f'Failed to save workflow to path: "{path}".'
-        except:
-            err_msg = 'Failed to convert Workflow object to `hickle`-compatible dict.'
+            except Exception as err:
+                err_msg = f'Failed to save workflow to path: "{path}": {err}.'
+        except Exception as err:
+            err_msg = (f'Failed to convert Workflow object to `hickle`-compatible '
+                       f'dict: {err}.')
 
         if err_msg:
             if not keep_previous_versions:
