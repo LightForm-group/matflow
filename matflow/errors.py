@@ -40,3 +40,7 @@ class MissingSoftware(Exception):
 
 class WorkflowPersistenceError(Exception):
     'For problems related to saving and loading the persistent HDF5 files.'
+
+
+class UnsatisfiedGroupParameter(Exception):
+    'For when an input has a group, but that group does not exist in the Workflow.'
