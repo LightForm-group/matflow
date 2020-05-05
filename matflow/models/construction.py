@@ -475,6 +475,8 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
         raise TaskError(msg)
 
     task = {**def_keys, **copy.deepcopy(task)}
+    if 'num_cores' not in task['run_options']:
+        task.update({'run_options': def_keys['run_options']})
 
     # Make TaskSchema:
     if is_from_file:
