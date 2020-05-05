@@ -546,23 +546,28 @@ class Workflow(object):
         if obj_json['_extend_paths']:
             extend = {
                 'paths': obj_json['_extend_paths'],
-                'nest_idx': obj_json['extend_nest_idx']
+                'nest_idx': obj_json['_extend_nest_idx']
             }
 
+        tasks = [{k.lstrip('_'): v for k, v in i.items()} for i in obj_json['_tasks']]
         obj = {
-            'name': obj_json['name'],
-            'tasks': obj_json['tasks'],
+            'name': obj_json['_name'],
+            'tasks': tasks,
             'stage_directory': obj_json['_stage_directory'],
             'extend': extend,
         }
 
-        workflow = cls(**obj, __is_from_file=True, check_integrity=check_integrity)
+        workflow = cls(
+            **obj,
+            _Workflow__is_from_file=True,
+            check_integrity=check_integrity,
+        )
 
-        workflow.profile_str = obj_json['profile_str']
-        workflow._human_id = obj_json['human_id']
-        workflow._id = obj_json['id']
-        workflow._matflow_version = obj_json['matflow_version']
-        workflow._version = obj_json['version']
+        workflow.profile_str = obj_json['_profile_str']
+        workflow._human_id = obj_json['_human_id']
+        workflow._id = obj_json['_id']
+        workflow._matflow_version = obj_json['_matflow_version']
+        workflow._version = obj_json['_version']
 
         return workflow
 
