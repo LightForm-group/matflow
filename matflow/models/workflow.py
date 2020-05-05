@@ -210,6 +210,9 @@ class Workflow(object):
     def write_directories(self):
         'Generate task and element directories.'
 
+        if self.path.exists():
+            raise ValueError('Directories for this workflow already exist.')
+
         self.path.mkdir(exist_ok=False)
 
         for elems_idx, task in zip(self.elements_idx, self.tasks):
