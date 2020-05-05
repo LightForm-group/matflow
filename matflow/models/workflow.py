@@ -717,4 +717,3 @@ class Workflow(object):
 
         task.outputs = outputs
 
-        self.save()
