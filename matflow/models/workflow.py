@@ -66,6 +66,16 @@ def increments_version(func):
     return func_wrap
 
 
+def save_workflow(func):
+    'Workflow method decorator to save the workflow after completion of the method.'
+    @functools.wraps(func)
+    def func_wrap(self, *args, **kwargs):
+        ret = func(self, *args, **kwargs)
+        self.save()
+        return ret
+    return func_wrap
+
+
 class Workflow(object):
 
     __slots__ = [
@@ -571,8 +581,9 @@ class Workflow(object):
 
         return workflow
 
-    @requires_path_exists
+    @save_workflow
     @increments_version
+    @requires_path_exists
     def prepare_task(self, task_idx):
         'Prepare inputs and run input maps.'
 
@@ -640,8 +651,8 @@ class Workflow(object):
 
         task.files = files
 
-        self.save()
-
+    @save_workflow
+    @increments_version
     @requires_path_exists
     @increments_version
     def process_task(self, task_idx):
