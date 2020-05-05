@@ -452,6 +452,8 @@ class Workflow(object):
             for del_path_i in to_delete.keys():
                 tagged_name = del_path_i.with_name(del_path_i.name + remove_tag)
                 del_path_i.rename(tagged_name)
+                msg = f'Marking old workflow file for deletion: {del_path_i}'
+                print(msg, flush=True)
 
         if path.exists():
             msg = f'Workflow cannot be saved to a path that already exists: "{path}".'
@@ -475,6 +477,8 @@ class Workflow(object):
                 for del_path_i in to_delete.keys():
                     tagged_name = del_path_i.with_name(del_path_i.name + remove_tag)
                     tagged_name.rename(del_path_i)
+                    msg = f'Save failed. Reverting old workflow file name: {tagged_name}.'
+                    print(msg, flush=True)
 
                 del to_delete
             raise WorkflowPersistenceError(err_msg)
@@ -484,7 +488,8 @@ class Workflow(object):
                 # Delete older versions (same ID):
                 for del_path_i in to_delete.keys():
                     tagged_name = del_path_i.with_name(del_path_i.name + remove_tag)
-                    tagged_name.unlink(missing_ok=False)
+                    print(f'Removing old workflow file: {tagged_name}', flush=True)
+                    tagged_name.unlink()
 
     @classmethod
     def load(cls, path, full_path=False, version=None, check_integrity=True):
