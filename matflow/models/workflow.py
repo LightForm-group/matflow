@@ -528,6 +528,8 @@ class Workflow(object):
                 raise OSError(f'Workflow file does not exist: "{path}".')
         else:
             existing = cls.get_existing_workflow_files(path)
+            if not existing:
+                raise ValueError('No workflow files found.')
             all_IDs = set([v['id'] for v in existing.values()])
             if len(all_IDs) > 1:
                 msg = (f'Saved workflows with multiple distinct IDs exist in the loading'
