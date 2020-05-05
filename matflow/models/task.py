@@ -186,6 +186,12 @@ class TaskSchema(object):
         )
         return out
 
+    def get_input_by_name(self, input_name):
+        for i in self.inputs:
+            if i['name'] == input_name:
+                return i
+        raise ValueError(f'No input "{input_name}" in schema.')
+
 
 class Task(object):
     """
