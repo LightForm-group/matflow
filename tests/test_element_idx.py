@@ -2,28 +2,49 @@
 
 import unittest
 
+from pprint import pprint
+
 from matflow.models import TaskSchema
-from matflow.models.construction import get_dependency_idx, get_local_inputs
+from matflow.models.construction import (
+    validate_task_dict,
+    order_tasks,
+    get_element_idx,
+)
 
 TEST_DATA = {
     'test_1': {
         'description': 'Simple two-task example with nesting between tasks.',
-        'schemas': {
-            'one': {
-                'inputs': {
-                    'p1': {'group': 'default'},
-                    'p2': {'group': 'default'},
-                },
+        'software': [
+            {
+                'name': 'software_1',
+                'version': 1,
+                'num_cores': [1, 1, 1],
+            }
+        ],
+        'schemas': [
+            {
+                'name': 'one',
                 'outputs': ['p3'],
+                'methods': [
+                    {
+                        'name': 'method_1',
+                        'inputs': ['p1[group=default]', 'p2[group=default]'],
+                        'implementations': [{'name': 'software_1'}]
+                    }
+                ],
             },
-            'two': {
-                'inputs': {
-                    'p3': {'group': 'default'},
-                    'p4': {'group': 'default'},
-                },
+            {
+                'name': 'two',
                 'outputs': ['p5'],
+                'methods': [
+                    {
+                        'name': 'method_1',
+                        'inputs': ['p3[group=default]', 'p4[group=default]'],
+                        'implementations': [{'name': 'software_1'}]
+                    }
+                ],
             },
-        },
+        ],
         'tasks': [
             {
                 'name': 'one',
@@ -32,44 +53,100 @@ TEST_DATA = {
                     {'name': 'p2', 'vals': [201, 202], 'nest_idx': 1}
                 ],
                 'nest': True,
+                'method': 'method_1',
+                'software': 'software_1',
             },
             {
                 'name': 'two',
                 'sequences': [
                     {'name': 'p4', 'vals': [401, 402]},
                 ],
+                'method': 'method_1',
+                'software': 'software_1',
+            },
+        ],
+        'tasks_validated_expected': [
+            {
+                'name': 'one',
+                'context': '',
+                'run_options': {'num_cores': 1},
+                'stats': True,
+                'base': None,
+                'sequences': [
+                    {'name': 'p1', 'vals': [101, 102], 'nest_idx': 0},
+                    {'name': 'p2', 'vals': [201, 202], 'nest_idx': 1}
+                ],
+                'repeats': 1,
+                'merge_priority': None,
+                'nest': True,
+                'method': 'method_1',
+                'software': 'software_1',
+                'local_inputs': {
+                    'length': 4,
+                    'repeats_idx': [0, 0, 0, 0],
+                    'inputs': {
+                        'p1': {'vals': [101, 102], 'vals_idx': [0, 0, 1, 1]},
+                        'p2': {'vals': [201, 202], 'vals_idx': [0, 1, 0, 1]},
+                    },
+                    'groups': {
+                        'default': {
+                            'group_by': ['p1', 'p2', 'repeats'],
+                            'nest': True,
+                        },
+                    },
+                },
+                'schema': {
+                    'name': 'one',
+                    'method': 'method_1',
+                    'implementation': 'software_1',
+                    'inputs': [
+                        {'name': 'p1', 'group': 'default', 'context': None},
+                        {'name': 'p2', 'group': 'default', 'context': None},
+                    ],
+                    'outputs': ['p3'],
+                }
+            },
+            {
+                'name': 'two',
+                'context': '',
+                'run_options': {'num_cores': 1},
+                'stats': True,
+                'base': None,
+                'sequences': [
+                    {'name': 'p4', 'vals': [401, 402], 'nest_idx': 0},
+                ],
+                'repeats': 1,
+                'merge_priority': None,
+                'nest': True,
+                'method': 'method_1',
+                'software': 'software_1',
+                'local_inputs': {
+                    'length': 2,
+                    'repeats_idx': [0, 0],
+                    'inputs': {
+                        'p4': {'vals': [401, 402], 'vals_idx': [0, 1]},
+                    },
+                    'groups': {
+                        'default': {
+                            'group_by': ['p3', 'p4', 'repeats'],
+                            'nest': True,
+                        },
+                    },
+                },
+                'schema': {
+                    'name': 'two',
+                    'method': 'method_1',
+                    'implementation': 'software_1',
+                    'inputs': [
+                        {'name': 'p3', 'group': 'default', 'context': None},
+                        {'name': 'p4', 'group': 'default', 'context': None},
+                    ],
+                    'outputs': ['p5'],
+                }
             },
         ],
         'dependency_idx_expected': [[], [0]],
-        'local_inputs_expected': [
-            {
-                'length': 4,
-                'repeats_idx': [0, 0, 0, 0],
-                'inputs': {
-                    'p1': {'vals': [101, 102], 'vals_idx': [0, 0, 1, 1]},
-                    'p2': {'vals': [201, 202], 'vals_idx': [0, 1, 0, 1]},
-                },
-                'groups': {
-                    'default': {
-                        'group_by': ['p1', 'p2', 'repeats'],
-                        'nest': True,
-                    },
-                },
-            },
-            {
-                'length': 2,
-                'repeats_idx': [0, 0],
-                'inputs': {
-                    'p4': {'vals': [401, 402], 'vals_idx': [0, 1]},
-                },
-                'groups': {
-                    'default': {
-                        'group_by': ['p3', 'p4', 'repeats'],
-                        'nest': True,
-                    },
-                },
-            }
-        ],
+        'task_idx_expected': [0, 1],
         'elements_idx_expected': [
             {
                 'num_elements': 4,
@@ -81,6 +158,7 @@ TEST_DATA = {
                         'group_element_idx': [[0], [1], [2], [3]],
                         'num_groups': 4,
                         'group_size': 1,
+                        'merge_priority': None,
                     },
                 },
                 'inputs': {
@@ -92,12 +170,13 @@ TEST_DATA = {
                 'num_elements': 8,
                 'groups': {
                     'default': {
-                        'group_by': ['p3', 'p4', 'repeats'],
+                        'group_by': ['p4', 'repeats'],
                         'nest': True,
                         'group_idx': [0, 1, 2, 3, 4, 5, 6, 7],
                         'group_element_idx': [[0], [1], [2], [3], [4], [5], [6], [7]],
                         'num_groups': 8,
                         'group_size': 1,
+                        'merge_priority': None,
                     },
                 },
                 'inputs': {
@@ -114,32 +193,57 @@ TEST_DATA = {
     'test_2': {
         'description': ('Two tasks feed into a third task, with one parameter using a '
                         'user-defined group.'),
-        'schemas': {
-            'one': {
-                'inputs': {
-                    'p1': {'group': 'default'},
-                    'p3': {'group': 'default'}
-                },
+        'software': [
+            {
+                'name': 'software_1',
+                'version': 1,
+                'num_cores': [1, 1, 1],
+            }
+        ],
+        'schemas': [
+            {
+                'name': 'one',
                 'outputs': ['p2', 'p4'],
+                'methods': [
+                    {
+                        'name': 'method_1',
+                        'inputs': ['p1[group=default]', 'p3[group=default]'],
+                        'implementations': [{'name': 'software_1'}]
+                    }
+                ],
             },
-            'two': {
-                'inputs': {
-                    'p5': {'group': 'default'},
-                },
+            {
+                'name': 'two',
                 'outputs': ['p6'],
+                'methods': [
+                    {
+                        'name': 'method_1',
+                        'inputs': ['p5[group=default]'],
+                        'implementations': [{'name': 'software_1'}]
+                    }
+                ],
             },
-            'three': {
-                'inputs': {
-                    'p4': {'group': 'group_A'},
-                    'p6': {'group': 'default'},
-                    'p7': {'group': 'default'},
-                },
+            {
+                'name': 'three',
                 'outputs': ['p8'],
+                'methods': [
+                    {
+                        'name': 'method_1',
+                        'inputs': [
+                            'p4[group=group_A]',
+                            'p6[group=default]',
+                            'p7[group=default]',
+                        ],
+                        'implementations': [{'name': 'software_1'}]
+                    }
+                ],
             },
-        },
+        ],
         'tasks': [
             {
                 'name': 'one',
+                'software': 'software_1',
+                'method': 'method_1',
                 'sequences': [
                     {'name': 'p1', 'vals': [101, 102], 'nest_idx': 0},
                     {'name': 'p3', 'vals': [301, 302], 'nest_idx': 1},
@@ -151,6 +255,8 @@ TEST_DATA = {
             },
             {
                 'name': 'two',
+                'software': 'software_1',
+                'method': 'method_1',
                 'sequences': [
                     {'name': 'p5', 'vals': [501, 502]},
                 ],
@@ -158,105 +264,200 @@ TEST_DATA = {
             },
             {
                 'name': 'three',
+                'software': 'software_1',
+                'method': 'method_1',
                 'sequences': [
                     {'name': 'p7', 'vals': [701, 702]},
                 ],
                 'nest': False,
             },
         ],
-        'dependency_idx_expected': [[], [], [0, 1]],
-        'local_inputs_expected': [
+        'tasks_validated_expected': [
             {
-                'length': 4,
-                'repeats_idx': [0, 0, 0, 0],
-                'groups': {
-                    'default': {
-                        'group_by': ['p1', 'p3', 'repeats'],
-                        'nest': False,
+                'name': 'one',
+                'context': '',
+                'run_options': {'num_cores': 1},
+                'stats': True,
+                'base': None,
+                'sequences': [
+                    {'name': 'p1', 'vals': [101, 102], 'nest_idx': 0},
+                    {'name': 'p3', 'vals': [301, 302], 'nest_idx': 1},
+                ],
+                'repeats': 1,
+                'merge_priority': None,
+                'nest': False,
+                'method': 'method_1',
+                'software': 'software_1',
+                'local_inputs': {
+                    'length': 4,
+                    'repeats_idx': [0, 0, 0, 0],
+                    'groups': {
+                        'default': {
+                            'group_by': ['p1', 'p3', 'repeats'],
+                            'nest': False,
+                        },
+                        'user_group_group_A': {
+                            'group_by': ['p1'],
+                            'nest': False,
+                        },
                     },
-                    'user_group_group_A': {
-                        'group_by': ['p1'],
-                        'nest': False,
+                    'inputs': {
+                        'p1': {'vals': [101, 102], 'vals_idx': [0, 0, 1, 1]},
+                        'p3': {'vals': [301, 302], 'vals_idx': [0, 1, 0, 1]},
                     },
                 },
-                'inputs': {
-                    'p1': {'vals': [101, 102], 'vals_idx': [0, 0, 1, 1]},
-                    'p3': {'vals': [301, 302], 'vals_idx': [0, 1, 0, 1]},
-                },
+                'schema': {
+                    'name': 'one',
+                    'method': 'method_1',
+                    'implementation': 'software_1',
+                    'inputs': [
+                        {'name': 'p1', 'group': 'default', 'context': None},
+                        {'name': 'p3', 'group': 'default', 'context': None},
+                    ],
+                    'outputs': ['p2', 'p4'],
+                }
             },
             {
-                'length': 2,
-                'repeats_idx': [0, 0],
-                'groups': {
-                    'default': {
-                        'group_by': ['p5', 'repeats'],
-                        'nest': False
+                'name': 'two',
+                'context': '',
+                'run_options': {'num_cores': 1},
+                'stats': True,
+                'base': None,
+                'sequences': [
+                    {'name': 'p5', 'vals': [501, 502], 'nest_idx': 0},
+                ],
+                'repeats': 1,
+                'merge_priority': None,
+                'nest': False,
+                'method': 'method_1',
+                'software': 'software_1',
+                'local_inputs': {
+                    'length': 2,
+                    'repeats_idx': [0, 0],
+                    'groups': {
+                        'default': {
+                            'group_by': ['p5', 'repeats'],
+                            'nest': False
+                        },
+                    },
+                    'inputs': {
+                        'p5': {'vals': [501, 502], 'vals_idx': [0, 1]}
                     },
                 },
-                'inputs': {
-                    'p5': {'vals': [501, 502], 'vals_idx': [0, 1], }
-                },
+                'schema': {
+                    'name': 'two',
+                    'method': 'method_1',
+                    'implementation': 'software_1',
+                    'inputs': [
+                        {'name': 'p5', 'group': 'default', 'context': None},
+                    ],
+                    'outputs': ['p6'],
+                }
             },
             {
-                'length': 2,
-                'repeats_idx': [0, 0],
-                'groups': {
-                    'default': {
-                        'group_by': ['p4', 'p6', 'p7', 'repeats'],
-                        'nest': False,
+                'name': 'three',
+                'context': '',
+                'run_options': {'num_cores': 1},
+                'stats': True,
+                'base': None,
+                'sequences': [
+                    {'name': 'p7', 'vals': [701, 702], 'nest_idx': 0},
+                ],
+                'repeats': 1,
+                'merge_priority': None,
+                'nest': False,
+                'method': 'method_1',
+                'software': 'software_1',
+                'local_inputs': {
+                    'length': 2,
+                    'repeats_idx': [0, 0],
+                    'groups': {
+                        'default': {
+                            'group_by': ['p4', 'p6', 'p7', 'repeats'],
+                            'nest': False,
+                        },
+                    },
+                    'inputs': {
+                        'p7': {'vals': [701, 702], 'vals_idx': [0, 1]},
                     },
                 },
-                'inputs': {
-                    'p7': {'vals': [701, 702], 'vals_idx': [0, 1]},
-                },
+                'schema': {
+                    'name': 'three',
+                    'method': 'method_1',
+                    'implementation': 'software_1',
+                    'inputs': [
+                        {'name': 'p4', 'group': 'group_A', 'context': None},
+                        {'name': 'p6', 'group': 'default', 'context': None},
+                        {'name': 'p7', 'group': 'default', 'context': None},
+                    ],
+                    'outputs': ['p8'],
+                }
             },
         ],
+        'dependency_idx_expected': [[], [], [0, 1]],
+        'task_idx_expected': [0, 1, 2],
         'elements_idx_expected': [
             {
                 'num_elements': 4,
                 'groups': {
                     'default': {
+                        'group_by': ['p1', 'p3', 'repeats'],
                         'group_idx': [0, 1, 2, 3],
                         'group_element_idx': [[0], [1], [2], [3]],
                         'num_groups': 4,
                         'group_size': 1,
-                        'nest': False, },
+                        'nest': False,
+                        'merge_priority': None,
+                    },
                     'user_group_group_A': {
+                        'group_by': ['p1'],
                         'group_idx': [0, 0, 1, 1],
                         'group_element_idx': [[0, 1], [2, 3]],
                         'num_groups': 2,
                         'group_size': 2,
-                        'nest': False, },
+                        'nest': False,
+                        'merge_priority': None,
+                    },
                 },
                 'inputs': {'p1': {'input_idx': [0, 1, 2, 3]},
                            'p3': {'input_idx': [0, 1, 2, 3]}}
             },
             {
                 'num_elements': 2,
-                'groups': {'default': {
-                    'group_idx': [0, 1],
-                    'group_element_idx': [[0], [1]],
-                    'num_groups': 2,
-                    'group_size': 1,
-                    'nest': False, }, },
+                'groups': {
+                    'default': {
+                        'group_by': ['p5', 'repeats'],
+                        'group_idx': [0, 1],
+                        'group_element_idx': [[0], [1]],
+                        'num_groups': 2,
+                        'group_size': 1,
+                        'nest': False,
+                        'merge_priority': None,
+                    },
+                },
                 'inputs': {'p5': {'input_idx': [0, 1]}},
             },
             {
                 'num_elements': 2,
-                'groups': {'default': {
-                    'group_idx': [0, 1],
-                    'group_element_idx': [[0], [1]],
-                    'num_groups': 2,
-                    'group_size': 1,
-                    'nest': False, }, },
+                'groups': {
+                    'default': {
+                        'group_by': ['p7', 'repeats'],
+                        'group_idx': [0, 1],
+                        'group_element_idx': [[0], [1]],
+                        'num_groups': 2,
+                        'group_size': 1,
+                        'nest': False,
+                        'merge_priority': None,
+                    },
+                },
                 'inputs': {
                     'p7': {'input_idx': [0, 1]},
                     'p4': {'task_idx': 0,
                            'group': 'group_A',
-                           'elements_idx': [[0, 1], [2, 3]]},
+                           'element_idx': [[0, 1], [2, 3]]},
                     'p6': {'task_idx': 1,
                            'group': 'default',
-                           'elements_idx': [[0], [1]]},
+                           'element_idx': [[0], [1]]},
                 },
             },
         ],
@@ -264,32 +465,53 @@ TEST_DATA = {
     'test_3': {
         'description': ('Demonstrate propagation of a user-defined group through '
                         'dependent tasks.'),
-        'schemas': {
-            'one': {
-                'inputs': {
-                    'p1': {'group': 'default'},
-                    'p2': {'group': 'default'},
-                },
+        'software': [
+            {
+                'name': 'software_1',
+                'version': 1,
+                'num_cores': [1, 1, 1],
+            }
+        ],
+        'schemas': [
+            {
+                'name': 'one',
                 'outputs': ['p3'],
+                'methods': [
+                    {
+                        'name': 'method_1',
+                        'inputs': ['p1[group=default]', 'p2[group=default]'],
+                        'implementations': [{'name': 'software_1'}]
+                    }
+                ],
             },
-            'two': {
-                'inputs': {
-                    'p3': {'group': 'default'},
-                    'p4': {'group': 'default'},
-                },
+            {
+                'name': 'two',
                 'outputs': ['p5'],
+                'methods': [
+                    {
+                        'name': 'method_1',
+                        'inputs': ['p3[group=default]', 'p4[group=default]'],
+                        'implementations': [{'name': 'software_1'}]
+                    }
+                ],
             },
-            'three': {
-                'inputs': {
-                    'p5': {'group': 'group_A'},
-                    'p6': {'group': 'default'},
-                },
+            {
+                'name': 'three',
                 'outputs': ['p7'],
+                'methods': [
+                    {
+                        'name': 'method_1',
+                        'inputs': ['p5[group=group_A]', 'p6[group=default]'],
+                        'implementations': [{'name': 'software_1'}]
+                    }
+                ],
             },
-        },
+        ],
         'tasks': [
             {
                 'name': 'one',
+                'software': 'software_1',
+                'method': 'method_1',
                 'sequences': [
                     {'name': 'p1', 'vals': [101, 102], 'nest_idx': 0},
                     {'name': 'p2', 'vals': [201, 202], 'nest_idx': 1},
@@ -301,79 +523,163 @@ TEST_DATA = {
             },
             {
                 'name': 'two',
+                'software': 'software_1',
+                'method': 'method_1',
                 'base': {'p4': 401},
                 'nest': True,
             },
             {
                 'name': 'three',
+                'software': 'software_1',
+                'method': 'method_1',
                 'sequences': [
                     {'name': 'p6', 'vals': [601, 602]},
                 ]
             }
         ],
-        'dependency_idx_expected': [[], [0], [1]],
-        'local_inputs_expected': [
+        'tasks_validated_expected': [
             {
-                'length': 4,
-                'repeats_idx': [0, 0, 0, 0],
-                'inputs': {
-                    'p1': {'vals': [101, 102], 'vals_idx': [0, 0, 1, 1]},
-                    'p2': {'vals': [201, 202], 'vals_idx': [0, 1, 0, 1]},
-                },
-                'groups': {
-                    'default': {
-                        'group_by': ['p1', 'p2', 'repeats'],
-                        'nest': True,
+                'name': 'one',
+                'context': '',
+                'run_options': {'num_cores': 1},
+                'stats': True,
+                'base': None,
+                'sequences': [
+                    {'name': 'p1', 'vals': [101, 102], 'nest_idx': 0},
+                    {'name': 'p2', 'vals': [201, 202], 'nest_idx': 1},
+                ],
+                'repeats': 1,
+                'merge_priority': None,
+                'nest': True,
+                'method': 'method_1',
+                'software': 'software_1',
+                'local_inputs': {
+                    'length': 4,
+                    'repeats_idx': [0, 0, 0, 0],
+                    'inputs': {
+                        'p1': {'vals': [101, 102], 'vals_idx': [0, 0, 1, 1]},
+                        'p2': {'vals': [201, 202], 'vals_idx': [0, 1, 0, 1]},
                     },
-                    'user_group_group_A': {
-                        'group_by': ['p1'],
-                        'nest': False,
+                    'groups': {
+                        'default': {
+                            'group_by': ['p1', 'p2', 'repeats'],
+                            'nest': True,
+                        },
+                        'user_group_group_A': {
+                            'group_by': ['p1'],
+                            'nest': False,
+                        },
                     },
                 },
+                'schema': {
+                    'name': 'one',
+                    'method': 'method_1',
+                    'implementation': 'software_1',
+                    'inputs': [
+                        {'name': 'p1', 'group': 'default', 'context': None},
+                        {'name': 'p2', 'group': 'default', 'context': None},
+                    ],
+                    'outputs': ['p3'],
+                }
             },
             {
-                'length': 1,
-                'repeats_idx': [0],
-                'inputs': {
-                    'p4': {'vals': [401], 'vals_idx': [0]}
-                },
-                'groups': {
-                    'default': {
-                        'group_by': ['p3', 'p4', 'repeats'],
-                        'nest': True,
+                'name': 'two',
+                'context': '',
+                'run_options': {'num_cores': 1},
+                'stats': True,
+                'base': {'p4': 401},
+                'sequences': None,
+                'repeats': 1,
+                'merge_priority': None,
+                'nest': True,
+                'method': 'method_1',
+                'software': 'software_1',
+                'local_inputs': {
+                    'length': 1,
+                    'repeats_idx': [0],
+                    'inputs': {
+                        'p4': {'vals': [401], 'vals_idx': [0]}
+                    },
+                    'groups': {
+                        'default': {
+                            'group_by': ['p3', 'p4', 'repeats'],
+                            'nest': True,
+                        },
                     },
                 },
+                'schema': {
+                    'name': 'two',
+                    'method': 'method_1',
+                    'implementation': 'software_1',
+                    'inputs': [
+                        {'name': 'p3', 'group': 'default', 'context': None},
+                        {'name': 'p4', 'group': 'default', 'context': None},
+                    ],
+                    'outputs': ['p5'],
+                }
             },
             {
-                'length': 2,
-                'repeats_idx': [0, 0],
-                'inputs': {
-                    'p6': {'vals': [601, 602], 'vals_idx': [0, 1]},
-                },
-                'groups': {
-                    'default': {
-                        'group_by': ['p5', 'p6', 'repeats'],
-                        'nest': True,
+                'name': 'three',
+                'context': '',
+                'run_options': {'num_cores': 1},
+                'stats': True,
+                'base': None,
+                'sequences': [
+                    {'name': 'p6', 'vals': [601, 602], 'nest_idx': 0},
+                ],
+                'repeats': 1,
+                'merge_priority': None,
+                'nest': True,  # ------------------- Hmmmm..
+                'method': 'method_1',
+                'software': 'software_1',
+                'local_inputs': {
+                    'length': 2,
+                    'repeats_idx': [0, 0],
+                    'inputs': {
+                        'p6': {'vals': [601, 602], 'vals_idx': [0, 1]},
+                    },
+                    'groups': {
+                        'default': {
+                            'group_by': ['p5', 'p6', 'repeats'],
+                            'nest': True,
+                        },
                     },
                 },
+                'schema': {
+                    'name': 'three',
+                    'method': 'method_1',
+                    'implementation': 'software_1',
+                    'inputs': [
+                        {'name': 'p5', 'group': 'group_A', 'context': None},
+                        {'name': 'p6', 'group': 'default', 'context': None},
+                    ],
+                    'outputs': ['p7'],
+                }
             },
         ],
+        'dependency_idx_expected': [[], [0], [1]],
+        'task_idx_expected': [0, 1, 2],
         'elements_idx_expected': [
             {
                 'num_elements': 4,
                 'groups': {
                     'default': {
+                        'group_by': ['p1', 'p2', 'repeats'],
                         'group_idx': [0, 1, 2, 3],
                         'group_element_idx': [[0], [1], [2], [3]],
                         'num_groups': 4,
                         'group_size': 1,
                         'nest': True,
+                        'merge_priority': None,
                     },
                     'user_group_group_A': {
                         'group_by': ['p1'],
                         'group_idx': [0, 0, 1, 1],
                         'group_element_idx': [[0, 1], [2, 3]],
+                        'num_groups': 2,
+                        'group_size': 2,
                         'nest': False,
+                        'merge_priority': None,
                     },
                 },
                 'inputs': {
@@ -385,17 +691,22 @@ TEST_DATA = {
                 'num_elements': 4,
                 'groups': {
                     'default': {
+                        'group_by': ['p4', 'repeats'],
                         'group_idx': [0, 1, 2, 3],
                         'group_element_idx': [[0], [1], [2], [3]],
                         'num_groups': 4,
                         'group_size': 1,
                         'nest': True,
+                        'merge_priority': None,
                     },
                     'user_group_group_A': {
                         'group_by': ['p1'],
                         'group_idx': [0, 0, 1, 1],
                         'group_element_idx': [[0, 1], [2, 3]],
+                        'num_groups': 2,
+                        'group_size': 2,
                         'nest': False,
+                        'merge_priority': None,
                     },
                 },
                 'inputs': {
@@ -407,11 +718,13 @@ TEST_DATA = {
                 'num_elements': 2,
                 'groups': {
                     'default': {
+                        'group_by': ['p6', 'repeats'],
                         'group_idx': [0, 1],
                         'group_element_idx': [[0], [1]],
                         'num_groups': 2,
-                        'group_size': 2,
+                        'group_size': 1,
                         'nest': True,
+                        'merge_priority': None,
                     },
                 },
                 'inputs': {
@@ -424,59 +737,85 @@ TEST_DATA = {
 }
 
 
-def init_schemas(task_lst):
-    'Construct TaskSchema objects for test_dependency_idx test, for each example.'
-    for idx, i in enumerate(task_lst):
-        task_lst[idx]['schema'] = TaskSchema(**i['schema'])
-    return task_lst
+class InitTasksFullTestCase(unittest.TestCase):
+    'Test each step of `init_tasks`.'
 
-
-class ElementIdxFullTestCase(unittest.TestCase):
-    'Check each step in generating elements indices is successful.'
-
-    def test_local_inputs(self):
-        'Test expected local inputs are generated.'
+    def test_validate_task_dict(self):
+        'Test validated task dicts are as expected.'
 
         for test_data in TEST_DATA.values():
 
-            tasks = test_data['tasks']
-            schemas = test_data['schemas']
-            local_ins_exp = test_data['local_inputs_expected']
+            with self.subTest(test_data=test_data):
 
-            for idx, task in enumerate(tasks):
-                loc_ins = get_local_inputs(
-                    list(schemas[task['name']]['inputs'].keys()),
-                    base=task.get('base'),
-                    sequences=task.get('sequences'),
-                    num_repeats=task.get('repeats', 1),
-                    groups=task.get('groups'),
-                    nest=task.get('nest', True),
-                    merge_priority=task.get('merge_priority'),
-                )
-                self.assertTrue(loc_ins == local_ins_exp[idx])
+                all_software = test_data['software']
+                all_schemas = test_data['schemas']
+                validated_exp = test_data['tasks_validated_expected']
 
-    def test_dependency_idx(self):
-        'Test expected dependency indices are generated.'
+                for idx, task in enumerate(test_data['tasks']):
+
+                    validated = validate_task_dict(
+                        task,
+                        is_from_file=False,
+                        all_software=all_software,
+                        all_task_schemas=all_schemas,
+                        check_integrity=False,
+                    )
+                    validated['schema'] = {
+                        'name': validated['schema'].name,
+                        'method': validated['schema'].method,
+                        'implementation': validated['schema'].implementation,
+                        'inputs': validated['schema'].inputs,
+                        'outputs': validated['schema'].outputs,
+                    }
+
+                    # print('validated:')
+                    # pprint(validated)
+
+                    # print('expected:')
+                    # pprint(validated_exp[idx])
+
+                    self.assertTrue(validated == validated_exp[idx])
+
+    def test_order_tasks(self):
+        'Test expected dependency indices are generated from `order_tasks`'
 
         for test_data in TEST_DATA.values():
 
-            tasks = test_data['tasks']
-            schemas = test_data['schemas']
+            with self.subTest(test_data=test_data):
 
-            task_info_lst = []
-            for task in tasks:
-                schema = TaskSchema(
-                    name=task['name'],
-                    inputs=[{'name': k, **v}
-                            for k, v in schemas[task['name']]['inputs'].items()],
-                    outputs=schemas[task['name']]['outputs'],
-                )
-                task_info = {
-                    'context': task.get('context', ''),
-                    'schema': schema,
-                }
-                task_info_lst.append(task_info)
+                task_lst = []
+                for i in test_data['tasks_validated_expected']:
+                    i['schema'] = TaskSchema(**i['schema'])
+                    task_lst.append(i)
 
-            dep_idx_exp = test_data['dependency_idx_expected']
-            dep_idx = get_dependency_idx(task_info_lst)
-            self.assertTrue(dep_idx == dep_idx_exp)
+                tasks_ordered, dep_idx_srt = order_tasks(task_lst)
+                dep_idx_exp = test_data['dependency_idx_expected']
+                self.assertTrue(dep_idx_srt == dep_idx_exp)
+
+                # Check task_idx correct:
+                for idx, i in enumerate(test_data['task_idx_expected']):
+                    self.assertTrue(i == tasks_ordered[idx]['task_idx'])
+
+    def test_element_idx(self):
+        'Test expected element idx from `get_element_idx`.'
+
+        for test_name, test_data in TEST_DATA.items():
+
+            with self.subTest(test_data=test_data):
+
+                task_lst = []
+                for idx, i in enumerate(test_data['tasks_validated_expected']):
+                    i['schema'] = TaskSchema(**i['schema'])
+                    i['task_idx'] = test_data['task_idx_expected'][idx]
+                    task_lst.append(i)
+
+                dep_idx = test_data['dependency_idx_expected']
+                elem_idx = get_element_idx(task_lst, dep_idx)
+
+                # print(f'calculated ({test_name}):', flush=True)
+                # pprint(elem_idx)
+
+                # print(f'expected ({test_name}):', flush=True)
+                # pprint(test_data['elements_idx_expected'])
+
+                self.assertTrue(elem_idx == test_data['elements_idx_expected'])
