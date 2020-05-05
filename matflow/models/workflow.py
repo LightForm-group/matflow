@@ -610,7 +610,8 @@ class Workflow(object):
                            'the current task: "{}".')
                     raise ValueError(msg.format(prev_task.name, task.name))
 
-                values_all = [prev_outs[i][input_name] for i in inputs_idx['output_idx']]
+                values_all = [[prev_outs[j][input_name] for j in i]
+                              for i in inputs_idx['element_idx']]
 
             else:
                 # Input values should be copied from this task's `local_inputs`
@@ -623,6 +624,8 @@ class Workflow(object):
                 values_all = [values[i] for i in inputs_idx['input_idx']]
 
             for element, val in zip(inputs, values_all):
+                if (task_idx is not None) and (inputs_idx['group'] == 'default'):
+                    val = val[0]
                 element.update({input_name: val})
 
         task.inputs = inputs
