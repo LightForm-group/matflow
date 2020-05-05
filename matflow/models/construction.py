@@ -754,9 +754,17 @@ def get_element_idx(task_lst, dep_idx):
                         group_name_ = group_name
                         if group_name != 'default':
                             group_name_ = 'user_group_' + group_name
+                        group_dict = element_idx[up_task['task_idx']]['groups']
+                        group_names_fmt = ', '.join([f'"{i}"' for i in group_dict.keys()])
+                        group_dat = group_dict.get(group_name_)
+                        if group_dat is None:
+                            msg = (f'No group "{group_name}" defined in the workflow for '
+                                   f'input "{input_name}". Defined groups are: '
+                                   f'{group_names_fmt}.')
+                            raise UnsatisfiedGroupParameter(msg)
                         input_groups.update({
                             input_name: {
-                                **element_idx[up_task['task_idx']]['groups'][group_name_],
+                                **group_dat,
                                 'group_name': group_name,
                                 'task_idx': up_task['task_idx'],
                                 'task_name': up_task['name'],
