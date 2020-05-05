@@ -662,7 +662,8 @@ def resolve_group(group, local_inputs, repeats_idx):
         group_idx = [0] * length
         group_elem_idx = [arange(length)]
 
-    group.update({
+    group_resolved = copy.deepcopy(group)
+    group_resolved.update({
         'group_idx': group_idx,
         'group_element_idx': group_elem_idx,
         'num_groups': len(group_elem_idx),
@@ -670,12 +671,12 @@ def resolve_group(group, local_inputs, repeats_idx):
         'group_by': new_group_by,
     })
 
-    if 'merge_priority' not in group:
-        group.update({'merge_priority': None})
+    if 'merge_priority' not in group_resolved:
+        group_resolved.update({'merge_priority': None})
 
     # print(f'resolve_group: group_idx: {group_idx}')
 
-    return group
+    return group_resolved
 
 
 def get_element_idx(task_lst, dep_idx):
