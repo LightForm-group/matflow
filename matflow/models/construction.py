@@ -486,10 +486,11 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
     else:
         # Find the software instance:
         soft_inst = get_software_instance(
-            task['software'],
+            task.pop('software'),
             task['run_options']['num_cores'],
             all_software,
         )
+        task['software_instance'] = soft_inst
         schema_dict = get_schema_dict(
             task['name'],
             task['method'],
