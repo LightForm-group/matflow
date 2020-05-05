@@ -145,3 +145,92 @@ def index(lst, idx):
 def arange(size):
     'Get 1D list of increasing integers.'
     return list(range(size))
+
+
+def extend_index_list(lst, repeats):
+    """Extend an integer index list by repeating some number of times such that the extra
+    indices added are new and follow the same ordering as the existing elements.
+
+    Parameters
+    ----------
+    lst : list of int
+    repeats : int
+
+    Returns
+    -------
+    new_idx : list of int
+        Returned list has length `len(lst) * repeats`.
+
+    Examples
+    --------
+    >>> extend_index_list([0, 1, 2], 2)
+    [0, 1, 2, 3, 4, 5]
+
+    >>> extend_index_list([0, 0, 1, 1], 3)
+    [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
+
+    >>> extend_index_list([4, 1, 2], 2)
+    [4, 1, 2, 8, 5, 6]
+
+    """
+
+    new_idx = []
+    for i in lst:
+        if i < 0:
+            raise ValueError('List elements must be positive or zero.')
+        new_idx.append(i)
+
+    for _ in range(repeats - 1):
+        next_avail_idx = max(new_idx) + 1
+        new_idx.extend([next_avail_idx + i - min(lst) for i in lst])
+
+    return new_idx
+
+
+def flatten_list(lst):
+    """Flatten a list of lists.
+
+    Parameters
+    ----------
+    lst : list of list
+
+    Returns
+    -------
+    list 
+
+    Examples
+    --------
+    >>> flatten_list([[0, 2, 4], [9, 1]])
+    [0, 2, 4, 9, 1]
+
+    """
+    return [j for i in lst for j in i]
+
+
+def to_sub_list(lst, sub_list_len):
+    """Transform a list into a list of sub lists of certain size.
+
+    Parameters
+    ----------
+    lst : list
+        List to transform into a list of sub-lists.
+    sub_list_len : int
+        Size of sub-lists. Must be an integer factor of the length of the
+        original list, `lst`.
+
+    Returns
+    -------
+    list of list
+
+    Examples
+    --------
+    >>> to_sub_list([0, 1, 2, 3], 2)
+    [[0, 1], [2, 3]]
+
+    """
+
+    if (sub_list_len <= 0) or (len(lst) % sub_list_len != 0):
+        raise ValueError('`sub_list_len` must be a positive factor of `len(lst)`.')
+    out = [lst[(i * sub_list_len):((i * sub_list_len) + sub_list_len)]
+           for i in range(len(lst) // sub_list_len)]
+    return out
