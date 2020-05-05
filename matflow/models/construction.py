@@ -25,6 +25,7 @@ from matflow.errors import (
     TaskError,
     MissingMergePriority,
     IncompatibleTaskNesting,
+    UnsatisfiedGroupParameter,
 )
 from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list,
                            to_sub_list)
