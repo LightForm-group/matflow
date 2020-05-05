@@ -521,8 +521,6 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             )
             raise WorkflowPersistenceError(msg)
 
-    del task['groups']  # groups are now in local_inputs
-
     task['local_inputs'] = local_ins
     task['schema'] = schema
 
@@ -827,7 +825,7 @@ def get_element_idx(task_lst, dep_idx):
                                          for i in loc_in['inputs']})
 
                         for group_name, group in loc_in['groups'].items():
-                            print(f'resolving group: {group_name}...')
+                            # print(f'resolving group: {group_name}...')
                             group = resolve_group(group, loc_in['inputs'], repeats_idx)
                             groups.update({group_name: group})
 
