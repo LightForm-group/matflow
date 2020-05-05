@@ -41,8 +41,17 @@ def to_jsonable(obj, attr=None, parent=None, idx=None, exclude=None):
         if hasattr(obj, 'to_jsonable'):
             obj_json = obj.to_jsonable()
         else:
+
+            all_attrs = {}
+            if hasattr(obj, '__dict__'):
+                all_attrs.update(getattr(obj, '__dict__'))
+            if hasattr(obj, '__slots__'):
+                all_attrs.update({k: getattr(obj, k) for k in getattr(obj, '__slots__')
+                                  if k != '__dict__'})
+            if not hasattr(obj, '__dict__') and not hasattr(obj, '__slots__'):
+                raise ValueError(f'Object not understood: {obj}.')
+
             obj_json = {}
-            all_attrs = getattr(obj, '__dict__', getattr(obj, '__slots__'))
             for attr, value in all_attrs.items():
                 if attr in (exclude or []):
                     continue
