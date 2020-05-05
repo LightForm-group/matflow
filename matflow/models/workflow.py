@@ -716,4 +716,3 @@ class Workflow(object):
                         outputs[elem_idx][output_name] = handle.read()
 
         task.outputs = outputs
-
