@@ -116,7 +116,7 @@ class TaskSchema(object):
 
         # Check correct keys in supplied input/output maps:
         for in_map in self.input_map:
-            if list(in_map.keys()) != ['inputs', 'file']:
+            if sorted(in_map.keys()) != sorted(['inputs', 'file']):
                 bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in in_map.keys()])
                 msg = ('Input maps must map a list of `inputs` into a `file` but found '
                        'input map with keys {} for schema "{}".')
