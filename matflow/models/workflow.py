@@ -434,7 +434,7 @@ class Workflow(object):
             to_delete = {k: v for k, v in same_IDs.items()
                          if v['version'] <= self.version}
 
-            if self.version in [i['version'] for i in to_delete.keys()]:
+            if self.version in [v['version'] for k, v in to_delete.items()]:
                 warn('A saved workflow with the same ID and version already exists in '
                      'this directory. This will be removed.')
 
