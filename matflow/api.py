@@ -67,12 +67,6 @@ def load_workflow(directory, full_path=False):
     return workflow
 
 
-def proceed(directory):
-
-    workflow = load_workflow(directory)
-    workflow.proceed()
-
-
 def prepare_task(task_idx, directory):
     'Prepare a task for execution by setting inputs and running input maps.'
     workflow = load_workflow(directory)

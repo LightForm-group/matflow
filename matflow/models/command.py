@@ -9,6 +9,20 @@ from subprocess import run, PIPE
 from pprint import pprint
 
 
+def list_formatter(lst):
+    return ' '.join([f'{i}' for i in lst])
+
+
+DEFAULT_FORMATTERS = {
+    str: lambda x: x,
+    int: lambda number: str(number),
+    float: lambda number: f'{number:.6f}',
+    list: list_formatter,
+    set: list_formatter,
+    tuple: list_formatter,
+}
+
+
 class CommandGroup(object):
     """Class to represent a group of commands to be executed within a particular
     environment. Three environment types will eventually be supported: using
@@ -84,125 +98,6 @@ class CommandGroup(object):
             fmt_commands.append(cmd_fmt)
 
         return (fmt_commands, var_names)
-
-    def _write_task_executable(self, input_props, os_type, path):
-
-        exec_str = []
-
-        if os_type == 'posix':
-            exec_str += ['#!/bin/bash', '']
-            ext = 'sh'
-            linesep = '\n'
-        elif os_type == 'nt':
-            ext = 'bat'
-            linesep = '\r\n'
-        else:
-            raise NotImplementedError(f'`os_type` "{os_type}" not supported.')
-
-        if self.env_pre:
-            exec_str += self.env_pre + ['']
-        exec_str += [i.prepare_execution(input_props) for i in self.commands]
-        if self.env_post:
-            exec_str += [''] + self.env_post
-
-        task_exec_file = path.joinpath(f'task.{ext}')
-
-        # With an empty string as newline, the line separator is not translated, so we can
-        # explicitly set it depending on the target platform (there might be a better way
-        # to do this):
-        with task_exec_file.open('w', newline='') as handle:
-            handle.write(linesep.join(exec_str))
-
-        # Make file executable:
-        # if os_type == 'posix':
-        #     task_exec_file.chmod(0o666)
-
-        return task_exec_file.name
-
-    def execute_non_scheduled(self, input_props, os_type, path, wsl_wrapper=None):
-        """
-        Steps:
-        1.) form each command with the correct arguments (as a string)
-        2.) combine arguments with pre and post environment strings
-        3.) write an executable file containing the commands to execute (this
-            is like a non-scheduled jobscript I guess...)
-        3.) execute file and record stdout and stderr in a new log file
-        """
-
-        if wsl_wrapper:
-            os_type = 'posix'
-
-        exec_path = self._write_task_executable(input_props, os_type, path)
-        run_cmd = f'{exec_path.name}'
-
-        if os_type == 'posix':
-            run_cmd = f'./{run_cmd}'
-
-        if wsl_wrapper:
-            run_cmd = f'{wsl_wrapper} "{run_cmd}"'
-
-        log_path = path.joinpath('task.log')
-
-        with log_path.open('w') as handle:
-            _ = run(run_cmd, shell=True, stdout=handle, stderr=handle,
-                    cwd=str(path))
-
-    def prepare_direct_execution(self, input_props, resource, element_path,
-                                 wsl_wrapper=None):
-        'Prepare command group for non-scheduled execution.'
-
-        # print(f'CommandGroup.prepare_direct.. ')
-        # print(f'input_props')
-        # pprint(input_props)
-
-        # print(f'resource')
-        # pprint(resource)
-
-        # print(f'element_path')
-        # pprint(element_path)
-
-        # print(f'wsl_wrapper')
-        # pprint(wsl_wrapper)
-
-        try:
-            os_type = resource.non_cloud_machines[0]['machine'].os_type
-        except ValueError:
-            os_type = resource.machine.os_type
-
-        # print(f'ww: {wsl_wrapper}')
-
-        if wsl_wrapper:
-            os_type = 'posix'
-
-        # print(f'os_type: {os_type}')
-
-        # run_dir is relative to task dir.
-        run_dir = element_path.relative_to(element_path.parent)
-        if os_type == 'posix':
-            run_dir = PurePosixPath(run_dir)
-        elif os_type == 'nt':
-            run_dir = PureWindowsPath(run_dir)
-
-        exec_file_name = self._write_task_executable(input_props, os_type, element_path)
-
-        run_cmd = exec_file_name
-        if os_type == 'posix':
-            run_cmd = f'source {run_cmd}'
-        if wsl_wrapper:
-            # run_cmd = f'{wsl_wrapper} "/bin/bash -ic \'cd {task_path}; source ~/init_damask.sh; {run_cmd}\'"'
-            run_cmd = f'{wsl_wrapper} "{run_cmd}"'
-
-        print(f'prepare_direct_execution: run_cmd: {run_cmd}')
-
-        out = {
-            'run_cmd': run_cmd,
-            'run_dir': str(run_dir),
-        }
-
-        return out
-
-    def prepare_scheduled_execution(self):
-        'Prepare command group for scheduled execution.'
 
 
 class Command(object):
