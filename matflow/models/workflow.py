@@ -308,6 +308,13 @@ class Workflow(object):
                     with var_file_path.open('w') as handle:
                         handle.write(in_val + '\n')
 
+            scheduler_opts = {}
+            for k, v in task.run_options.items():
+                if k != 'num_cores':
+                    if k == 'pe':
+                        v = v + ' ' + str(task.run_options['num_cores'])
+                    scheduler_opts.update({k: v})
+
             sources = task.software_instance.get('sources', [])
             command_groups.extend([
                 {
@@ -324,6 +331,7 @@ class Workflow(object):
                     'commands': fmt_commands,
                     'sources': sources,
                     'stats': task.stats,
+                    'scheduler_options': scheduler_opts,
                 },
                 {
                     'directory': '.',
