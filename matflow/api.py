@@ -10,6 +10,7 @@ from pathlib import Path
 from pprint import pprint
 
 import pyperclip
+from hpcflow import api as hf_api
 
 from matflow.profile import parse_workflow_profile
 from matflow.models import Workflow
@@ -57,6 +58,15 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
             pass
 
     return workflow
+
+
+def go(profile_path, directory=None):
+    'Generate and submit a new workflow from a profile file.'
+
+    workflow = make_workflow(profile_path, directory=directory, write_dirs=True)
+    hf_path = workflow.path.joinpath('1.hf.yml')
+    hf_wid = hf_api.make_workflow(dir_path=workflow.path, profile_list=[hf_path])
+    hf_api.submit_workflow(workflow_id=hf_wid, dir_path=workflow.path)
 
 
 def load_workflow(directory, full_path=False):

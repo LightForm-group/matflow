@@ -28,6 +28,15 @@ def make(profile, directory=None):
 
 
 @cli.command()
+@click.option('--directory', '-d')
+@click.argument('profile', type=click.Path(exists=True))
+def go(profile, directory=None):
+    """Generate and submit a new Workflow."""
+    print('matflow.cli.go', flush=True)
+    api.go(profile_path=profile, directory=directory)
+
+
+@cli.command()
 @click.option('--task-idx', '-t', type=click.INT, required=True)
 @click.option('--directory', '-d', type=click.Path(exists=True))
 def prepare_task(task_idx, directory=None):
