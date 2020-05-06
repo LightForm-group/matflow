@@ -81,12 +81,28 @@ def dummy_input_map_6(path, parameter_11, parameter_12):
         handle.write('parameter_12: {}\n'.format(parameter_12))
 
 
+def dummy_input_map_6b(path, parameter_4_multiaxial, parameter_4_uniaxial, parameter_5):
+    with Path(path).open('w') as handle:
+        handle.write('{}\n'.format(randint(0, 1e6)))
+        handle.write('parameter_4_uniaxial: {}\n'.format(parameter_4_uniaxial))
+        handle.write('parameter_4_multiaxial: {}\n'.format(parameter_4_multiaxial))
+        handle.write('parameter_5: {}\n'.format(parameter_5))
+
+
 def dummy_output_map_1(path):
 
     with Path(path).open('r') as handle:
         parameter_2 = int(handle.readline().strip())
 
     return parameter_2
+
+
+def dummy_output_map_2(path):
+
+    with Path(path).open('r') as handle:
+        parameter_4 = int(handle.readline().strip())
+
+    return parameter_4
 
 
 def dummy_output_map_3(path):
@@ -111,6 +127,14 @@ def dummy_output_map_5(path):
         parameter_11 = int(handle.readline().strip())
 
     return parameter_11
+
+
+def dummy_output_map_6b(path):
+
+    with Path(path).open('r') as handle:
+        parameter_8 = int(handle.readline().strip())
+
+    return parameter_8
 
 
 def fmt_parameter_1(parameter_1):
@@ -154,11 +178,17 @@ TASK_INPUT_MAP.update({
     ('dummy_task_6', 'method_1', 'software_1'): {
         't6_m1_infile_1': dummy_input_map_6,
     },
+    ('dummy_task_6b', 'method_1', 'software_1'): {
+        't6_m1_infile_1': dummy_input_map_6b,
+    },
 })
 
 TASK_OUTPUT_MAP.update({
     ('dummy_task_1', 'method_1', 'software_1'): {
         'parameter_2': dummy_output_map_1,
+    },
+    ('dummy_task_2', 'method_1', 'software_1'): {
+        'parameter_4': dummy_output_map_2,
     },
     ('dummy_task_3', 'method_1', 'software_1'): {
         'parameter_6': dummy_output_map_3,
@@ -168,6 +198,9 @@ TASK_OUTPUT_MAP.update({
     },
     ('dummy_task_5', 'method_1', 'software_1'): {
         'parameter_11': dummy_output_map_5,
+    },
+    ('dummy_task_6b', 'method_1', 'software_1'): {
+        'parameter_8': dummy_output_map_6b,
     },
 })
 
