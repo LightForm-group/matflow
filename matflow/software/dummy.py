@@ -179,7 +179,7 @@ TASK_INPUT_MAP.update({
         't6_m1_infile_1': dummy_input_map_6,
     },
     ('dummy_task_6b', 'method_1', 'software_1'): {
-        't6_m1_infile_1': dummy_input_map_6b,
+        't6b_m1_infile_1': dummy_input_map_6b,
     },
 })
 
