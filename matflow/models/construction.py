@@ -448,7 +448,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
         ] + req_keys
 
         def_keys = {
-            'run_options': {'num_cores': 1},
+            'run_options': {},
             'stats': True,
             'context': '',
             'base': None,
@@ -475,7 +475,23 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
 
     task = {**def_keys, **copy.deepcopy(task)}
     if 'num_cores' not in task['run_options']:
-        task.update({'run_options': def_keys['run_options']})
+        task['run_options'].update({'num_cores': 1})
+
+    # (SGE specific):
+    if task['run_options']['num_cores'] > 1:
+        if 'pe' not in task['run_options']:
+            msg = ('Parallel environment (`pe`) key must be specified in `run_options`, '
+                   'since `num_cores > 1`.')
+            raise TaskError(msg)
+
+    elif task['run_options']['num_cores'] <= 0:
+        msg = 'Specify `num_cores` (in `run_options`) as an integer greater than 0.'
+        raise TaskError(msg)
+
+    elif 'pe' in task['run_options']:
+        msg = ('No need to specify parallel environment (`pe`) in `run_options`, since '
+               '`num_cores=1`.')
+        raise TaskError(msg)
 
     # Make TaskSchema:
     if is_from_file:
