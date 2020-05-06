@@ -1,3 +1,3 @@
-# [WIP] matflow
+# matflow
 
-❗ This is a work-in-progress and not quite ready for real-world use.
+Matflow is a computational workflow management code for materials science.
