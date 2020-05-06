@@ -50,6 +50,7 @@ setup(
         'matflow': package_data,
     },
     install_requires=[
+        'hpcflow>=0.1.2',
         'click>7.0',
         'hickle',
         'pyyaml',
