@@ -269,10 +269,8 @@ def get_local_inputs(schema_inputs, base=None, num_repeats=1, sequences=None,
 
     all_groups = {**def_group, **user_groups}
 
-    # print(f'get_local_inputs: all_groups:\n{all_groups}\n')
-
     local_ins['groups'] = all_groups
-    local_ins['length'] = total_len
+    local_ins['length'] = total_len * num_repeats
 
     return local_ins
 
