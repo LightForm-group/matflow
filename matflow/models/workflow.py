@@ -315,6 +315,8 @@ class Workflow(object):
                         v = v + ' ' + str(task.run_options['num_cores'])
                     scheduler_opts.update({k: v})
 
+            # (SGE specific)
+            process_so = {'l': 'short'}
             sources = task.software_instance.get('sources', [])
             command_groups.extend([
                 {
@@ -324,6 +326,7 @@ class Workflow(object):
                         'matflow prepare-task --task-idx={}'.format(task.task_idx)
                     ],
                     'stats': False,
+                    'scheduler_options': process_so,
                 },
                 {
                     'directory': '<<{}_dirs>>'.format(task_path_rel),
@@ -340,6 +343,7 @@ class Workflow(object):
                         'matflow process-task --task-idx={}'.format(task.task_idx)
                     ],
                     'stats': False,
+                    'scheduler_options': process_so,
                 },
             ])
 
