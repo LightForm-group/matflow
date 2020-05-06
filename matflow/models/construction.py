@@ -633,8 +633,6 @@ def resolve_group(group, local_inputs, repeats_idx):
 
     # TODO (later): allow group_by on inputs from upstream tasks.
 
-    # print(f'resolve_group: group: {group}\nlocal_inputs: {local_inputs}')
-
     combined_arr = []
     new_group_by = []
     for i in group['group_by']:
@@ -670,8 +668,6 @@ def resolve_group(group, local_inputs, repeats_idx):
 
     if 'merge_priority' not in group_resolved:
         group_resolved.update({'merge_priority': None})
-
-    # print(f'resolve_group: group_idx: {group_idx}')
 
     return group_resolved
 
@@ -713,8 +709,6 @@ def get_element_idx(task_lst, dep_idx):
     element_idx = []
     for idx, downstream_task in enumerate(task_lst):
 
-        # print(f'\ndownstream task name: {downstream_task["name"]}.')
-
         upstream_tasks = [task_lst[i] for i in dep_idx[idx]]
 
         # local inputs dict:
@@ -725,7 +719,6 @@ def get_element_idx(task_lst, dep_idx):
             # This task does not depend on any other tasks.
             groups = {}
             for group_name, group in loc_in['groups'].items():
-                # print(f'resolving group: {group_name}...')
                 group = resolve_group(group, loc_in['inputs'], loc_in['repeats_idx'])
                 groups.update({group_name: group})
 
@@ -811,8 +804,6 @@ def get_element_idx(task_lst, dep_idx):
                 if in_group['group_name'] != 'default':
                     consumed_groups.append('user_group_' + in_group['group_name'])
 
-                # print(f'merging input: {input_name} in group: {in_group}')
-
                 incoming_size = in_group['num_groups']
                 group_size = in_group['group_size']
                 if group_size > 1:
@@ -831,7 +822,6 @@ def get_element_idx(task_lst, dep_idx):
                             ins_dict.update({inp_alias: {'input_idx': input_idx}})
 
                         for group_name, group in loc_in['groups'].items():
-                            # print(f'resolving group: {group_name}...')
                             group = resolve_group(group, loc_in['inputs'], repeats_idx)
                             groups.update({group_name: group})
 
@@ -847,11 +837,7 @@ def get_element_idx(task_lst, dep_idx):
                         })
                         continue
 
-                    # print(f'ins_dict is currently:\n{ins_dict}')
-
                 if in_group['nest']:
-
-                    # print(f'in group nest is TRUE.')
 
                     # Repeat existing:
                     for k, v in ins_dict.items():
@@ -893,8 +879,6 @@ def get_element_idx(task_lst, dep_idx):
 
                 else:
 
-                    # print(f'in group nest is FALSE.')
-
                     if incoming_size != existing_size:
                         msg = (
                             f'Cannot merge input "{input_alias}" from task '
@@ -913,8 +897,6 @@ def get_element_idx(task_lst, dep_idx):
                             'element_idx': in_group['group_element_idx'],
                         }
                     })
-
-            # print(f'consumed_groups are: {consumed_groups}.')
 
             # Try to propagate into this task any non-default groups from dependent tasks:
             prop_groups = {}
@@ -936,8 +918,6 @@ def get_element_idx(task_lst, dep_idx):
                                 f'sized element groups from task "{up_task["name"]}".'
                             )
                             raise IncompatibleWorkflow(msg)
-
-            # print(f'prop_groups are: {prop_groups}.')
 
             for group_name, g in prop_groups.items():
 
@@ -961,7 +941,6 @@ def get_element_idx(task_lst, dep_idx):
                 'groups': all_groups,
             }
 
-        # print(f'New element idx:\n{elem_idx_i}\n')
         element_idx.append(elem_idx_i)
 
     return element_idx
