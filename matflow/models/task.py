@@ -100,6 +100,10 @@ class TaskSchema(object):
                 # Add default group:
                 inp['group'] = 'default'
 
+            if 'alias' not in inp:
+                # Add default alias:
+                inp['alias'] = inp['name']
+
             unknown_inp_keys = set(inp.keys()) - set(allowed_inp_keys)
             if unknown_inp_keys:
                 msg = (f'Unknown task schema input key: {unknown_inp_keys}. Allowed keys '
@@ -191,6 +195,12 @@ class TaskSchema(object):
             if i['name'] == input_name:
                 return i
         raise ValueError(f'No input "{input_name}" in schema.')
+
+    def get_input_by_alias(self, input_alias):
+        for i in self.inputs:
+            if i['alias'] == input_alias:
+                return i
+        raise ValueError(f'No input alias "{input_alias}" in schema.')
 
 
 class Task(object):

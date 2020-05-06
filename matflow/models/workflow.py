@@ -600,8 +600,12 @@ class Workflow(object):
         inputs = [{} for _ in range(num_elems)]
         files = [{} for _ in range(num_elems)]
 
-        for input_name, inputs_idx in elems_idx['inputs'].items():
+        for input_alias, inputs_idx in elems_idx['inputs'].items():
+
             task_idx = inputs_idx.get('task_idx')
+            input_name = [i['name'] for i in task.schema.inputs
+                          if i['alias'] == input_alias][0]
+
             if task_idx is not None:
                 # Input values should be copied from a previous task's `outputs`
                 prev_task = self.tasks[task_idx]
@@ -628,7 +632,7 @@ class Workflow(object):
             for element, val in zip(inputs, values_all):
                 if (task_idx is not None) and (inputs_idx['group'] == 'default'):
                     val = val[0]
-                element.update({input_name: val})
+                element.update({input_alias: val})
 
         task.inputs = inputs
 

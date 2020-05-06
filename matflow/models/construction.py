@@ -739,14 +739,20 @@ def get_element_idx(task_lst, dep_idx):
         else:
             # This task depends on other tasks.
             ins_local = list(loc_in['inputs'].keys())
-            ins_non_local = list(set(schema.input_names) - set(ins_local))
+            ins_non_local = [i for i in schema.inputs if i['name'] not in ins_local]
 
             # Get the (local inputs) group dict for each `ins_non_local` (from upstream
             # tasks):
             input_groups = {}
-            for input_name in ins_non_local:
-                group_name = schema.get_input_by_name(input_name)['group']
+            for non_loc_inp in ins_non_local:
+                input_alias = non_loc_inp['alias']
+                input_name = non_loc_inp['name']
+                input_context = non_loc_inp['context']
+                group_name = schema.get_input_by_alias(input_alias)['group']
                 for up_task in upstream_tasks:
+                    if input_context is not None:
+                        if up_task['context'] != input_context:
+                            continue
                     if input_name in up_task['schema'].outputs:
                         group_name_ = group_name
                         if group_name != 'default':
@@ -760,7 +766,7 @@ def get_element_idx(task_lst, dep_idx):
                                    f'{group_names_fmt}.')
                             raise UnsatisfiedGroupParameter(msg)
                         input_groups.update({
-                            input_name: {
+                            input_alias: {
                                 **group_dat,
                                 'group_name': group_name,
                                 'task_idx': up_task['task_idx'],
@@ -770,12 +776,12 @@ def get_element_idx(task_lst, dep_idx):
                         break
 
             is_nesting_mixed = len(set([i['nest'] for i in input_groups.values()])) > 1
-            for input_name, group_info in input_groups.items():
+            for input_alias, group_info in input_groups.items():
 
                 if group_info['merge_priority'] is None and is_nesting_mixed:
                     raise MissingMergePriority(
                         f'`merge_priority` for group ("{group_info["group_name"]}") of '
-                        f'input "{input_name}" from task "{group_info["task_name"]}" must'
+                        f'input "{input_alias}" from task "{group_info["task_name"]}" must'
                         f' be specified because nesting is mixed. (Attempting to merge '
                         f'into task "{downstream_task["name"]}").'
                     )
@@ -783,7 +789,7 @@ def get_element_idx(task_lst, dep_idx):
                 elif group_info['merge_priority'] is not None and not is_nesting_mixed:
                     warn(
                         f'`merge_priority` for group ("{group_info["group_name"]}") of '
-                        f'input "{input_name}" from task "{group_info["task_name"]}" is '
+                        f'input "{input_alias}" from task "{group_info["task_name"]}" is '
                         f'specified but not required because nesting is not mixed. '
                         f'(Merging into task "{downstream_task["name"]}").'
                     )
@@ -799,9 +805,9 @@ def get_element_idx(task_lst, dep_idx):
             ins_dict = {}
             groups = {}  # groups defined on the downstream task
             consumed_groups = []
-            for idx, input_name in enumerate(merging_order):
+            for idx, input_alias in enumerate(merging_order):
 
-                in_group = input_groups[input_name]
+                in_group = input_groups[input_alias]
                 if in_group['group_name'] != 'default':
                     consumed_groups.append('user_group_' + in_group['group_name'])
 
@@ -819,8 +825,10 @@ def get_element_idx(task_lst, dep_idx):
                         existing_size = loc_in['length']
                         repeats_idx = loc_in['repeats_idx']
                         input_idx = arange(existing_size)
-                        ins_dict.update({i: {'input_idx': input_idx}
-                                         for i in loc_in['inputs']})
+                        for i in loc_in['inputs']:
+                            inp_alias = [j['alias'] for j in schema.inputs
+                                         if j['name'] == i][0]
+                            ins_dict.update({inp_alias: {'input_idx': input_idx}})
 
                         for group_name, group in loc_in['groups'].items():
                             # print(f'resolving group: {group_name}...')
@@ -831,7 +839,7 @@ def get_element_idx(task_lst, dep_idx):
                         existing_size = incoming_size
                         repeats_idx = [None] * existing_size
                         ins_dict.update({
-                            input_name: {
+                            input_alias: {
                                 'task_idx': in_group['task_idx'],
                                 'group': in_group['group_name'],
                                 'element_idx': in_group['group_element_idx'],
@@ -857,7 +865,7 @@ def get_element_idx(task_lst, dep_idx):
 
                     # Tile incoming:
                     ins_dict.update({
-                        input_name: {
+                        input_alias: {
                             'task_idx': in_group['task_idx'],
                             'group': in_group['group_name'],
                             'element_idx': tile(
@@ -889,7 +897,7 @@ def get_element_idx(task_lst, dep_idx):
 
                     if incoming_size != existing_size:
                         msg = (
-                            f'Cannot merge input "{input_name}" from task '
+                            f'Cannot merge input "{input_alias}" from task '
                             f'"{in_group["task_name"]}" and group '
                             f'"{in_group["group_name"]}" into task '
                             f'"{downstream_task["name"]}". Input has '
@@ -899,7 +907,7 @@ def get_element_idx(task_lst, dep_idx):
                         raise IncompatibleTaskNesting(msg)
 
                     ins_dict.update({
-                        input_name: {
+                        input_alias: {
                             'task_idx': in_group['task_idx'],
                             'group': in_group['group_name'],
                             'element_idx': in_group['group_element_idx'],
