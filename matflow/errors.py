@@ -44,3 +44,7 @@ class WorkflowPersistenceError(Exception):
 
 class UnsatisfiedGroupParameter(Exception):
     'For when an input has a group, but that group does not exist in the Workflow.'
+
+
+class MatflowExtensionError(Exception):
+    'For problems when loading extensions.'
