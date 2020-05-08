@@ -1,7 +1,7 @@
 """`matflow.__init__.py`"""
 
 import os
-import yaml
+from ruamel import yaml
 from pathlib import Path
 import shutil
 

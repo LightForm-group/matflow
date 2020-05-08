@@ -14,7 +14,7 @@ from warnings import warn
 
 import hickle
 import numpy as np
-import yaml
+from ruamel.yaml import YAML
 from hpcflow.api import get_stats as hpcflow_get_stats
 
 from matflow import (
@@ -368,7 +368,10 @@ class Workflow(object):
         }
 
         with self.path.joinpath('1.hf.yml').open('w') as handle:
-            yaml.safe_dump(hf_data, handle)
+            yaml = YAML()
+            yaml.width = 5000 # Avoid line breaks
+            yaml.indent(mapping=2, sequence=4, offset=2)
+            yaml.dump(hf_data, handle)
 
     def get_extended_workflows(self):
         if self.extend_paths:
