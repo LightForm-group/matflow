@@ -3,7 +3,7 @@
 import os
 import pkg_resources
 import functools
-import yaml
+from ruamel import yaml
 from pathlib import Path
 import shutil
 

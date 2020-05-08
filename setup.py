@@ -53,7 +53,7 @@ setup(
         'hpcflow>=0.1.5',
         'click>7.0',
         'hickle',
-        'pyyaml',
+        'ruamel.yaml',
         'numpy',
         'pyperclip',
     ],
