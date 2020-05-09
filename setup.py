@@ -50,6 +50,7 @@ setup(
         'matflow': package_data,
     },
     install_requires=[
+        'matflow-demo-extension',
         'hpcflow>=0.1.5',
         'click>7.0',
         'hickle',
