@@ -42,7 +42,7 @@ COMMAND_LINE_ARG_MAP = {}
 TASK_OUTPUT_FILES_MAP = {}
 
 
-def input_mapper(input_name, task, method, software):
+def input_mapper(input_file, task, method, software):
     """Function decorator for adding input maps from extensions."""
     def _input_mapper(func):
         @functools.wraps(func)
@@ -51,10 +51,10 @@ def input_mapper(input_name, task, method, software):
         key = (task, method, software)
         if key not in TASK_INPUT_MAP:
             TASK_INPUT_MAP.update({key: {}})
-        if input_name in TASK_INPUT_MAP[key]:
-            msg = (f'Input name "{input_name}" already exists in the input map.')
+        if input_file in TASK_INPUT_MAP[key]:
+            msg = (f'Input file name "{input_file}" already exists in the input map.')
             raise MatflowExtensionError(msg)
-        TASK_INPUT_MAP[key].update({input_name: func_wrap})
+        TASK_INPUT_MAP[key].update({input_file: func_wrap})
         return func_wrap
     return _input_mapper
 
@@ -122,3 +122,10 @@ def register_output_file(file_reference, file_name, task, method, software):
 # From extensions, load functions into the TASK_INPUT_MAP and so on:
 for entry_point in pkg_resources.iter_entry_points('matflow.extension'):
     entry_point.load()
+
+
+print(f'TASK_INPUT_MAP:\n{TASK_INPUT_MAP}')
+print(f'TASK_OUTPUT_MAP:\n{TASK_OUTPUT_MAP}')
+print(f'TASK_OUTPUT_FILES_MAP:\n{TASK_OUTPUT_FILES_MAP}')
+print(f'COMMAND_LINE_ARG_MAP:\n{COMMAND_LINE_ARG_MAP}')
+print(f'TASK_FUNC_MAP:\n{TASK_FUNC_MAP}')
