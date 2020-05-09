@@ -77,13 +77,13 @@ def output_mapper(output_name, task, method, software):
     return _output_mapper
 
 
-def func_mapper(task, method):
+def func_mapper(task, method, software):
     """Function decorator for adding function maps from extensions."""
     def _func_mapper(func):
         @functools.wraps(func)
         def func_wrap(*args, **kwargs):
             return func(*args, **kwargs)
-        key = (task, method)
+        key = (task, method, software)
         if key in TASK_FUNC_MAP:
             msg = (f'Function map "{key}" already exists in the function map.')
             raise MatflowExtensionError(msg)
