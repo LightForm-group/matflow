@@ -122,9 +122,19 @@ def register_output_file(file_reference, file_name, task, method, software):
 EXTENSIONS = {}
 # From extensions, load functions into the TASK_INPUT_MAP and so on:
 for entry_point in pkg_resources.iter_entry_points('matflow.extension'):
-    EXTENSIONS.update({entry_point.name: entry_point.module_name})
-    entry_point.load()
+    loaded = entry_point.load()
+    if not hasattr(loaded, '__version__'):
+        raise MatflowExtensionError('Matflow extensions must define a `__version__`.')
+    EXTENSIONS.update({
+        entry_point.name: {
+            'module_name': entry_point.module_name,
+            'version': loaded.__version__,
+        }
+    })
 
 if EXTENSIONS:
-    _ext_fmt = ', '.join([f'"{k}" from "{v}"' for k, v in EXTENSIONS.items()])
-    print(f'Loaded extensions: {_ext_fmt}')
+    _ext_fmt = ', '.join([
+        f'"{k}" from {v["module_name"]} (version {v["version"]})'
+        for k, v in sorted(EXTENSIONS.items())
+    ])
+    print(f'Loaded extensions: {_ext_fmt}.')
