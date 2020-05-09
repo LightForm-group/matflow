@@ -119,13 +119,12 @@ def register_output_file(file_reference, file_name, task, method, software):
     TASK_OUTPUT_FILES_MAP[key].update({file_ref_full: file_name})
 
 
+EXTENSIONS = {}
 # From extensions, load functions into the TASK_INPUT_MAP and so on:
 for entry_point in pkg_resources.iter_entry_points('matflow.extension'):
+    EXTENSIONS.update({entry_point.name: entry_point.module_name})
     entry_point.load()
 
-
-print(f'TASK_INPUT_MAP:\n{TASK_INPUT_MAP}')
-print(f'TASK_OUTPUT_MAP:\n{TASK_OUTPUT_MAP}')
-print(f'TASK_OUTPUT_FILES_MAP:\n{TASK_OUTPUT_FILES_MAP}')
-print(f'COMMAND_LINE_ARG_MAP:\n{COMMAND_LINE_ARG_MAP}')
-print(f'TASK_FUNC_MAP:\n{TASK_FUNC_MAP}')
+if EXTENSIONS:
+    _ext_fmt = ', '.join([f'"{k}" from "{v}"' for k, v in EXTENSIONS.items()])
+    print(f'Loaded extensions: {_ext_fmt}')
