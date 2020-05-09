@@ -48,3 +48,6 @@ class UnsatisfiedGroupParameter(Exception):
 
 class MatflowExtensionError(Exception):
     'For problems when loading extensions.'
+
+class MissingSchemaError(Exception):
+    'For when a suitable schema does not exist.'

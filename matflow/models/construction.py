@@ -26,13 +26,14 @@ from matflow.errors import (
     MissingMergePriority,
     IncompatibleTaskNesting,
     UnsatisfiedGroupParameter,
+    MissingSchemaError,
 )
 from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list,
                            to_sub_list)
 from matflow.models.task import Task, TaskSchema
 
 
-def get_schema_dict(name, method, all_task_schemas, software_instance=None):
+def get_schema_dict(name, method, all_task_schemas, software_instance):
     """Get the schema associated with the method/implementation of this task."""
 
     match_task_idx = None
@@ -61,46 +62,39 @@ def get_schema_dict(name, method, all_task_schemas, software_instance=None):
             break
 
     if match_task_idx is None:
-        msg = (f'No matching task found with name: "{name}"')
-        raise ValueError(msg)
+        msg = (f'No matching task schema found with name: "{name}"')
+        raise MissingSchemaError(msg)
 
     if match_method_idx is None:
-        msg = (f'No matching method found with name: "{method}"'
-               f' in task: "{name}""')
-        raise ValueError(msg)
+        msg = (f'No matching method found for task schema "{name}" with method: '
+               f'"{method}".')
+        raise MissingSchemaError(msg)
+
+    if match_imp_idx is None:
+        msg = (f'No matching implementation found for task schema "{name}" and method '
+               f'"{method}" with software "{software_instance["name"]}".')
+        raise MissingSchemaError(msg)
 
     task_ref = all_task_schemas[match_task_idx]
     met_ref = task_ref['methods'][met_idx]
     inputs = task_ref.get('inputs', []) + met_ref.get('inputs', [])
     outputs = task_ref.get('outputs', []) + met_ref.get('outputs', [])
 
-    imp_ref = None
-    in_map = None
-    out_map = None
-    command_opt = None
-
-    if match_imp_idx is not None:
-        imp_ref = met_ref['implementations'][match_imp_idx]
-
-        inputs += imp_ref.get('inputs', [])
-        outputs += imp_ref.get('outputs', [])
-
-        in_map = imp_ref.get('input_map', [])
-        out_map = imp_ref.get('output_map', [])
-        command_opt = imp_ref.get('commands', [])
+    imp_ref = met_ref['implementations'][match_imp_idx]
+    inputs += imp_ref.get('inputs', [])
+    outputs += imp_ref.get('outputs', [])
+    in_map = imp_ref.get('input_map', [])
+    out_map = imp_ref.get('output_map', [])
+    command_opt = imp_ref.get('commands', [])
 
     outputs = list(set(outputs))
-
-    if software_instance:
-        implementation = software_instance['name']
-        command_group = {
-            'commands': command_opt,
-            'env_pre': software_instance.get('env_pre'),
-            'env_post': software_instance.get('env_post'),
-        }
-    else:
-        implementation = None
-        command_group = None
+    
+    implementation = software_instance['name']
+    command_group = {
+        'commands': command_opt,
+        'env_pre': software_instance.get('env_pre'),
+        'env_post': software_instance.get('env_post'),
+    }
 
     schema_dict = {
         'name': name,
@@ -495,7 +489,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
 
     # Make TaskSchema:
     if is_from_file:
-        # Load from file (don't rely on the task schema existing on this installation):
+        # Load from file (don't use task schemas existing on this installation):
         schema = TaskSchema(**task['schema'])
 
     else:
