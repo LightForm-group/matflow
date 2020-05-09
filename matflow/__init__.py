@@ -1,6 +1,7 @@
 """`matflow.__init__.py`"""
 
 import os
+import warnings
 import pkg_resources
 import functools
 from ruamel import yaml
@@ -124,7 +125,9 @@ EXTENSIONS = {}
 for entry_point in pkg_resources.iter_entry_points('matflow.extension'):
     loaded = entry_point.load()
     if not hasattr(loaded, '__version__'):
-        raise MatflowExtensionError('Matflow extensions must define a `__version__`.')
+        warnings.warn(f'Matflow extension {entry_point.module_name} has no '
+                      f'`__version__` attribute. This extension will not be loaded.')
+        continue
     EXTENSIONS.update({
         entry_point.name: {
             'module_name': entry_point.module_name,
