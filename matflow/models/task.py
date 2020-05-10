@@ -70,9 +70,9 @@ class TaskSchema(object):
                         imp.get('inputs', [])
                     )
                     all_outputs = list(set(
-                        schema.get('inputs', []) +
-                        method.get('inputs', []) +
-                        imp.get('inputs', [])
+                        schema.get('outputs', []) +
+                        method.get('outputs', []) +
+                        imp.get('outputs', [])
                     ))
                     all_schema_dicts.update({
                         key: {
