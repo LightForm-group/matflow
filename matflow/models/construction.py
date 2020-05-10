@@ -641,7 +641,8 @@ def set_default_nesting(task_lst, dep_idx):
 
 def resolve_group(group, local_inputs, repeats_idx):
 
-    # TODO (later): allow group_by on inputs from upstream tasks.
+    # TODO (later): allow `group_by` on inputs from upstream tasks?
+    # See: https://github.com/LightForm-group/matflow/issues/10
 
     combined_arr = []
     new_group_by = []
