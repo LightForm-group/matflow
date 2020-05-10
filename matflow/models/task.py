@@ -5,6 +5,7 @@ Module containing the Task and TaskSchema classes.
 """
 
 import re
+import secrets
 from pprint import pprint
 
 import numpy as np
@@ -217,6 +218,7 @@ class Task(object):
     INIT_STATUS = 'pending'
 
     __slots__ = [
+        '_id',
         '_name',
         '_method',
         '_software_instance',
@@ -244,6 +246,8 @@ class Task(object):
                  outputs=None, schema=None, files=None, resource_usage=None,
                  base=None, sequences=None, repeats=None, groups=None, nest=None,
                  merge_priority=None):
+
+        self._id = None  # Generated once by generate_id()
 
         self._name = name
         self._method = method
@@ -284,6 +288,20 @@ class Task(object):
 
     def __len__(self):
         return self.local_inputs['length']
+
+    def generate_id(self):
+        self.id = secrets.token_hex(10)
+
+    @property
+    def id(self):
+        return self._id
+
+    @id.setter
+    def id(self, id_):
+        if self._id:
+            raise ValueError(f'ID is already set for Task. ID is: "{self.id}".')
+        else:
+            self._id = id_
 
     @property
     def name(self):

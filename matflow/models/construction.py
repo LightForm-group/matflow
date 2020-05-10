@@ -88,7 +88,7 @@ def get_schema_dict(name, method, all_task_schemas, software_instance):
     command_opt = imp_ref.get('commands', [])
 
     outputs = list(set(outputs))
-    
+
     implementation = software_instance['name']
     command_group = {
         'commands': command_opt,
@@ -403,6 +403,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
 
     if is_from_file:
         req_keys = [
+            'id',
             'name',
             'method',
             'software_instance',
@@ -998,6 +999,16 @@ def init_tasks(task_lst, is_from_file, check_integrity=True):
     # Find element indices that determine the elements from which task inputs are drawn:
     element_idx = get_element_idx(task_lst, dep_idx)
 
-    task_objs = [Task(**i) for i in task_lst]
+    task_objs = []
+    for i in task_lst:
+
+        task_id = i.pop('id') if is_from_file else None
+        task = Task(**i)
+        if is_from_file:
+            task.id = task_id
+        else:
+            task.generate_id()
+
+        task_objs.append(task)
 
     return task_objs, element_idx
