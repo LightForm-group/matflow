@@ -13,7 +13,7 @@ import pyperclip
 from hpcflow import api as hf_api
 
 from matflow.profile import parse_workflow_profile
-from matflow.models import Workflow
+from matflow.models.workflow import Workflow
 
 
 def make_workflow(profile_path, directory=None, write_dirs=True):
