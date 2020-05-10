@@ -180,7 +180,7 @@ class TaskSchema(object):
 
     @property
     def is_func(self):
-        return not self.implementation
+        return not self.command_group.commands
 
     def __repr__(self):
         out = (

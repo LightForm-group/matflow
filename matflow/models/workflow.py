@@ -369,7 +369,7 @@ class Workflow(object):
 
         with self.path.joinpath('1.hf.yml').open('w') as handle:
             yaml = YAML()
-            yaml.width = 5000 # Avoid line breaks
+            yaml.width = 5000  # Avoid line breaks
             yaml.indent(mapping=2, sequence=4, offset=2)
             yaml.dump(hf_data, handle)
 
