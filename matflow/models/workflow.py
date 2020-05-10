@@ -253,8 +253,7 @@ class Workflow(object):
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
             # Generate task directory:
-            task_path = self.get_task_path(task.task_idx)
-            task_path.mkdir()
+            self.get_task_path(task.task_idx).mkdir()
 
             num_elems = elems_idx['num_elements']
             # Generate element directories:
@@ -268,8 +267,6 @@ class Workflow(object):
         command_groups = []
         variables = {}
         for elems_idx, task in zip(self.elements_idx, self.tasks):
-
-            task_path_rel = str(self.get_task_path(task.task_idx).name)
 
             # `input_vars` are those inputs that appear directly in the commands:
             fmt_commands, input_vars = task.schema.command_group.get_formatted_commands(
@@ -307,8 +304,6 @@ class Workflow(object):
 
             num_elems = elems_idx['num_elements']
 
-            task_path = self.get_task_path(task.task_idx)
-
             for local_in_name, var_name in input_vars.items():
 
                 var_file_name = '{}.txt'.format(var_name)
@@ -338,6 +333,8 @@ class Workflow(object):
                     if k == 'pe':
                         v = v + ' ' + str(task.run_options['num_cores'])
                     scheduler_opts.update({k: v})
+
+            task_path_rel = str(self.get_task_path(task.task_idx).name)
 
             # (SGE specific)
             process_so = {'l': 'short'}
@@ -678,7 +675,6 @@ class Workflow(object):
         # Run any input maps:
         schema_id = (task.name, task.method, task.software)
         in_map_lookup = TASK_INPUT_MAP.get(schema_id)
-        task_path = self.get_task_path(task.task_idx)
         for elem_idx, elem_inputs in zip(range(num_elems), task.inputs):
 
             task_elem_path = self.get_element_path(task.task_idx, elem_idx)
