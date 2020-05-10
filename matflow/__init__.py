@@ -94,7 +94,7 @@ def func_mapper(task, method, software):
 
 def cli_format_mapper(input_name, task, method, software):
     """Function decorator for adding CLI arg formatter functions from extensions."""
-    def _func_mapper(func):
+    def _cli_format_mapper(func):
         @functools.wraps(func)
         def func_wrap(*args, **kwargs):
             return func(*args, **kwargs)
@@ -106,7 +106,7 @@ def cli_format_mapper(input_name, task, method, software):
             raise MatflowExtensionError(msg)
         COMMAND_LINE_ARG_MAP[key].update({input_name: func_wrap})
         return func_wrap
-    return _func_mapper
+    return _cli_format_mapper
 
 
 def register_output_file(file_reference, file_name, task, method, software):
