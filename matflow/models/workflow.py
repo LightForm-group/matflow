@@ -125,6 +125,9 @@ class Workflow(object):
             self._human_id = self.name_safe + '_' + parse_times('%Y-%m-%d-%H%M%S')[0]
             self._id = secrets.token_hex(15)
 
+    def __len__(self):
+        return len(self.tasks)
+
     @property
     def id(self):
         return self._id
@@ -216,6 +219,28 @@ class Workflow(object):
     def version(self):
         return self._version
 
+    @requires_path_exists
+    def get_task_path(self, task_idx):
+        'Get the path to a task directory.'
+        if task_idx > (len(self) - 1):
+            msg = f'Workflow has only {len(self)} tasks.'
+            raise ValueError(msg)
+        task = self.tasks[task_idx]
+        task_idx_fmt = str(zeropad(task_idx, len(self) - 1))
+        task_path = self.path.joinpath(f'task_{task_idx_fmt}_{task.name}')
+        return task_path
+
+    @requires_path_exists
+    def get_element_path(self, task_idx, element_idx):
+        'Get the path to an element directory.'
+        num_elements = self.elements_idx[task_idx]['num_elements']
+        if element_idx > (num_elements - 1):
+            msg = f'Task at index {task_idx} has only {num_elements} elements.'
+            raise ValueError(msg)
+        element_idx_fmt = str(zeropad(element_idx, num_elements - 1))
+        element_path = self.get_task_path(task_idx).joinpath(element_idx_fmt)
+        return element_path
+
     @increments_version
     def write_directories(self):
         'Generate task and element directories.'
@@ -228,7 +253,7 @@ class Workflow(object):
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
             # Generate task directory:
-            task_path = task.get_task_path(self.path)
+            task_path = self.get_task_path(task.task_idx)
             task_path.mkdir()
 
             num_elems = elems_idx['num_elements']
@@ -245,7 +270,7 @@ class Workflow(object):
         variables = {}
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
-            task_path_rel = str(task.get_task_path(self.path).name)
+            task_path_rel = str(self.get_task_path(task.task_idx).name)
 
             # `input_vars` are those inputs that appear directly in the commands:
             fmt_commands, input_vars = task.schema.command_group.get_formatted_commands(
@@ -283,7 +308,7 @@ class Workflow(object):
 
             num_elems = elems_idx['num_elements']
 
-            task_path = task.get_task_path(self.path)
+            task_path = self.get_task_path(task.task_idx)
 
             for local_in_name, var_name in input_vars.items():
 
@@ -651,9 +676,10 @@ class Workflow(object):
 
         task.inputs = inputs
 
+        # Run any input maps:
         schema_id = (task.name, task.method, task.software)
         in_map_lookup = TASK_INPUT_MAP.get(schema_id)
-        task_path = task.get_task_path(self.path)
+        task_path = self.get_task_path(task.task_idx)
         for elem_idx, elem_inputs in zip(range(num_elems), task.inputs):
 
             task_elem_path = task_path.joinpath(str(zeropad(elem_idx, num_elems - 1)))
@@ -693,7 +719,7 @@ class Workflow(object):
 
         schema_id = (task.name, task.method, task.software)
         out_map_lookup = TASK_OUTPUT_MAP.get(schema_id)
-        task_path = task.get_task_path(self.path)
+        task_path = self.get_task_path(task.task_idx)
 
         # Save hpcflow task stats
         hf_stats_all = hpcflow_get_stats(self.path, jsonable=True, datetime_dicts=True)

@@ -405,6 +405,3 @@ class Task(object):
     @property
     def software(self):
         return self.software_instance['name']
-
-    def get_task_path(self, workflow_path):
-        return workflow_path.joinpath(f'task_{self.task_idx}_{self.name}')
