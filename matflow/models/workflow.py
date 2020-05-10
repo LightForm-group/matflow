@@ -259,8 +259,7 @@ class Workflow(object):
             num_elems = elems_idx['num_elements']
             # Generate element directories:
             for i in range(num_elems):
-                task_elem_path = task_path.joinpath(str(zeropad(i, num_elems - 1)))
-                task_elem_path.mkdir()
+                self.get_element_path(task.task_idx, i).mkdir()
 
     @requires_path_exists
     def write_hpcflow_workflow(self):
@@ -326,7 +325,7 @@ class Workflow(object):
                 # Create text file in each element directory for each in `input_vars`:
                 for i in range(num_elems):
 
-                    task_elem_path = task_path.joinpath(str(zeropad(i, num_elems - 1)))
+                    task_elem_path = self.get_element_path(task.task_idx, i)
                     in_val = cmd_line_inputs[local_in_name][i]
 
                     var_file_path = task_elem_path.joinpath(var_file_name)
@@ -682,7 +681,7 @@ class Workflow(object):
         task_path = self.get_task_path(task.task_idx)
         for elem_idx, elem_inputs in zip(range(num_elems), task.inputs):
 
-            task_elem_path = task_path.joinpath(str(zeropad(elem_idx, num_elems - 1)))
+            task_elem_path = self.get_element_path(task.task_idx, elem_idx)
 
             # For each input file to be written, invoke the function:
             for in_map in task.schema.input_map:
@@ -738,7 +737,7 @@ class Workflow(object):
 
         for elem_idx in range(num_elems):
 
-            task_elem_path = task_path.joinpath(str(zeropad(elem_idx, num_elems - 1)))
+            task_elem_path = self.get_element_path(task.task_idx, elem_idx)
 
             # For each output to be parsed, invoke the function:
             for out_map in task.schema.output_map:
