@@ -37,9 +37,13 @@ SOFTWARE = [{**s_dict, 'name': s_name}
 
 # Load and validate self-consistency of task schemas:
 print('Loading task schemas...', end='')
-with _TASK_SCHEMAS_FILE_PATH.open() as handle:
-    _TASK_SCHEMAS = yaml.safe_load(handle)['task_schemas']
-TASK_SCHEMAS = TaskSchema.load_from_hierarchy(_TASK_SCHEMAS)
+try:
+    with _TASK_SCHEMAS_FILE_PATH.open() as handle:
+        _TASK_SCHEMAS = yaml.safe_load(handle)['task_schemas']
+    TASK_SCHEMAS = TaskSchema.load_from_hierarchy(_TASK_SCHEMAS)
+except Exception as err:
+    print('Failed.')
+    raise err
 print('OK!')
 
 # These dicts map task/method/implementations to specific Python functions.
