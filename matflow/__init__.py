@@ -136,7 +136,7 @@ for entry_point in pkg_resources.iter_entry_points('matflow.extension'):
     })
 
 if EXTENSIONS:
-    _ext_fmt = '\n'.join([
+    _ext_fmt = '\n\t'.join([
         f'"{k}" from {v["module_name"]} (version {v["version"]})'
         for k, v in sorted(EXTENSIONS.items())
     ])
