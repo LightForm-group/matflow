@@ -43,6 +43,54 @@ class TaskSchema(object):
 
         self._validate_inputs_outputs()
 
+    @classmethod
+    def load_from_hierarchy(cls, schema_lst):
+
+        all_schema_dicts = {}
+        for schema in schema_lst:
+
+            name = schema['name']
+
+            for method in schema['methods']:
+
+                for imp in method['implementations']:
+
+                    key = (name, method['name'], imp['name'])
+                    if key in all_schema_dicts:
+                        msg = (f'Schema with name "{name}", method "{method["name"]}" '
+                               f'and implementation "{imp["name"]}" is multiply defined.')
+                        raise ValueError(msg)
+
+                    input_map = imp.get('input_map', [])
+                    output_map = imp.get('output_map', [])
+                    command_group = {'commands': imp.get('commands', [])}
+                    all_inputs = (
+                        schema.get('inputs', []) +
+                        method.get('inputs', []) +
+                        imp.get('inputs', [])
+                    )
+                    all_outputs = list(set(
+                        schema.get('inputs', []) +
+                        method.get('inputs', []) +
+                        imp.get('inputs', [])
+                    ))
+                    all_schema_dicts.update({
+                        key: {
+                            'name': name,
+                            'method': method['name'],
+                            'implementation': imp['name'],
+                            'inputs': all_inputs,
+                            'outputs': all_outputs,
+                            'input_map': input_map,
+                            'output_map': output_map,
+                            'command_group': command_group,
+                        }
+                    })
+
+        all_schemas = {k: TaskSchema(**v) for k, v in all_schema_dicts.items()}
+
+        return all_schemas
+
     @property
     def input_names(self):
         return [i['name'] for i in self.inputs]

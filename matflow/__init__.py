@@ -11,6 +11,9 @@ import shutil
 from matflow._version import __version__
 from matflow.errors import MatflowExtensionError
 
+
+from matflow.models.task import TaskSchema
+
 PKG_DATA_DIR = Path(__file__).parent.joinpath('data')
 DATA_DIR = Path(os.getenv('MATFLOW_DATA_DIR', '~/.matflow')).expanduser()
 DATA_DIR.mkdir(exist_ok=True)
@@ -32,8 +35,12 @@ SOFTWARE = [{**s_dict, 'name': s_name}
             for s_name, s_list in CONFIG['software'].items()
             for s_dict in s_list]
 
+# Load and validate self-consistency of task schemas:
+print('Loading task schemas...', end='')
 with _TASK_SCHEMAS_FILE_PATH.open() as handle:
-    TASK_SCHEMAS = yaml.safe_load(handle)['task_schemas']
+    _TASK_SCHEMAS = yaml.safe_load(handle)['task_schemas']
+TASK_SCHEMAS = TaskSchema.load_from_hierarchy(_TASK_SCHEMAS)
+print('OK!')
 
 # These dicts map task/method/implementations to specific Python functions.
 TASK_INPUT_MAP = {}

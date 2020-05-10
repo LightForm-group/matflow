@@ -33,83 +33,6 @@ from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list
 from matflow.models.task import Task, TaskSchema
 
 
-def get_schema_dict(name, method, all_task_schemas, software_instance):
-    """Get the schema associated with the method/implementation of this task."""
-
-    match_task_idx = None
-    match_method_idx = None
-    match_imp_idx = None
-
-    for task_ref_idx, task_ref in enumerate(all_task_schemas):
-
-        if task_ref['name'] == name:
-
-            match_task_idx = task_ref_idx
-            for met_idx, met in enumerate(task_ref['methods']):
-
-                if met['name'] == method:
-
-                    match_method_idx = met_idx
-                    implementations = met.get('implementations')
-                    if implementations:
-
-                        for imp_idx, imp in enumerate(implementations):
-
-                            if imp['name'] == software_instance['name']:
-                                match_imp_idx = imp_idx
-                                break
-                    break
-            break
-
-    if match_task_idx is None:
-        msg = (f'No matching task schema found with name: "{name}"')
-        raise MissingSchemaError(msg)
-
-    if match_method_idx is None:
-        msg = (f'No matching method found for task schema "{name}" with method: '
-               f'"{method}".')
-        raise MissingSchemaError(msg)
-
-    if match_imp_idx is None:
-        msg = (f'No matching implementation found for task schema "{name}" and method '
-               f'"{method}" with software "{software_instance["name"]}".')
-        raise MissingSchemaError(msg)
-
-    task_ref = all_task_schemas[match_task_idx]
-    met_ref = task_ref['methods'][met_idx]
-    inputs = task_ref.get('inputs', []) + met_ref.get('inputs', [])
-    outputs = task_ref.get('outputs', []) + met_ref.get('outputs', [])
-
-    imp_ref = met_ref['implementations'][match_imp_idx]
-    inputs += imp_ref.get('inputs', [])
-    outputs += imp_ref.get('outputs', [])
-    in_map = imp_ref.get('input_map', [])
-    out_map = imp_ref.get('output_map', [])
-    command_opt = imp_ref.get('commands', [])
-
-    outputs = list(set(outputs))
-
-    implementation = software_instance['name']
-    command_group = {
-        'commands': command_opt,
-        'env_pre': software_instance.get('env_pre'),
-        'env_post': software_instance.get('env_post'),
-    }
-
-    schema_dict = {
-        'name': name,
-        'method': method,
-        'implementation': implementation,
-        'inputs': inputs,
-        'outputs': outputs,
-        'input_map': in_map,
-        'output_map': out_map,
-        'command_group': command_group,
-    }
-
-    return schema_dict
-
-
 def normalise_local_inputs(base=None, sequences=None):
     'Validate and normalise sequences and task inputs for a given task.'
 
@@ -383,7 +306,8 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
         Has this task dict been loaded from a workflow file or is it associated
         with a brand new workflow?
     all_software
-    all_task_schemas
+    all_task_schemas : dict of (tuple : TaskSchema)
+        All available TaskSchema objects, keyed by a (name, method, software) tuple.
     check_integrity : bool, optional
         Applicable if `is_from_file` is True. If True, re-generate `local_inputs`
         and compare them to those loaded from the file. If the equality test
@@ -501,13 +425,14 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             all_software,
         )
         task['software_instance'] = soft_inst
-        schema_dict = get_schema_dict(
-            task['name'],
-            task['method'],
-            all_task_schemas,
-            soft_inst
-        )
-        schema = TaskSchema(**schema_dict)
+
+        # Find the schema:
+        schema_key = (task['name'], task['method'], soft_inst['name'])
+        schema = all_task_schemas.get(schema_key)
+        if not schema:
+            msg = (f'No matching task schema found for task name "{task["name"]}" with '
+                   f'method "{task["method"]}" and software "{soft_inst["name"]}".')
+            raise MissingSchemaError(msg)
 
     local_ins = get_local_inputs(
         schema.input_names,
