@@ -54,5 +54,9 @@ class MissingSchemaError(Exception):
     'For when a suitable schema does not exist.'
 
 
+class UnsatisfiedSchemaError(Exception):
+    'For when a suitable extension function cannot be found for a task schema.'
+
+
 class TaskElementExecutionError(Exception):
     'For when the execution of an task element fails.'

@@ -10,8 +10,7 @@ import shutil
 
 from matflow._version import __version__
 from matflow.errors import MatflowExtensionError
-
-
+from matflow.validate import validate_task_schemas
 from matflow.models.task import TaskSchema
 
 PKG_DATA_DIR = Path(__file__).parent.joinpath('data')
@@ -131,25 +130,44 @@ def register_output_file(file_reference, file_name, task, method, software):
     TASK_OUTPUT_FILES_MAP[key].update({file_ref_full: file_name})
 
 
-EXTENSIONS = {}
 # From extensions, load functions into the TASK_INPUT_MAP and so on:
-for entry_point in pkg_resources.iter_entry_points('matflow.extension'):
-    loaded = entry_point.load()
-    if not hasattr(loaded, '__version__'):
-        warnings.warn(f'Matflow extension {entry_point.module_name} has no '
-                      f'`__version__` attribute. This extension will not be loaded.')
-        continue
-    EXTENSIONS.update({
-        entry_point.name: {
-            'module_name': entry_point.module_name,
-            'version': loaded.__version__,
-        }
-    })
+EXTENSIONS = {}
+extensions_entries = pkg_resources.iter_entry_points('matflow.extension')
+if extensions_entries:
+    print('Loading extensions...')
+    for entry_point in extensions_entries:
+        loaded = entry_point.load()
+        if not hasattr(loaded, '__version__'):
+            warnings.warn(f'Matflow extension {entry_point.module_name} has no '
+                          f'`__version__` attribute. This extension will not be loaded.')
+            continue
+        EXTENSIONS.update({
+            entry_point.name: {
+                'module_name': entry_point.module_name,
+                'version': loaded.__version__,
+            }
+        })
 
-if EXTENSIONS:
     indent = '  '
     _ext_fmt = f'\n{indent}'.join([
         f'"{k}" from {v["module_name"]} (version {v["version"]})'
         for k, v in sorted(EXTENSIONS.items())
     ])
-    print(f'Loaded extensions:\n{indent}{_ext_fmt}.')
+    print(f'{indent}{_ext_fmt}')
+
+    # Validate task schemas against loaded extensions:
+    print('Validating task schemas against loaded extensions...', end='')
+    try:
+        validate_task_schemas(
+            TASK_SCHEMAS,
+            TASK_INPUT_MAP,
+            TASK_OUTPUT_MAP,
+            TASK_FUNC_MAP
+        )
+    except Exception as err:
+        print('Failed.', flush=True)
+        raise err
+    print('OK!')
+
+else:
+    print('No extensions found.')
