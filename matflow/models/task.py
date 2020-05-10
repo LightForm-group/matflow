@@ -111,6 +111,9 @@ class TaskSchema(object):
         allowed_inp_keys = req_inp_keys + allowed_inp_specifiers
         allowed_inp_keys_fmt = ', '.join(['"{}"'.format(i) for i in allowed_inp_keys])
 
+        err = (f'Validation failed for task schema "{self.name}" with method '
+               f'"{self.method}" and software "{self.implementation}". ')
+
         # Normalise schema inputs:
         for inp_idx, inp in enumerate(self.inputs):
 
@@ -131,15 +134,15 @@ class TaskSchema(object):
                     if 'context' in inp and inp['context'] and 'alias' not in inp:
                         msg = ('Task schema inputs for which a `context` is specified '
                                'must also be given an `alias`.')
-                        raise TaskSchemaError(msg)
+                        raise TaskSchemaError(err + msg)
 
             elif not isinstance(inp, dict):
-                raise TypeError('Task schema input must be a str or a dict.')
+                raise TypeError(err + 'Task schema input must be a str or a dict.')
 
             for r in req_inp_keys:
                 if r not in inp:
                     msg = f'Task schema input must include key {r}.'
-                    raise TaskSchemaError(msg)
+                    raise TaskSchemaError(err + msg)
 
             if 'context' not in inp:
                 # Add default parameter context:
@@ -153,40 +156,41 @@ class TaskSchema(object):
                 # Add default alias:
                 inp['alias'] = inp['name']
 
-            unknown_inp_keys = set(inp.keys()) - set(allowed_inp_keys)
+            unknown_inp_keys = list(set(inp.keys()) - set(allowed_inp_keys))
             if unknown_inp_keys:
-                msg = (f'Unknown task schema input key: {unknown_inp_keys}. Allowed keys '
-                       f'are: {allowed_inp_keys_fmt}')
-                raise TaskSchemaError(msg)
+                unknown_inp_keys_fmt = ', '.join([f'"{i}"' for i in unknown_inp_keys])
+                msg = (f'Unknown task schema input keys: {unknown_inp_keys_fmt}. Allowed '
+                       f'keys are: {allowed_inp_keys_fmt}.')
+                raise TaskSchemaError(err + msg)
 
             self.inputs[inp_idx] = inp
 
         # Check the task does not output an input(!):
         for i in self.outputs:
             if i in self.input_names:
-                msg = 'Task schema input "{}" cannot also be an output!'
-                raise TaskSchemaError(msg.format(i))
+                msg = f'Task schema input "{i}" cannot also be an output!'
+                raise TaskSchemaError(err + msg)
 
         # Check correct keys in supplied input/output maps:
         for in_map in self.input_map:
             if sorted(in_map.keys()) != sorted(['inputs', 'file']):
                 bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in in_map.keys()])
-                msg = ('Input maps must map a list of `inputs` into a `file` but found '
-                       'input map with keys {} for schema "{}".')
-                raise TaskSchemaError(msg.format(bad_keys_fmt, self.name))
+                msg = (f'Input maps must map a list of `inputs` into a `file` but found '
+                       f'input map with keys {bad_keys_fmt}.')
+                raise TaskSchemaError(err + msg)
             if not isinstance(in_map['inputs'], list):
-                msg = 'Input map `inputs` must be a list for schema "{}".'
-                raise TaskSchemaError(msg.format(self.name))
+                msg = 'Input map `inputs` must be a list.'
+                raise TaskSchemaError(err + msg)
 
         for out_map in self.output_map:
             if list(out_map.keys()) != ['files', 'output']:
                 bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in out_map.keys()])
-                msg = ('Output maps must map a list of `files` into an `output` but found '
-                       'output map with keys {} for schema "{}".')
-                raise TaskSchemaError(msg.format(bad_keys_fmt, self.name))
+                msg = (f'Output maps must map a list of `files` into an `output` but found '
+                       f'output map with keys {bad_keys_fmt}.')
+                raise TaskSchemaError(err + msg)
             if not isinstance(out_map['output'], str):
-                msg = 'Output map `output` must be a string for schema "{}".'
-                raise TaskSchemaError(msg.format(self.name))
+                msg = 'Output map `output` must be a string.'
+                raise TaskSchemaError(err + msg)
 
         # Check inputs/outputs named in input/output_maps are in inputs/outputs lists:
         input_map_ins = [j for i in self.input_map for j in i['inputs']]
@@ -197,15 +201,15 @@ class TaskSchema(object):
 
         if unknown_map_inputs:
             bad_ins_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_inputs])
-            msg = ('Input map inputs {} not known by the schema "{}" with input '
-                   '(aliases): {}.')
-            raise TaskSchemaError(msg.format(
-                bad_ins_map_fmt, self.name, self.input_aliases))
+            msg = (f'Input map inputs {bad_ins_map_fmt} not known by the schema with '
+                   f'input (aliases): {self.input_aliases}.')
+            raise TaskSchemaError(err + msg)
 
         if unknown_map_outputs:
             bad_outs_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_outputs])
-            msg = 'Output map outputs {} not known by the schema "{}" with outputs: {}.'
-            raise TaskSchemaError(msg.format(bad_outs_map_fmt, self.name, self.outputs))
+            msg = (f'Output map outputs {bad_outs_map_fmt} not known by the schema with '
+                   f'outputs: {self.outputs}.')
+            raise TaskSchemaError(err + msg)
 
     def check_surplus_inputs(self, inputs):
         'Check for any inputs that are specified but not required by this schema.'
