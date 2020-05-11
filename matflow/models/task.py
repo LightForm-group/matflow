@@ -183,7 +183,7 @@ class TaskSchema(object):
                 raise TaskSchemaError(err + msg)
 
         for out_map in self.output_map:
-            if list(out_map.keys()) != ['files', 'output']:
+            if list(out_map.keys()) != ['files', 'output', 'options']:
                 bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in out_map.keys()])
                 msg = (f'Output maps must map a list of `files` into an `output` but found '
                        f'output map with keys {bad_keys_fmt}.')
