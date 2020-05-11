@@ -784,7 +784,6 @@ class Workflow(object):
                 with func_outputs_path.open('rb') as handle:
                     func_outputs = pickle.load(handle)
                 outputs[elem_idx].update(**func_outputs)
-                # outputs[elem_idx].update({'ha': func_outputs})  # TEMP
                 func_outputs_path.unlink()
 
             # For each output to be parsed, invoke the function:
