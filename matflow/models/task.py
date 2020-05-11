@@ -203,6 +203,12 @@ class TaskSchema(object):
                 msg = 'Output map `output` must be a string.'
                 raise TaskSchemaError(err + msg)
 
+            for i in out_map['files']:
+                if ('name' not in i) or ('save' not in i):
+                    msg = (f'Specify keys `name` (str) and `save` (bool) in output map '
+                           f'`files` key.')
+                    raise TaskSchemaError(err + msg)
+
         # Check inputs/outputs named in input/output_maps are in inputs/outputs lists:
         input_map_ins = [j for i in self.input_map for j in i['inputs']]
         unknown_map_inputs = set(input_map_ins) - set(self.input_aliases)

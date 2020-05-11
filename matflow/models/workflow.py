@@ -789,12 +789,13 @@ class Workflow(object):
                 # Filter only those file paths required for this output:
                 file_paths = []
                 for i in out_map['files']:
-                    out_file_path = task_elem_path.joinpath(i)
+                    out_file_path = task_elem_path.joinpath(i['name'])
                     file_paths.append(out_file_path)
 
                     # Save generated file as string in workflow:
-                    with out_file_path.open('r') as handle:
-                        task.files[elem_idx].update({i: handle.read()})
+                    if i['save']:
+                        with out_file_path.open('r') as handle:
+                            task.files[elem_idx].update({i['name']: handle.read()})
 
                 func = out_map_lookup[out_map['output']]
                 output = func(*file_paths, **task.output_map_options)
