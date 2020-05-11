@@ -231,6 +231,31 @@ class TaskSchema(object):
             raise TaskParameterError(msg.format(
                 missing_ins_fmt, self.name, self.input_names))
 
+    def check_output_map_options(self, options):
+        'Check a set of options are consistent with the output map options.'
+
+        req_opts, opt_opts = [], []
+        for i in self.output_map:
+            out_map_opts = i.get('options', {})
+            req_opts.extend(out_map_opts.get('required', []))
+            opt_opts.extend(out_map_opts.get('optional', []))
+
+        miss_opts = list(set(req_opts) - set(options))
+        if miss_opts:
+            miss_opts_fmt = ', '.join([f'"{i}"' for i in miss_opts])
+            msg = (f'Output maps for the schema "{self.name}" have the following '
+                   f'required output map options that are not specified in the task: '
+                   f'{miss_opts_fmt}.')
+            raise TaskParameterError(msg)
+
+        bad_opts = list(set(options) - set(req_opts + opt_opts))
+        if bad_opts:
+            bad_opts_fmt = ', '.join([f'"{i}"' for i in bad_opts])
+            msg = (f'Output maps for the schema "{self.name}" are not compatible with '
+                   f'the following output map options that are specified in the task: '
+                   f'{bad_opts_fmt}.')
+            raise TaskParameterError(msg)
+
     @property
     def is_func(self):
         return not self.command_group.commands
@@ -282,6 +307,7 @@ class Task(object):
         '_local_inputs',
         '_inputs',
         '_outputs',
+        '_output_map_options',
         '_schema',
         '_files',
         '_resource_usage',
@@ -297,7 +323,7 @@ class Task(object):
                  status=None, stats=True, context='', local_inputs=None, inputs=None,
                  outputs=None, schema=None, files=None, resource_usage=None,
                  base=None, sequences=None, repeats=None, groups=None, nest=None,
-                 merge_priority=None):
+                 merge_priority=None, output_map_options=None):
 
         self._id = None  # Generated once by generate_id()
 
@@ -312,6 +338,7 @@ class Task(object):
         self._local_inputs = local_inputs
         self._inputs = inputs
         self._outputs = outputs
+        self._output_map_options = output_map_options
         self._schema = schema
         self._files = files
         self._resource_usage = resource_usage
@@ -418,6 +445,10 @@ class Task(object):
         if not isinstance(outputs, list) or not isinstance(outputs[0], dict):
             raise ValueError('Outputs must be a list of dict.')
         self._outputs = outputs
+
+    @property
+    def output_map_options(self):
+        return self._output_map_options
 
     @property
     def schema(self):

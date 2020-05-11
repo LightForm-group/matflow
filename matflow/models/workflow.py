@@ -797,7 +797,7 @@ class Workflow(object):
                         task.files[elem_idx].update({i: handle.read()})
 
                 func = out_map_lookup[out_map['output']]
-                output = func(*file_paths)
+                output = func(*file_paths, **task.output_map_options)
                 outputs[elem_idx].update({out_map['output']: output})
 
             # Save output files specified explicitly as outputs:

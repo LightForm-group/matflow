@@ -348,6 +348,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'groups',
             'nest',
             'merge_priority',
+            'output_map_options',
         ]
         good_keys = req_keys
         def_keys = {}
@@ -364,6 +365,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'groups',
             'nest',
             'merge_priority',
+            'output_map_options',
         ] + req_keys
 
         def_keys = {
@@ -376,6 +378,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'groups': None,
             'merge_priority': None,
             'nest': True,
+            'output_map_options': {},
         }
 
     miss_keys = list(set(req_keys) - set(task.keys()))
@@ -491,6 +494,7 @@ def check_consistent_inputs(task_lst, dep_idx):
                     defined_inputs.append(output)
 
         task['schema'].check_missing_inputs(defined_inputs)
+        task['schema'].check_output_map_options(task['output_map_outputs'])
 
 
 def order_tasks(task_lst):
