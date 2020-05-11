@@ -44,3 +44,19 @@ class WorkflowPersistenceError(Exception):
 
 class UnsatisfiedGroupParameter(Exception):
     'For when an input has a group, but that group does not exist in the Workflow.'
+
+
+class MatflowExtensionError(Exception):
+    'For problems when loading extensions.'
+
+
+class MissingSchemaError(Exception):
+    'For when a suitable schema does not exist.'
+
+
+class UnsatisfiedSchemaError(Exception):
+    'For when a suitable extension function cannot be found for a task schema.'
+
+
+class TaskElementExecutionError(Exception):
+    'For when the execution of an task element fails.'

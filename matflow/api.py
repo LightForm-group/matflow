@@ -13,7 +13,7 @@ import pyperclip
 from hpcflow import api as hf_api
 
 from matflow.profile import parse_workflow_profile
-from matflow.models import Workflow
+from matflow.models.workflow import Workflow
 
 
 def make_workflow(profile_path, directory=None, write_dirs=True):
@@ -87,3 +87,9 @@ def process_task(task_idx, directory):
     'Process a completed task by running the output map.'
     workflow = load_workflow(directory)
     workflow.process_task(task_idx)
+
+
+def run_python_task(task_idx, element_idx, directory):
+    'Process a completed task by running the output map.'
+    workflow = load_workflow(directory)
+    workflow.run_python_task(task_idx, element_idx)
