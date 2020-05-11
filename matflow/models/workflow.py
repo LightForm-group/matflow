@@ -763,9 +763,6 @@ class Workflow(object):
         # Save hpcflow task stats
         hf_stats_all = hpcflow_get_stats(self.path, jsonable=True, datetime_dicts=True)
 
-        print('matflow.models.workflow. process_task: hf_stats_all: ')
-        pprint(hf_stats_all)
-
         workflow_idx = 0
         submission_idx = 0
         hf_sub_stats = hf_stats_all[workflow_idx]['submissions'][submission_idx]
