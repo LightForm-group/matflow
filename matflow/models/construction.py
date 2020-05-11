@@ -494,7 +494,7 @@ def check_consistent_inputs(task_lst, dep_idx):
                     defined_inputs.append(output)
 
         task['schema'].check_missing_inputs(defined_inputs)
-        task['schema'].check_output_map_options(task['output_map_outputs'])
+        task['schema'].check_output_map_options(task['output_map_options'])
 
 
 def order_tasks(task_lst):
