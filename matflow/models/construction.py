@@ -526,6 +526,7 @@ def order_tasks(task_lst):
         {
             'schema': i['schema'],
             'local_input_names': list(i['local_inputs']['inputs'].keys()),
+            'output_map_options': i['output_map_options'],
         } for i in task_lst
     ]
     check_consistent_inputs(task_lst_check, dep_idx)
