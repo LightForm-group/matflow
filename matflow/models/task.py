@@ -183,11 +183,22 @@ class TaskSchema(object):
                 raise TaskSchemaError(err + msg)
 
         for out_map in self.output_map:
-            if list(out_map.keys()) != ['files', 'output', 'options']:
-                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in out_map.keys()])
-                msg = (f'Output maps must map a list of `files` into an `output` but found '
-                       f'output map with keys {bad_keys_fmt}.')
-                raise TaskSchemaError(err + msg)
+
+            req_keys = ['files', 'output']
+            allowed_keys = set(req_keys + ['options'])
+            miss_keys = list(set(req_keys) - set(out_map.keys()))
+            bad_keys = list(set(out_map.keys()) - allowed_keys)
+
+            msg = (f'Output maps must map a list of `files` into an `output` (with '
+                   f'optional `options`). ')
+            if miss_keys:
+                miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+                raise TaskSchemaError(err + msg + f'Missing keys are: {miss_keys_fmt}.')
+
+            if bad_keys:
+                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+                raise TaskSchemaError(err + msg + f'Unknown keys are: {bad_keys_fmt}.')
+
             if not isinstance(out_map['output'], str):
                 msg = 'Output map `output` must be a string.'
                 raise TaskSchemaError(err + msg)
