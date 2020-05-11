@@ -111,7 +111,7 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
                 validate_function_args(
                     func=out_map_func,
                     func_type='output_mapper',
-                    num_args=len(out_map['files']),
+                    num_args=(len(out_map['files']) + len(out_map.get('options', {}))),
                 )
             except TypeError as err:
                 raise UnsatisfiedSchemaError(key_msg + ' ' + str(err)) from None
