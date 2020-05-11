@@ -135,6 +135,7 @@ EXTENSIONS = {}
 extensions_entries = pkg_resources.iter_entry_points('matflow.extension')
 if extensions_entries:
     print('Loading extensions...')
+    indent = '  '
     for entry_point in extensions_entries:
         loaded = entry_point.load()
         if not hasattr(loaded, '__version__'):
@@ -147,13 +148,8 @@ if extensions_entries:
                 'version': loaded.__version__,
             }
         })
-
-    indent = '  '
-    _ext_fmt = f'\n{indent}'.join([
-        f'"{k}" from {v["module_name"]} (version {v["version"]})'
-        for k, v in sorted(EXTENSIONS.items())
-    ])
-    print(f'{indent}{_ext_fmt}')
+        print(f'{indent}"{entry_point.name}" from {entry_point.module_name} '
+              f'(version {loaded.__version__})', flush=True)
 
     # Validate task schemas against loaded extensions:
     print('Validating task schemas against loaded extensions...', end='')
