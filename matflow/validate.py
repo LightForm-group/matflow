@@ -61,7 +61,11 @@ def validate_function_args(func, func_type, expected_args=None, num_args=None):
 
 def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_func_map):
 
+    schema_is_valid = {}
+
     for key, schema in task_schemas.items():
+
+        schema_is_valid.update({key: True})
 
         key_msg = (f'Unresolved task schema for task "{schema.name}" with method '
                    f'"{schema.method}" and software "{schema.implementation}".')
@@ -75,7 +79,8 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
             )
 
             if not extension_inp_maps:
-                raise UnsatisfiedSchemaError(msg)
+                schema_is_valid.update({key: False})
+                continue
             else:
                 inp_map_func = extension_inp_maps.get(inp_map['file'])
                 if not inp_map_func:
@@ -100,7 +105,8 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
             )
 
             if not extension_out_maps:
-                raise UnsatisfiedSchemaError(msg)
+                schema_is_valid.update({key: False})
+                continue
             else:
                 out_map_func = extension_out_maps.get(out_map['output'])
                 if not out_map_func:
@@ -120,9 +126,11 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
 
             func = task_func_map.get(key)
             if not func:
-                msg = (f'{key_msg} No matching extension function found for the '
-                       f'function map.')
-                raise UnsatisfiedSchemaError(msg)
+                schema_is_valid.update({key: False})
+                continue
+                # msg = (f'{key_msg} No matching extension function found for the '
+                #        f'function map.')
+                # raise UnsatisfiedSchemaError(msg)
 
             try:
                 validate_function_args(
@@ -132,3 +140,5 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
                 )
             except TypeError as err:
                 raise UnsatisfiedSchemaError(key_msg + ' ' + str(err)) from None
+
+    return schema_is_valid

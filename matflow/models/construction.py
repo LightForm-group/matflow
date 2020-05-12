@@ -15,7 +15,7 @@ from warnings import warn
 
 import numpy as np
 
-from matflow import SOFTWARE, TASK_SCHEMAS
+from matflow import SOFTWARE, TASK_SCHEMAS, SCHEMA_IS_VALID
 from matflow.errors import (
     IncompatibleWorkflow,
     MissingSoftware,
@@ -27,6 +27,7 @@ from matflow.errors import (
     IncompatibleTaskNesting,
     UnsatisfiedGroupParameter,
     MissingSchemaError,
+    UnsatisfiedSchemaError,
 )
 from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list,
                            to_sub_list)
@@ -431,6 +432,10 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
 
         # Find the schema:
         schema_key = (task['name'], task['method'], soft_inst['name'])
+        if not SCHEMA_IS_VALID[schema_key]:
+            msg = (f'No matching extension function found for the schema with '
+                   f'implementation: {soft_inst["name"]}.')
+            raise UnsatisfiedSchemaError(msg)
         schema = all_task_schemas.get(schema_key)
         if not schema:
             msg = (f'No matching task schema found for task name "{task["name"]}" with '

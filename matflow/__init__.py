@@ -13,32 +13,50 @@ from matflow.errors import MatflowExtensionError
 from matflow.validate import validate_task_schemas
 from matflow.models.task import TaskSchema
 
-PKG_DATA_DIR = Path(__file__).parent.joinpath('data')
 DATA_DIR = Path(os.getenv('MATFLOW_DATA_DIR', '~/.matflow')).expanduser()
 DATA_DIR.mkdir(exist_ok=True)
 
-_CONFIG_PATH = DATA_DIR.joinpath('config.yml')
-_TASK_SCHEMAS_FILE_PATH = DATA_DIR.joinpath('task_schemas.yml')
+CONFIG_PATH = DATA_DIR.joinpath('config.yml')
 
-if not _CONFIG_PATH.is_file():
-    # If no config file in data directory, copy the default config file:
-    shutil.copyfile(
-        str(PKG_DATA_DIR.joinpath('config_default.yml')),
-        str(_CONFIG_PATH)
-    )
+if not CONFIG_PATH.is_file():
+    # If no config file in data directory, write the default config file:
+    def_config = {'task_schema_sources': [str(DATA_DIR.joinpath('task_schemas.yml'))]}
+    with CONFIG_PATH.open('w') as handle:
+        yaml.safe_dump(def_config, handle)
+    # If no task schema file in default location, make one:
+    def_schemas = {'software': {}, 'task_schemas': []}
+    with DATA_DIR.joinpath('task_schemas.yml').open('w') as handle:
+        yaml.safe_dump(def_schemas, handle)
 
-with _CONFIG_PATH.open('r') as handle:
+with CONFIG_PATH.open('r') as handle:
     CONFIG = yaml.safe_load(handle)
 
+# Load task_schemas list and software list from all specified task schema files:
+_TASK_SCHEMAS = {}
+_SOFTWARE = {}
+for task_schema_file in CONFIG['task_schema_sources'][::-1]:
+    with Path(task_schema_file).open() as handle:
+        file_dat = yaml.safe_load(handle)
+        task_schemas = file_dat.get('task_schemas', [])
+        software = file_dat.get('software', {})
+    for i in task_schemas:
+        if 'name' not in i:
+            raise ValueError('Task schema definition is missing a "name" key.')
+        # Overwrite any task schema with the same name (hence we order files in reverse,
+        # so e.g. the first task schema file takes precedence):
+        _TASK_SCHEMAS.update({i['name']: i})
+    for k, v in software.items():
+        _SOFTWARE.update({k: v})
+
+# Convert to lists:
+_TASK_SCHEMAS = [v for k, v in _TASK_SCHEMAS.items()]
 SOFTWARE = [{**s_dict, 'name': s_name}
-            for s_name, s_list in CONFIG['software'].items()
+            for s_name, s_list in _SOFTWARE.items()
             for s_dict in s_list]
 
 # Load and validate self-consistency of task schemas:
 print('Loading task schemas...', end='')
 try:
-    with _TASK_SCHEMAS_FILE_PATH.open() as handle:
-        _TASK_SCHEMAS = yaml.safe_load(handle)['task_schemas']
     TASK_SCHEMAS = TaskSchema.load_from_hierarchy(_TASK_SCHEMAS)
 except Exception as err:
     print('Failed.')
@@ -154,7 +172,7 @@ if extensions_entries:
     # Validate task schemas against loaded extensions:
     print('Validating task schemas against loaded extensions...', end='')
     try:
-        validate_task_schemas(
+        SCHEMA_IS_VALID = validate_task_schemas(
             TASK_SCHEMAS,
             TASK_INPUT_MAP,
             TASK_OUTPUT_MAP,
@@ -163,7 +181,8 @@ if extensions_entries:
     except Exception as err:
         print('Failed.', flush=True)
         raise err
-    print('OK!')
+    num_valid = sum(SCHEMA_IS_VALID.values())
+    print(f'OK! {num_valid}/{len(SCHEMA_IS_VALID)} schemas are valid.', flush=True)
 
 else:
     print('No extensions found.')
