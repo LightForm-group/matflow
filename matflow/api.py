@@ -11,9 +11,11 @@ from pprint import pprint
 
 import pyperclip
 from hpcflow import api as hf_api
+from ruamel.yaml import YAML
 
+from matflow import CONFIG_PATH
 from matflow.profile import parse_workflow_profile
-from matflow.models import Workflow
+from matflow.models.workflow import Workflow
 
 
 def make_workflow(profile_path, directory=None, write_dirs=True):
@@ -87,3 +89,27 @@ def process_task(task_idx, directory):
     'Process a completed task by running the output map.'
     workflow = load_workflow(directory)
     workflow.process_task(task_idx)
+
+
+def run_python_task(task_idx, element_idx, directory):
+    'Process a completed task by running the output map.'
+    workflow = load_workflow(directory)
+    workflow.run_python_task(task_idx, element_idx)
+
+
+def append_schema_source(schema_source_path):
+    'Add a task schema source file to the end of the schema source list.'
+    yaml = YAML(typ='rt')
+    config = yaml.load(CONFIG_PATH)
+    config['task_schema_sources'].append(str(schema_source_path))
+    yaml.dump(config, CONFIG_PATH)
+
+
+def prepend_schema_source(schema_source_path):
+    'Add a task schema source file to the front of the schema source list.'
+    yaml = YAML(typ='rt')
+    config = yaml.load(CONFIG_PATH)
+    config['task_schema_sources'] = (
+        str(schema_source_path) + config['task_schema_sources']
+    )
+    yaml.dump(config, CONFIG_PATH)

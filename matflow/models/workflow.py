@@ -7,6 +7,7 @@ Module containing the Workflow class and some functions used to decorate Workflo
 import copy
 import functools
 import secrets
+import pickle
 from pathlib import Path
 from pprint import pprint
 from subprocess import run, PIPE
@@ -14,7 +15,7 @@ from warnings import warn
 
 import hickle
 import numpy as np
-import yaml
+from ruamel.yaml import YAML
 from hpcflow.api import get_stats as hpcflow_get_stats
 
 from matflow import (
@@ -22,12 +23,14 @@ from matflow import (
     TASK_OUTPUT_MAP,
     COMMAND_LINE_ARG_MAP,
     TASK_OUTPUT_FILES_MAP,
+    TASK_FUNC_MAP,
     __version__,
 )
 from matflow.errors import (
     IncompatibleTaskNesting,
     MissingMergePriority,
-    WorkflowPersistenceError
+    WorkflowPersistenceError,
+    TaskElementExecutionError,
 )
 from matflow.jsonable import to_jsonable
 from matflow.utils import parse_times, zeropad
@@ -125,6 +128,9 @@ class Workflow(object):
             self._human_id = self.name_safe + '_' + parse_times('%Y-%m-%d-%H%M%S')[0]
             self._id = secrets.token_hex(15)
 
+    def __len__(self):
+        return len(self.tasks)
+
     @property
     def id(self):
         return self._id
@@ -216,6 +222,35 @@ class Workflow(object):
     def version(self):
         return self._version
 
+    @requires_path_exists
+    def get_task_path(self, task_idx):
+        'Get the path to a task directory.'
+        if task_idx > (len(self) - 1):
+            msg = f'Workflow has only {len(self)} tasks.'
+            raise ValueError(msg)
+        task = self.tasks[task_idx]
+        task_idx_fmt = str(zeropad(task_idx, len(self) - 1))
+        task_path = self.path.joinpath(f'task_{task_idx_fmt}_{task.name}')
+        return task_path
+
+    @requires_path_exists
+    def get_element_path(self, task_idx, element_idx):
+        'Get the path to an element directory.'
+        num_elements = self.elements_idx[task_idx]['num_elements']
+        if element_idx > (num_elements - 1):
+            msg = f'Task at index {task_idx} has only {num_elements} elements.'
+            raise ValueError(msg)
+        element_idx_fmt = str(zeropad(element_idx, num_elements - 1))
+        element_path = self.get_task_path(task_idx).joinpath(element_idx_fmt)
+        return element_path
+
+    @requires_path_exists
+    def _get_element_temp_output_path(self, task_idx, element_idx):
+        task = self.tasks[task_idx]
+        element_path = self.get_element_path(task_idx, element_idx)
+        out = element_path.joinpath(f'task_output_{task.id}_element_{element_idx}.pickle')
+        return out
+
     @increments_version
     def write_directories(self):
         'Generate task and element directories.'
@@ -228,14 +263,12 @@ class Workflow(object):
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
             # Generate task directory:
-            task_path = task.get_task_path(self.path)
-            task_path.mkdir()
+            self.get_task_path(task.task_idx).mkdir()
 
             num_elems = elems_idx['num_elements']
             # Generate element directories:
             for i in range(num_elems):
-                task_elem_path = task_path.joinpath(str(zeropad(i, num_elems - 1)))
-                task_elem_path.mkdir()
+                self.get_element_path(task.task_idx, i).mkdir()
 
     @requires_path_exists
     def write_hpcflow_workflow(self):
@@ -245,68 +278,75 @@ class Workflow(object):
         variables = {}
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
-            task_path_rel = str(task.get_task_path(self.path).name)
+            if task.schema.is_func:
+                # The task is to be run directly in Python:
+                # (SGE specific)
+                fmt_commands = [
+                    f'matflow run-python-task --task-idx={task.task_idx} '
+                    f'--element-idx=$(($SGE_TASK_ID-1)) '
+                    f'--directory={self.path}'
+                ]
 
-            # `input_vars` are those inputs that appear directly in the commands:
-            fmt_commands, input_vars = task.schema.command_group.get_formatted_commands(
-                task.local_inputs['inputs'].keys())
+            else:
+                # `input_vars` are those inputs that appear directly in the commands:
+                cmd_group = task.schema.command_group
+                fmt_commands, input_vars = cmd_group.get_formatted_commands(
+                    task.local_inputs['inputs'].keys())
 
-            cmd_line_inputs = {}
-            for local_in_name, local_in in task.local_inputs['inputs'].items():
-                if local_in_name in input_vars:
-                    # TODO: We currently only consider input_vars for local inputs.
+                cmd_line_inputs = {}
+                for local_in_name, local_in in task.local_inputs['inputs'].items():
+                    if local_in_name in input_vars:
+                        # TODO: We currently only consider input_vars for local inputs.
 
-                    # Expand values for intra-task nesting:
-                    values = [local_in['vals'][i] for i in local_in['vals_idx']]
+                        # Expand values for intra-task nesting:
+                        values = [local_in['vals'][i] for i in local_in['vals_idx']]
 
-                    # Format values:
-                    fmt_func_scope = COMMAND_LINE_ARG_MAP.get(
-                        (task.schema.name, task.schema.method, task.schema.implementation)
-                    )
-                    fmt_func = None
-                    if fmt_func_scope:
-                        fmt_func = fmt_func_scope.get(local_in_name)
-                    if not fmt_func:
-                        fmt_func = DEFAULT_FORMATTERS.get(
-                            type(values[0]),
-                            lambda x: str(x)
-                        )
+                        # Format values:
+                        fmt_func_scope = COMMAND_LINE_ARG_MAP.get((
+                            task.schema.name,
+                            task.schema.method,
+                            task.schema.implementation
+                        ))
+                        fmt_func = None
+                        if fmt_func_scope:
+                            fmt_func = fmt_func_scope.get(local_in_name)
+                        if not fmt_func:
+                            fmt_func = DEFAULT_FORMATTERS.get(
+                                type(values[0]),
+                                lambda x: str(x)
+                            )
 
-                    values_fmt = [fmt_func(i) for i in values]
+                        values_fmt = [fmt_func(i) for i in values]
 
-                    # Expand values for inter-task nesting:
-                    values_fmt_all = [
-                        values_fmt[i]
-                        for i in elems_idx['inputs'][local_in_name]['input_idx']
-                    ]
-                    cmd_line_inputs.update({local_in_name: values_fmt_all})
+                        # Expand values for inter-task nesting:
+                        values_fmt_all = [
+                            values_fmt[i]
+                            for i in elems_idx['inputs'][local_in_name]['input_idx']
+                        ]
+                        cmd_line_inputs.update({local_in_name: values_fmt_all})
 
-            num_elems = elems_idx['num_elements']
+                for local_in_name, var_name in input_vars.items():
 
-            task_path = task.get_task_path(self.path)
+                    var_file_name = '{}.txt'.format(var_name)
+                    variables.update({
+                        var_name: {
+                            'file_contents': {
+                                'path': var_file_name,
+                                'expected_multiplicity': 1,
+                            },
+                            'value': '{}',
+                        }
+                    })
 
-            for local_in_name, var_name in input_vars.items():
+                    # Create text file in each element directory for each in `input_vars`:
+                    for i in range(elems_idx['num_elements']):
 
-                var_file_name = '{}.txt'.format(var_name)
-                variables.update({
-                    var_name: {
-                        'file_contents': {
-                            'path': var_file_name,
-                            'expected_multiplicity': 1,
-                        },
-                        'value': '{}',
-                    }
-                })
+                        task_elem_path = self.get_element_path(task.task_idx, i)
+                        in_val = cmd_line_inputs[local_in_name][i]
 
-                # Create text file in each element directory for each in `input_vars`:
-                for i in range(num_elems):
-
-                    task_elem_path = task_path.joinpath(str(zeropad(i, num_elems - 1)))
-                    in_val = cmd_line_inputs[local_in_name][i]
-
-                    var_file_path = task_elem_path.joinpath(var_file_name)
-                    with var_file_path.open('w') as handle:
-                        handle.write(in_val + '\n')
+                        var_file_path = task_elem_path.joinpath(var_file_name)
+                        with var_file_path.open('w') as handle:
+                            handle.write(in_val + '\n')
 
             scheduler_opts = {}
             for k, v in task.run_options.items():
@@ -314,6 +354,8 @@ class Workflow(object):
                     if k == 'pe':
                         v = v + ' ' + str(task.run_options['num_cores'])
                     scheduler_opts.update({k: v})
+
+            task_path_rel = str(self.get_task_path(task.task_idx).name)
 
             # (SGE specific)
             process_so = {'l': 'short'}
@@ -368,7 +410,10 @@ class Workflow(object):
         }
 
         with self.path.joinpath('1.hf.yml').open('w') as handle:
-            yaml.safe_dump(hf_data, handle)
+            yaml = YAML()
+            yaml.width = 5000  # Avoid line breaks
+            yaml.indent(mapping=2, sequence=4, offset=2)
+            yaml.dump(hf_data, handle)
 
     def get_extended_workflows(self):
         if self.extend_paths:
@@ -612,6 +657,7 @@ class Workflow(object):
         inputs = [{} for _ in range(num_elems)]
         files = [{} for _ in range(num_elems)]
 
+        # Populate task inputs:
         for input_alias, inputs_idx in elems_idx['inputs'].items():
 
             task_idx = inputs_idx.get('task_idx')
@@ -648,12 +694,12 @@ class Workflow(object):
 
         task.inputs = inputs
 
+        # Run any input maps:
         schema_id = (task.name, task.method, task.software)
         in_map_lookup = TASK_INPUT_MAP.get(schema_id)
-        task_path = task.get_task_path(self.path)
         for elem_idx, elem_inputs in zip(range(num_elems), task.inputs):
 
-            task_elem_path = task_path.joinpath(str(zeropad(elem_idx, num_elems - 1)))
+            task_elem_path = self.get_element_path(task.task_idx, elem_idx)
 
             # For each input file to be written, invoke the function:
             for in_map in task.schema.input_map:
@@ -677,6 +723,29 @@ class Workflow(object):
 
         task.files = files
 
+    @requires_path_exists
+    def run_python_task(self, task_idx, element_idx):
+        'Execute a task that is to be run directly in Python (via the function mapper).'
+
+        task = self.tasks[task_idx]
+        schema_id = (task.name, task.method, task.software)
+        func = TASK_FUNC_MAP.get(schema_id)
+        inputs = task.inputs[element_idx]
+        try:
+            outputs = func(**inputs)
+        except Exception as err:
+            msg = (f'Task function "{func.__name__}" from module "{func.__module__}" '
+                   f'in extension "{func.__module__.split(".")[0]}" has failed with '
+                   f'exception: {err}')
+            raise TaskElementExecutionError(msg)
+
+        # Save outputs to a temporary pickle file in the element directory. Once all
+        # elements have run, we can collect the outputs in `process_task` and save them
+        # into the workflow file.
+        outputs_path = self._get_element_temp_output_path(task_idx, element_idx)
+        with outputs_path.open('wb') as handle:
+            pickle.dump(outputs, handle)
+
     @save_workflow
     @increments_version
     @requires_path_exists
@@ -690,13 +759,9 @@ class Workflow(object):
 
         schema_id = (task.name, task.method, task.software)
         out_map_lookup = TASK_OUTPUT_MAP.get(schema_id)
-        task_path = task.get_task_path(self.path)
 
         # Save hpcflow task stats
         hf_stats_all = hpcflow_get_stats(self.path, jsonable=True, datetime_dicts=True)
-
-        print('matflow.models.workflow. process_task: hf_stats_all: ')
-        pprint(hf_stats_all)
 
         workflow_idx = 0
         submission_idx = 0
@@ -709,7 +774,14 @@ class Workflow(object):
 
         for elem_idx in range(num_elems):
 
-            task_elem_path = task_path.joinpath(str(zeropad(elem_idx, num_elems - 1)))
+            task_elem_path = self.get_element_path(task.task_idx, elem_idx)
+
+            if task.schema.is_func:
+                func_outputs_path = self._get_element_temp_output_path(task_idx, elem_idx)
+                with func_outputs_path.open('rb') as handle:
+                    func_outputs = pickle.load(handle)
+                outputs[elem_idx].update(**func_outputs)
+                func_outputs_path.unlink()
 
             # For each output to be parsed, invoke the function:
             for out_map in task.schema.output_map:
@@ -717,16 +789,17 @@ class Workflow(object):
                 # Filter only those file paths required for this output:
                 file_paths = []
                 for i in out_map['files']:
-                    out_file_path = task_elem_path.joinpath(i)
+                    out_file_path = task_elem_path.joinpath(i['name'])
                     file_paths.append(out_file_path)
 
                     # Save generated file as string in workflow:
-                    with out_file_path.open('r') as handle:
-                        task.files[elem_idx].update({i: handle.read()})
+                    if i['save']:
+                        with out_file_path.open('r') as handle:
+                            task.files[elem_idx].update({i['name']: handle.read()})
 
                 func = out_map_lookup[out_map['output']]
-                output = func(*file_paths)
-                outputs[elem_idx][out_map['output']] = output
+                output = func(*file_paths, **task.output_map_options)
+                outputs[elem_idx].update({out_map['output']: output})
 
             # Save output files specified explicitly as outputs:
             for output_name in task.schema.outputs:
@@ -739,6 +812,6 @@ class Workflow(object):
 
                     # Save file in workflow:
                     with out_file_path.open('r') as handle:
-                        outputs[elem_idx][output_name] = handle.read()
+                        outputs[elem_idx].update({output_name: handle.read()})
 
         task.outputs = outputs

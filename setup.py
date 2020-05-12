@@ -50,10 +50,11 @@ setup(
         'matflow': package_data,
     },
     install_requires=[
-        'hpcflow>=0.1.5',
+        'matflow-demo-extension',
+        'hpcflow>=0.1.7',
         'click>7.0',
         'hickle',
-        'pyyaml',
+        'ruamel.yaml',
         'numpy',
         'pyperclip',
     ],

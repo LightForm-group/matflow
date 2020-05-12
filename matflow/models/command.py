@@ -24,30 +24,20 @@ DEFAULT_FORMATTERS = {
 
 
 class CommandGroup(object):
-    """Class to represent a group of commands to be executed within a particular
-    environment. Three environment types will eventually be supported: using
-    `module load`, activating a `conda` environment, and activating a `venv`
-    environment."""
+    """Class to represent a group of commands."""
 
-    def __init__(self, commands, env_pre=None, env_post=None):
+    def __init__(self, commands):
         """
         Parameters
         ----------
         commands : list of Command objects
-        env_pre : list of str
-        env_post : list of str
         """
 
         self.commands = [Command(**i) for i in commands]
-        self.env_pre = env_pre or []
-        self.env_post = env_post or []
 
     def __repr__(self):
         out = f'{self.__class__.__name__}(commands=['
         out += ', '.join([f'{i!r}' for i in self.commands]) + ']'
-        if self.env_pre:
-            env_pre = ', '.join([f'{i!r}' for i in self.env_pre])
-            out += ', env_pre=[' + env_pre + ']'
         out += ')'
         return out
 

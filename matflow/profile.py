@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-import yaml
+from ruamel import yaml
 
 from matflow.errors import ProfileError
 

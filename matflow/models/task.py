@@ -5,6 +5,7 @@ Module containing the Task and TaskSchema classes.
 """
 
 import re
+import secrets
 from pprint import pprint
 
 import numpy as np
@@ -42,6 +43,54 @@ class TaskSchema(object):
 
         self._validate_inputs_outputs()
 
+    @classmethod
+    def load_from_hierarchy(cls, schema_lst):
+
+        all_schema_dicts = {}
+        for schema in schema_lst:
+
+            name = schema['name']
+
+            for method in schema['methods']:
+
+                for imp in method['implementations']:
+
+                    key = (name, method['name'], imp['name'])
+                    if key in all_schema_dicts:
+                        msg = (f'Schema with name "{name}", method "{method["name"]}" '
+                               f'and implementation "{imp["name"]}" is multiply defined.')
+                        raise ValueError(msg)
+
+                    input_map = imp.get('input_map', [])
+                    output_map = imp.get('output_map', [])
+                    command_group = {'commands': imp.get('commands', [])}
+                    all_inputs = (
+                        schema.get('inputs', []) +
+                        method.get('inputs', []) +
+                        imp.get('inputs', [])
+                    )
+                    all_outputs = list(set(
+                        schema.get('outputs', []) +
+                        method.get('outputs', []) +
+                        imp.get('outputs', [])
+                    ))
+                    all_schema_dicts.update({
+                        key: {
+                            'name': name,
+                            'method': method['name'],
+                            'implementation': imp['name'],
+                            'inputs': all_inputs,
+                            'outputs': all_outputs,
+                            'input_map': input_map,
+                            'output_map': output_map,
+                            'command_group': command_group,
+                        }
+                    })
+
+        all_schemas = {k: TaskSchema(**v) for k, v in all_schema_dicts.items()}
+
+        return all_schemas
+
     @property
     def input_names(self):
         return [i['name'] for i in self.inputs]
@@ -61,6 +110,9 @@ class TaskSchema(object):
         req_inp_keys = ['name']
         allowed_inp_keys = req_inp_keys + allowed_inp_specifiers
         allowed_inp_keys_fmt = ', '.join(['"{}"'.format(i) for i in allowed_inp_keys])
+
+        err = (f'Validation failed for task schema "{self.name}" with method '
+               f'"{self.method}" and software "{self.implementation}". ')
 
         # Normalise schema inputs:
         for inp_idx, inp in enumerate(self.inputs):
@@ -82,15 +134,15 @@ class TaskSchema(object):
                     if 'context' in inp and inp['context'] and 'alias' not in inp:
                         msg = ('Task schema inputs for which a `context` is specified '
                                'must also be given an `alias`.')
-                        raise TaskSchemaError(msg)
+                        raise TaskSchemaError(err + msg)
 
             elif not isinstance(inp, dict):
-                raise TypeError('Task schema input must be a str or a dict.')
+                raise TypeError(err + 'Task schema input must be a str or a dict.')
 
             for r in req_inp_keys:
                 if r not in inp:
                     msg = f'Task schema input must include key {r}.'
-                    raise TaskSchemaError(msg)
+                    raise TaskSchemaError(err + msg)
 
             if 'context' not in inp:
                 # Add default parameter context:
@@ -104,40 +156,58 @@ class TaskSchema(object):
                 # Add default alias:
                 inp['alias'] = inp['name']
 
-            unknown_inp_keys = set(inp.keys()) - set(allowed_inp_keys)
+            unknown_inp_keys = list(set(inp.keys()) - set(allowed_inp_keys))
             if unknown_inp_keys:
-                msg = (f'Unknown task schema input key: {unknown_inp_keys}. Allowed keys '
-                       f'are: {allowed_inp_keys_fmt}')
-                raise TaskSchemaError(msg)
+                unknown_inp_keys_fmt = ', '.join([f'"{i}"' for i in unknown_inp_keys])
+                msg = (f'Unknown task schema input keys: {unknown_inp_keys_fmt}. Allowed '
+                       f'keys are: {allowed_inp_keys_fmt}.')
+                raise TaskSchemaError(err + msg)
 
             self.inputs[inp_idx] = inp
 
         # Check the task does not output an input(!):
         for i in self.outputs:
             if i in self.input_names:
-                msg = 'Task schema input "{}" cannot also be an output!'
-                raise TaskSchemaError(msg.format(i))
+                msg = f'Task schema input "{i}" cannot also be an output!'
+                raise TaskSchemaError(err + msg)
 
         # Check correct keys in supplied input/output maps:
         for in_map in self.input_map:
             if sorted(in_map.keys()) != sorted(['inputs', 'file']):
                 bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in in_map.keys()])
-                msg = ('Input maps must map a list of `inputs` into a `file` but found '
-                       'input map with keys {} for schema "{}".')
-                raise TaskSchemaError(msg.format(bad_keys_fmt, self.name))
+                msg = (f'Input maps must map a list of `inputs` into a `file` but found '
+                       f'input map with keys {bad_keys_fmt}.')
+                raise TaskSchemaError(err + msg)
             if not isinstance(in_map['inputs'], list):
-                msg = 'Input map `inputs` must be a list for schema "{}".'
-                raise TaskSchemaError(msg.format(self.name))
+                msg = 'Input map `inputs` must be a list.'
+                raise TaskSchemaError(err + msg)
 
         for out_map in self.output_map:
-            if list(out_map.keys()) != ['files', 'output']:
-                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in out_map.keys()])
-                msg = ('Output maps must map a list of `files` into an `output` but found '
-                       'output map with keys {} for schema "{}".')
-                raise TaskSchemaError(msg.format(bad_keys_fmt, self.name))
+
+            req_keys = ['files', 'output']
+            allowed_keys = set(req_keys + ['options'])
+            miss_keys = list(set(req_keys) - set(out_map.keys()))
+            bad_keys = list(set(out_map.keys()) - allowed_keys)
+
+            msg = (f'Output maps must map a list of `files` into an `output` (with '
+                   f'optional `options`). ')
+            if miss_keys:
+                miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+                raise TaskSchemaError(err + msg + f'Missing keys are: {miss_keys_fmt}.')
+
+            if bad_keys:
+                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+                raise TaskSchemaError(err + msg + f'Unknown keys are: {bad_keys_fmt}.')
+
             if not isinstance(out_map['output'], str):
-                msg = 'Output map `output` must be a string for schema "{}".'
-                raise TaskSchemaError(msg.format(self.name))
+                msg = 'Output map `output` must be a string.'
+                raise TaskSchemaError(err + msg)
+
+            for i in out_map['files']:
+                if ('name' not in i) or ('save' not in i):
+                    msg = (f'Specify keys `name` (str) and `save` (bool) in output map '
+                           f'`files` key.')
+                    raise TaskSchemaError(err + msg)
 
         # Check inputs/outputs named in input/output_maps are in inputs/outputs lists:
         input_map_ins = [j for i in self.input_map for j in i['inputs']]
@@ -148,15 +218,15 @@ class TaskSchema(object):
 
         if unknown_map_inputs:
             bad_ins_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_inputs])
-            msg = ('Input map inputs {} not known by the schema "{}" with input '
-                   '(aliases): {}.')
-            raise TaskSchemaError(msg.format(
-                bad_ins_map_fmt, self.name, self.input_aliases))
+            msg = (f'Input map inputs {bad_ins_map_fmt} not known by the schema with '
+                   f'input (aliases): {self.input_aliases}.')
+            raise TaskSchemaError(err + msg)
 
         if unknown_map_outputs:
             bad_outs_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_outputs])
-            msg = 'Output map outputs {} not known by the schema "{}" with outputs: {}.'
-            raise TaskSchemaError(msg.format(bad_outs_map_fmt, self.name, self.outputs))
+            msg = (f'Output map outputs {bad_outs_map_fmt} not known by the schema with '
+                   f'outputs: {self.outputs}.')
+            raise TaskSchemaError(err + msg)
 
     def check_surplus_inputs(self, inputs):
         'Check for any inputs that are specified but not required by this schema.'
@@ -178,9 +248,34 @@ class TaskSchema(object):
             raise TaskParameterError(msg.format(
                 missing_ins_fmt, self.name, self.input_names))
 
+    def check_output_map_options(self, options):
+        'Check a set of options are consistent with the output map options.'
+
+        req_opts, opt_opts = [], []
+        for i in self.output_map:
+            out_map_opts = i.get('options', {})
+            req_opts.extend(out_map_opts.get('required', []))
+            opt_opts.extend(out_map_opts.get('optional', []))
+
+        miss_opts = list(set(req_opts) - set(options))
+        if miss_opts:
+            miss_opts_fmt = ', '.join([f'"{i}"' for i in miss_opts])
+            msg = (f'Output maps for the schema "{self.name}" have the following '
+                   f'required output map options that are not specified in the task: '
+                   f'{miss_opts_fmt}.')
+            raise TaskParameterError(msg)
+
+        bad_opts = list(set(options) - set(req_opts + opt_opts))
+        if bad_opts:
+            bad_opts_fmt = ', '.join([f'"{i}"' for i in bad_opts])
+            msg = (f'Output maps for the schema "{self.name}" are not compatible with '
+                   f'the following output map options that are specified in the task: '
+                   f'{bad_opts_fmt}.')
+            raise TaskParameterError(msg)
+
     @property
     def is_func(self):
-        return not self.implementation
+        return not self.command_group.commands
 
     def __repr__(self):
         out = (
@@ -217,6 +312,7 @@ class Task(object):
     INIT_STATUS = 'pending'
 
     __slots__ = [
+        '_id',
         '_name',
         '_method',
         '_software_instance',
@@ -228,6 +324,7 @@ class Task(object):
         '_local_inputs',
         '_inputs',
         '_outputs',
+        '_output_map_options',
         '_schema',
         '_files',
         '_resource_usage',
@@ -243,7 +340,9 @@ class Task(object):
                  status=None, stats=True, context='', local_inputs=None, inputs=None,
                  outputs=None, schema=None, files=None, resource_usage=None,
                  base=None, sequences=None, repeats=None, groups=None, nest=None,
-                 merge_priority=None):
+                 merge_priority=None, output_map_options=None):
+
+        self._id = None  # Generated once by generate_id()
 
         self._name = name
         self._method = method
@@ -256,6 +355,7 @@ class Task(object):
         self._local_inputs = local_inputs
         self._inputs = inputs
         self._outputs = outputs
+        self._output_map_options = output_map_options
         self._schema = schema
         self._files = files
         self._resource_usage = resource_usage
@@ -284,6 +384,20 @@ class Task(object):
 
     def __len__(self):
         return self.local_inputs['length']
+
+    def generate_id(self):
+        self.id = secrets.token_hex(10)
+
+    @property
+    def id(self):
+        return self._id
+
+    @id.setter
+    def id(self, id_):
+        if self._id:
+            raise ValueError(f'ID is already set for Task. ID is: "{self.id}".')
+        else:
+            self._id = id_
 
     @property
     def name(self):
@@ -350,6 +464,10 @@ class Task(object):
         self._outputs = outputs
 
     @property
+    def output_map_options(self):
+        return self._output_map_options
+
+    @property
     def schema(self):
         return self._schema
 
@@ -405,6 +523,3 @@ class Task(object):
     @property
     def software(self):
         return self.software_instance['name']
-
-    def get_task_path(self, workflow_path):
-        return workflow_path.joinpath(f'task_{self.task_idx}_{self.name}')
