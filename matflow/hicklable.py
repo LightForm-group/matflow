@@ -39,6 +39,8 @@ def to_hicklable(obj, exclude=None, name_replace=None):
     elif isinstance(obj, dict):
         obj_valid = {}
         for dct_key, dct_val in obj.items():
+            if dct_key in (exclude or []):
+                continue
             for find, replace in (name_replace or {}).items():
                 dct_key = dct_key.replace(find, replace)
             obj_valid.update({dct_key: to_hicklable(dct_val, exclude, name_replace)})
