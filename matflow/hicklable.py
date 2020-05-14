@@ -2,10 +2,7 @@
 
 import numpy as np
 
-NATIVE_TYPES = (
-    list,
-    dict,
-    set,
+HICKLABLE_PRIMITIVES = (
     int,
     float,
     str,
@@ -16,31 +13,43 @@ NATIVE_TYPES = (
 )
 
 
-def to_hicklable(obj, attr=None, parent=None, idx=None, exclude=None):
-    'Get an object representation that can be saved to an HDF5 file using `hickle`.'
+def to_hicklable(obj, exclude=None, name_replace=None):
+    """Get an object representation that can be saved to an HDF5 file using `hickle`.
 
-    if isinstance(obj, list):
-        obj_json = []
-        for item_idx, item in enumerate(obj):
-            obj_json.append(to_hicklable(item, attr, obj, item_idx, exclude))
+    Parameters
+    ----------
+    obj : object
+        Object whose hicklable representation is to be returned.
+    exclude : list, optional
+        Attributes to exclude from the returned representation
+    name_replace : dict
+        Strings to find and replace in the object keys.
+
+    """
+
+    if isinstance(obj, (list, tuple, set)):
+        obj_valid = []
+        for item in obj:
+            obj_valid.append(to_hicklable(item, exclude, name_replace))
+        if isinstance(obj, tuple):
+            obj_valid = tuple(obj_valid)
+        elif isinstance(obj, set):
+            obj_valid = set(obj_valid)
 
     elif isinstance(obj, dict):
-        obj_json = {}
+        obj_valid = {}
         for dct_key, dct_val in obj.items():
-            obj_json.update(
-                {dct_key: to_hicklable(dct_val, attr, obj, dct_key, exclude)})
+            for find, replace in (name_replace or {}).items():
+                dct_key = dct_key.replace(find, replace)
+            obj_valid.update({dct_key: to_hicklable(dct_val, exclude, name_replace)})
 
-    elif isinstance(obj, set):
-        msg = ('`set` data type is not yet supported by JSONable.')
-        raise NotImplementedError(msg)
-
-    elif isinstance(obj, NATIVE_TYPES):
-        obj_json = obj
+    elif isinstance(obj, HICKLABLE_PRIMITIVES):
+        obj_valid = obj
 
     else:
         # We have an arbitrary object:
         if hasattr(obj, 'to_hicklable'):
-            obj_json = obj.to_hicklable()
+            obj_valid = obj.to_hicklable()
         else:
 
             all_attrs = {}
@@ -52,12 +61,14 @@ def to_hicklable(obj, attr=None, parent=None, idx=None, exclude=None):
             if not hasattr(obj, '__dict__') and not hasattr(obj, '__slots__'):
                 raise ValueError(f'Object not understood: {obj}.')
 
-            obj_json = {}
+            obj_valid = {}
             for attr, value in all_attrs.items():
                 if attr in (exclude or []):
                     continue
-                obj_json.update({
-                    attr: to_hicklable(value, attr, obj, exclude)
+                for find, replace in (name_replace or {}).items():
+                    attr = attr.replace(find, replace)
+                obj_valid.update({
+                    attr: to_hicklable(value, exclude, name_replace)
                 })
 
-    return obj_json
+    return obj_valid
