@@ -97,7 +97,7 @@ class Workflow(object):
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extend=None,
-                 check_integrity=True, __is_from_file=False, ):
+                 check_integrity=True, __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
@@ -421,6 +421,10 @@ class Workflow(object):
         else:
             return None
 
+    def as_dict(self):
+        'Return attributes dict with preceding underscores removed.'
+        return {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
+
     @classmethod
     def get_existing_workflow_files(cls, directory):
         """Get the ID and versions of any workflow files within a directory.
@@ -516,9 +520,13 @@ class Workflow(object):
             msg = f'Workflow cannot be saved to a path that already exists: "{path}".'
             raise WorkflowPersistenceError(msg)
 
+        workflow_as_dict = self.as_dict()
+        del workflow_as_dict['is_from_file']
+        workflow_as_dict['tasks'] = [i.as_dict() for i in self.tasks]
+
         err_msg = None
         try:
-            obj_json = to_hicklable(self, exclude=['_is_from_file'])
+            obj_json = to_hicklable(workflow_as_dict)
             try:
                 with path.open('w') as handle:
                     hickle.dump(obj_json, handle)
@@ -617,17 +625,16 @@ class Workflow(object):
             raise WorkflowPersistenceError(msg)
 
         extend = None
-        if obj_json['_extend_paths']:
+        if obj_json['extend_paths']:
             extend = {
-                'paths': obj_json['_extend_paths'],
-                'nest_idx': obj_json['_extend_nest_idx']
+                'paths': obj_json['extend_paths'],
+                'nest_idx': obj_json['extend_nest_idx']
             }
 
-        tasks = [{k.lstrip('_'): v for k, v in i.items()} for i in obj_json['_tasks']]
         obj = {
-            'name': obj_json['_name'],
-            'tasks': tasks,
-            'stage_directory': obj_json['_stage_directory'],
+            'name': obj_json['name'],
+            'tasks': obj_json['tasks'],
+            'stage_directory': obj_json['stage_directory'],
             'extend': extend,
         }
 
@@ -637,11 +644,11 @@ class Workflow(object):
             check_integrity=check_integrity,
         )
 
-        workflow.profile_str = obj_json['_profile_str']
-        workflow._human_id = obj_json['_human_id']
-        workflow._id = obj_json['_id']
-        workflow._matflow_version = obj_json['_matflow_version']
-        workflow._version = obj_json['_version']
+        workflow.profile_str = obj_json['profile_str']
+        workflow._human_id = obj_json['human_id']
+        workflow._id = obj_json['id']
+        workflow._matflow_version = obj_json['matflow_version']
+        workflow._version = obj_json['version']
 
         return workflow
 

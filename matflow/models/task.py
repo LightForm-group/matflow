@@ -385,6 +385,10 @@ class Task(object):
     def __len__(self):
         return self.local_inputs['length']
 
+    def as_dict(self):
+        'Return attributes dict with preceding underscores removed.'
+        return {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
+
     def generate_id(self):
         self.id = secrets.token_hex(10)
 
