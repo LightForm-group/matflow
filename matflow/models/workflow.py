@@ -240,8 +240,12 @@ class Workflow(object):
         if element_idx > (num_elements - 1):
             msg = f'Task at index {task_idx} has only {num_elements} elements.'
             raise ValueError(msg)
-        element_idx_fmt = str(zeropad(element_idx, num_elements - 1))
-        element_path = self.get_task_path(task_idx).joinpath(element_idx_fmt)
+
+        element_path = self.get_task_path(task_idx)
+        if num_elements > 1:
+            element_idx_fmt = str(zeropad(element_idx, num_elements - 1))
+            element_path = element_path.joinpath(element_idx_fmt)
+
         return element_path
 
     @requires_path_exists
@@ -268,7 +272,7 @@ class Workflow(object):
             num_elems = elems_idx['num_elements']
             # Generate element directories:
             for i in range(num_elems):
-                self.get_element_path(task.task_idx, i).mkdir()
+                self.get_element_path(task.task_idx, i).mkdir(exist_ok=True)
 
     @requires_path_exists
     def write_hpcflow_workflow(self):
@@ -390,10 +394,11 @@ class Workflow(object):
             ])
 
             # Add variable for the task directories:
+            elem_dir_regex = '/[0-9]+$' if elems_idx['num_elements'] > 1 else ''
             variables.update({
                 '{}_dirs'.format(task_path_rel): {
                     'file_regex': {
-                        'pattern': '({}/[0-9]+$)'.format(task_path_rel),
+                        'pattern': f'({task_path_rel}{elem_dir_regex})',
                         'is_dir': True,
                         'group': 0,
                     },
