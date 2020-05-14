@@ -1,4 +1,4 @@
-"""`matflow.jsonable.py`"""
+"""`matflow.hicklable.py`"""
 
 import numpy as np
 
@@ -16,18 +16,19 @@ NATIVE_TYPES = (
 )
 
 
-def to_jsonable(obj, attr=None, parent=None, idx=None, exclude=None):
+def to_hicklable(obj, attr=None, parent=None, idx=None, exclude=None):
+    'Get an object representation that can be saved to an HDF5 file using `hickle`.'
 
     if isinstance(obj, list):
         obj_json = []
         for item_idx, item in enumerate(obj):
-            obj_json.append(to_jsonable(item, attr, obj, item_idx, exclude))
+            obj_json.append(to_hicklable(item, attr, obj, item_idx, exclude))
 
     elif isinstance(obj, dict):
         obj_json = {}
         for dct_key, dct_val in obj.items():
             obj_json.update(
-                {dct_key: to_jsonable(dct_val, attr, obj, dct_key, exclude)})
+                {dct_key: to_hicklable(dct_val, attr, obj, dct_key, exclude)})
 
     elif isinstance(obj, set):
         msg = ('`set` data type is not yet supported by JSONable.')
@@ -38,8 +39,8 @@ def to_jsonable(obj, attr=None, parent=None, idx=None, exclude=None):
 
     else:
         # We have an arbitrary object:
-        if hasattr(obj, 'to_jsonable'):
-            obj_json = obj.to_jsonable()
+        if hasattr(obj, 'to_hicklable'):
+            obj_json = obj.to_hicklable()
         else:
 
             all_attrs = {}
@@ -56,7 +57,7 @@ def to_jsonable(obj, attr=None, parent=None, idx=None, exclude=None):
                 if attr in (exclude or []):
                     continue
                 obj_json.update({
-                    attr: to_jsonable(value, attr, obj, exclude)
+                    attr: to_hicklable(value, attr, obj, exclude)
                 })
 
     return obj_json

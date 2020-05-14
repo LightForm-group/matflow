@@ -32,7 +32,7 @@ from matflow.errors import (
     WorkflowPersistenceError,
     TaskElementExecutionError,
 )
-from matflow.jsonable import to_jsonable
+from matflow.hicklable import to_hicklable
 from matflow.utils import parse_times, zeropad
 from matflow.models.command import DEFAULT_FORMATTERS
 from matflow.models.construction import init_tasks
@@ -518,7 +518,7 @@ class Workflow(object):
 
         err_msg = None
         try:
-            obj_json = to_jsonable(self, exclude=['_is_from_file'])
+            obj_json = to_hicklable(self, exclude=['_is_from_file'])
             try:
                 with path.open('w') as handle:
                     hickle.dump(obj_json, handle)
