@@ -234,3 +234,15 @@ def to_sub_list(lst, sub_list_len):
     out = [lst[(i * sub_list_len):((i * sub_list_len) + sub_list_len)]
            for i in range(len(lst) // sub_list_len)]
     return out
+
+
+def datetime_to_dict(dt):
+    return {
+        'year': dt.year,
+        'month': dt.month,
+        'day': dt.day,
+        'hour': dt.hour,
+        'minute': dt.minute,
+        'second': dt.second,
+        'microsecond': dt.microsecond,
+    }

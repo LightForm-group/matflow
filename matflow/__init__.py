@@ -69,6 +69,7 @@ TASK_OUTPUT_MAP = {}
 TASK_FUNC_MAP = {}
 COMMAND_LINE_ARG_MAP = {}
 TASK_OUTPUT_FILES_MAP = {}
+SOFTWARE_VERSIONS = {}
 
 
 def input_mapper(input_file, task, method, software):
@@ -135,6 +136,22 @@ def cli_format_mapper(input_name, task, method, software):
         COMMAND_LINE_ARG_MAP[key].update({input_name: func_wrap})
         return func_wrap
     return _cli_format_mapper
+
+
+def software_versions(software):
+    """Function decorator to register an extension function as the function that returns
+    a dict of pertinent software versions for that extension."""
+    def _software_versions(func):
+        @functools.wraps(func)
+        def func_wrap(*args, **kwargs):
+            return func(*args, **kwargs)
+        key = software
+        if key in SOFTWARE_VERSIONS:
+            msg = (f'Software "{software}" has already registered a `software_versions` '
+                   f'function.')
+            raise MatflowExtensionError(msg)
+        SOFTWARE_VERSIONS[key] = func_wrap
+    return _software_versions
 
 
 def register_output_file(file_reference, file_name, task, method, software):

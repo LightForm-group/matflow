@@ -8,6 +8,8 @@ import copy
 import functools
 import secrets
 import pickle
+from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from pprint import pprint
 from subprocess import run, PIPE
@@ -24,6 +26,7 @@ from matflow import (
     COMMAND_LINE_ARG_MAP,
     TASK_OUTPUT_FILES_MAP,
     TASK_FUNC_MAP,
+    SOFTWARE_VERSIONS,
     __version__,
 )
 from matflow.errors import (
@@ -33,7 +36,7 @@ from matflow.errors import (
     TaskElementExecutionError,
 )
 from matflow.hicklable import to_hicklable
-from matflow.utils import parse_times, zeropad
+from matflow.utils import parse_times, zeropad, datetime_to_dict
 from matflow.models.command import DEFAULT_FORMATTERS
 from matflow.models.construction import init_tasks
 
@@ -58,25 +61,12 @@ def requires_path_exists(func):
     return func_wrap
 
 
-def increments_version(func):
-    """Workflow method decorator to increment the workflow version when a method is
-    successfully invoked."""
-    @functools.wraps(func)
-    def func_wrap(self, *args, **kwargs):
-        ret = func(self, *args, **kwargs)
-        self._version += 1
-        return ret
-    return func_wrap
+class WorkflowAction(Enum):
 
-
-def save_workflow(func):
-    'Workflow method decorator to save the workflow after completion of the method.'
-    @functools.wraps(func)
-    def func_wrap(self, *args, **kwargs):
-        ret = func(self, *args, **kwargs)
-        self.save()
-        return ret
-    return func_wrap
+    generate = 1
+    submit = 2
+    prepare_task = 3
+    process_task = 4
 
 
 class Workflow(object):
@@ -92,8 +82,7 @@ class Workflow(object):
         '_stage_directory',
         '_tasks',
         '_elements_idx',
-        '_matflow_version',
-        '_version',
+        '_history',
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extend=None,
@@ -114,11 +103,9 @@ class Workflow(object):
         self._tasks = tasks
         self._elements_idx = elements_idx
 
-        self._matflow_version = None
-        self._version = None
         if not self.is_from_file:
-            self._matflow_version = __version__
-            self._version = 0
+            self._history = []
+            self._append_history(WorkflowAction.generate)
 
     def set_ids(self):
         if self._id:
@@ -130,6 +117,30 @@ class Workflow(object):
 
     def __len__(self):
         return len(self.tasks)
+
+    def _append_history(self, action, **kwargs):
+        'Append a new history event.'
+
+        if action not in WorkflowAction:
+            raise TypeError('`action` must be a `WorkflowAction`.')
+
+        new = {
+            'action': action,
+            'matflow_version': __version__,
+            'timestamp': datetime.now(),
+            'action_info': kwargs,
+        }
+        self._history.append(new)
+        if action is not WorkflowAction.generate:
+            self.save()
+
+    @property
+    def version(self):
+        return len(self._history)
+
+    @property
+    def history(self):
+        return tuple(self._history)
 
     @property
     def id(self):
@@ -214,14 +225,6 @@ class Workflow(object):
     def hdf5_path(self):
         return self.path.joinpath(f'workflow_v{self.version:03}.hdf5')
 
-    @property
-    def matflow_version(self):
-        return self._matflow_version
-
-    @property
-    def version(self):
-        return self._version
-
     @requires_path_exists
     def get_task_path(self, task_idx):
         'Get the path to a task directory.'
@@ -255,7 +258,6 @@ class Workflow(object):
         out = element_path.joinpath(f'task_output_{task.id}_element_{element_idx}.pickle')
         return out
 
-    @increments_version
     def write_directories(self):
         'Generate task and element directories.'
 
@@ -371,6 +373,7 @@ class Workflow(object):
                     'commands': [
                         'matflow prepare-task --task-idx={}'.format(task.task_idx)
                     ],
+                    'sources': sources,
                     'stats': False,
                     'scheduler_options': process_so,
                 },
@@ -428,7 +431,14 @@ class Workflow(object):
 
     def as_dict(self):
         'Return attributes dict with preceding underscores removed.'
-        return {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
+        out = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
+
+        # Deal with the WorkflowAction enums and datetimes in history action values:
+        for i in out['history']:
+            i['action'] = (i['action'].name, i['action'].value)
+            i['timestamp'] = datetime_to_dict(i['timestamp'])
+
+        return out
 
     @classmethod
     def get_existing_workflow_files(cls, directory):
@@ -625,8 +635,8 @@ class Workflow(object):
         try:
             with path.open() as handle:
                 obj_json = hickle.load(handle)
-        except:
-            msg = f'Could not load workflow file with `hickle`: "{path}".'
+        except Exception as err:
+            msg = f'Could not load workflow file with `hickle`: "{path}": {err}.'
             raise WorkflowPersistenceError(msg)
 
         extend = None
@@ -652,13 +662,14 @@ class Workflow(object):
         workflow.profile_str = obj_json['profile_str']
         workflow._human_id = obj_json['human_id']
         workflow._id = obj_json['id']
-        workflow._matflow_version = obj_json['matflow_version']
-        workflow._version = obj_json['version']
+
+        for i in obj_json['history']:
+            i['action'] = WorkflowAction(i['action'][1])
+            i['timestamp'] = datetime(**i['timestamp'])
+        workflow._history = obj_json['history']
 
         return workflow
 
-    @save_workflow
-    @increments_version
     @requires_path_exists
     def prepare_task(self, task_idx):
         'Prepare inputs and run input maps.'
@@ -735,6 +746,13 @@ class Workflow(object):
 
         task.files = files
 
+        # Get software versions:
+        software_versions = SOFTWARE_VERSIONS[task.software]()
+        self._append_history(
+            WorkflowAction.prepare_task,
+            software_versions=software_versions,
+        )
+
     @requires_path_exists
     def run_python_task(self, task_idx, element_idx):
         'Execute a task that is to be run directly in Python (via the function mapper).'
@@ -758,8 +776,6 @@ class Workflow(object):
         with outputs_path.open('wb') as handle:
             pickle.dump(outputs, handle)
 
-    @save_workflow
-    @increments_version
     @requires_path_exists
     def process_task(self, task_idx):
         'Process outputs from an executed task: run output map and save outputs.'
@@ -827,3 +843,4 @@ class Workflow(object):
                         outputs[elem_idx].update({output_name: handle.read()})
 
         task.outputs = outputs
+        self._append_history(WorkflowAction.process_task)
