@@ -88,7 +88,7 @@ def process_task(task_idx, directory):
 
 
 def run_python_task(task_idx, element_idx, directory):
-    'Process a completed task by running the output map.'
+    'Run a (commandless) Python task.'
     workflow = load_workflow(directory)
     workflow.run_python_task(task_idx, element_idx)
 
