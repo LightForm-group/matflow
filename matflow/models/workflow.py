@@ -64,7 +64,6 @@ def requires_path_exists(func):
 class WorkflowAction(Enum):
 
     generate = 1
-    submit = 2
     prepare_task = 3
     process_task = 4
 
