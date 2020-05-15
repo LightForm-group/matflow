@@ -128,9 +128,6 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
             if not func:
                 schema_is_valid.update({key: False})
                 continue
-                # msg = (f'{key_msg} No matching extension function found for the '
-                #        f'function map.')
-                # raise UnsatisfiedSchemaError(msg)
 
             try:
                 validate_function_args(

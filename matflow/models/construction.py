@@ -15,7 +15,8 @@ from warnings import warn
 
 import numpy as np
 
-from matflow import SOFTWARE, TASK_SCHEMAS, SCHEMA_IS_VALID
+from matflow import SCHEMA_IS_VALID
+from matflow.config import Config
 from matflow.errors import (
     IncompatibleWorkflow,
     MissingSoftware,
@@ -924,7 +925,13 @@ def init_tasks(task_lst, is_from_file, check_integrity=True):
 
     # Validate and add `schema` and `local_inputs` to each task:
     task_lst = [
-        validate_task_dict(i, is_from_file, SOFTWARE, TASK_SCHEMAS, check_integrity)
+        validate_task_dict(
+            i,
+            is_from_file,
+            Config.get('software'),
+            Config.get('task_schemas'),
+            check_integrity
+        )
         for i in task_lst
     ]
 

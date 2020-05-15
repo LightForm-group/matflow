@@ -12,9 +12,12 @@ from pprint import pprint
 import pyperclip
 from ruamel.yaml import YAML
 
-from matflow import CONFIG_PATH
+from matflow.config import Config
+from matflow.extensions import load_extensions
 from matflow.profile import parse_workflow_profile
 from matflow.models.workflow import Workflow
+
+from matflow import TASK_INPUT_MAP
 
 
 def make_workflow(profile_path, directory=None, write_dirs=True):
@@ -33,6 +36,9 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
     workflow : Workflow
 
     """
+
+    Config.set_config()
+    load_extensions()
 
     profile_path = Path(profile_path)
     workflow_dict = parse_workflow_profile(profile_path)
@@ -68,7 +74,7 @@ def submit(profile_path, directory=None):
 
 
 def load_workflow(directory, full_path=False):
-
+    Config.set_config()
     path = Path(directory or '').resolve()
     workflow = Workflow.load(path, full_path)
 
@@ -77,35 +83,34 @@ def load_workflow(directory, full_path=False):
 
 def prepare_task(task_idx, directory):
     'Prepare a task for execution by setting inputs and running input maps.'
+    load_extensions()
     workflow = load_workflow(directory)
     workflow.prepare_task(task_idx)
 
 
 def process_task(task_idx, directory):
     'Process a completed task by running the output map.'
+    load_extensions()
     workflow = load_workflow(directory)
     workflow.process_task(task_idx)
 
 
 def run_python_task(task_idx, element_idx, directory):
     'Run a (commandless) Python task.'
+    load_extensions()
     workflow = load_workflow(directory)
     workflow.run_python_task(task_idx, element_idx)
 
 
 def append_schema_source(schema_source_path):
     'Add a task schema source file to the end of the schema source list.'
-    yaml = YAML(typ='rt')
-    config = yaml.load(CONFIG_PATH)
-    config['task_schema_sources'].append(str(schema_source_path))
-    yaml.dump(config, CONFIG_PATH)
+    Config.append_schema_source(schema_source_path)
 
 
 def prepend_schema_source(schema_source_path):
     'Add a task schema source file to the front of the schema source list.'
-    yaml = YAML(typ='rt')
-    config = yaml.load(CONFIG_PATH)
-    config['task_schema_sources'] = (
-        str(schema_source_path) + config['task_schema_sources']
-    )
-    yaml.dump(config, CONFIG_PATH)
+    Config.prepend_schema_source(schema_source_path)
+
+
+def validate():
+    load_extensions()

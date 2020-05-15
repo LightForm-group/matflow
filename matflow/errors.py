@@ -60,3 +60,7 @@ class UnsatisfiedSchemaError(Exception):
 
 class TaskElementExecutionError(Exception):
     'For when the execution of an task element fails.'
+
+
+class ConfigurationError(Exception):
+    'For malformed configuration files.'

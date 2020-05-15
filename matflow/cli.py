@@ -73,5 +73,11 @@ def prepend_schema_source(schema_source_path):
     api.prepend_schema_source(schema_source_path)
 
 
+@cli.command()
+def validate():
+    'Load and validate task schemas against available extensions.'
+    api.validate()
+
+
 if __name__ == '__main__':
     cli()
