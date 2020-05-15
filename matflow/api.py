@@ -10,7 +10,6 @@ from pathlib import Path
 from pprint import pprint
 
 import pyperclip
-from hpcflow import api as hf_api
 from ruamel.yaml import YAML
 
 from matflow import CONFIG_PATH
@@ -62,13 +61,10 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
     return workflow
 
 
-def go(profile_path, directory=None):
+def submit(profile_path, directory=None):
     'Generate and submit a new workflow from a profile file.'
-
     workflow = make_workflow(profile_path, directory=directory, write_dirs=True)
-    hf_path = workflow.path.joinpath('1.hf.yml')
-    hf_wid = hf_api.make_workflow(dir_path=workflow.path, profile_list=[hf_path])
-    hf_api.submit_workflow(workflow_id=hf_wid, dir_path=workflow.path)
+    workflow.submit()
 
 
 def load_workflow(directory, full_path=False):

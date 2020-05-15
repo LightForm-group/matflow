@@ -16,9 +16,9 @@ from subprocess import run, PIPE
 from warnings import warn
 
 import hickle
+import hpcflow
 import numpy as np
 from ruamel.yaml import YAML
-from hpcflow.api import get_stats as hpcflow_get_stats
 
 from matflow import (
     TASK_INPUT_MAP,
@@ -422,6 +422,11 @@ class Workflow(object):
             yaml.indent(mapping=2, sequence=4, offset=2)
             yaml.dump(hf_data, handle)
 
+    def submit(self):
+        hf_path = self.path.joinpath('1.hf.yml')
+        hf_wid = hpcflow.api.make_workflow(dir_path=self.path, profile_list=[hf_path])
+        hpcflow.api.submit_workflow(workflow_id=hf_wid, dir_path=self.path)
+
     def get_extended_workflows(self):
         if self.extend_paths:
             return [Workflow.load(i, full_path=True) for i in self.extend_paths]
@@ -788,7 +793,8 @@ class Workflow(object):
         out_map_lookup = TASK_OUTPUT_MAP.get(schema_id)
 
         # Save hpcflow task stats
-        hf_stats_all = hpcflow_get_stats(self.path, jsonable=True, datetime_dicts=True)
+        hf_stats_all = hpcflow.api.get_stats(
+            self.path, jsonable=True, datetime_dicts=True)
 
         workflow_idx = 0
         submission_idx = 0
