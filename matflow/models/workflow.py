@@ -64,6 +64,7 @@ def requires_path_exists(func):
 class WorkflowAction(Enum):
 
     generate = 1
+    submit = 2
     prepare_task = 3
     process_task = 4
 
@@ -422,10 +423,12 @@ class Workflow(object):
             yaml.indent(mapping=2, sequence=4, offset=2)
             yaml.dump(hf_data, handle)
 
+    @requires_path_exists
     def submit(self):
         hf_path = self.path.joinpath('1.hf.yml')
-        hf_wid = hpcflow.api.make_workflow(dir_path=self.path, profile_list=[hf_path])
-        hpcflow.api.submit_workflow(workflow_id=hf_wid, dir_path=self.path)
+        hf_wid = hpcflow.make_workflow(dir_path=self.path, profile_list=[hf_path])
+        self._append_history(WorkflowAction.submit, hpcflow_version=hpcflow.__version__)
+        hpcflow.submit_workflow(workflow_id=hf_wid, dir_path=self.path)
 
     def get_extended_workflows(self):
         if self.extend_paths:
@@ -438,9 +441,13 @@ class Workflow(object):
         out = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
 
         # Deal with the WorkflowAction enums and datetimes in history action values:
+        history = []
         for i in out['history']:
-            i['action'] = (i['action'].name, i['action'].value)
-            i['timestamp'] = datetime_to_dict(i['timestamp'])
+            hist = copy.deepcopy(i)
+            hist['action'] = (hist['action'].name, hist['action'].value)
+            hist['timestamp'] = datetime_to_dict(hist['timestamp'])
+            history.append(hist)
+        out['history'] = history
 
         return out
 
@@ -793,8 +800,7 @@ class Workflow(object):
         out_map_lookup = TASK_OUTPUT_MAP.get(schema_id)
 
         # Save hpcflow task stats
-        hf_stats_all = hpcflow.api.get_stats(
-            self.path, jsonable=True, datetime_dicts=True)
+        hf_stats_all = hpcflow.get_stats(self.path, jsonable=True, datetime_dicts=True)
 
         workflow_idx = 0
         submission_idx = 0
