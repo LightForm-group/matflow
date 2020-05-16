@@ -67,7 +67,7 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
     return workflow
 
 
-def submit(profile_path, directory=None):
+def submit_workflow(profile_path, directory=None):
     'Generate and submit a new workflow from a profile file.'
     workflow = make_workflow(profile_path, directory=directory, write_dirs=True)
     workflow.submit()

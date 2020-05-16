@@ -33,7 +33,7 @@ def make(profile, directory=None):
 def go(profile, directory=None):
     """Generate and submit a new Workflow."""
     print('matflow.cli.go', flush=True)
-    api.submit(profile_path=profile, directory=directory)
+    api.submit_workflow(profile_path=profile, directory=directory)
 
 
 @cli.command()
