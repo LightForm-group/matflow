@@ -218,6 +218,10 @@ class Workflow(object):
     def hdf5_path(self):
         return self.path.joinpath(f'workflow_v{self.version:03}.hdf5')
 
+    def get_task_idx_padded(self, task_idx):
+        'Get a task index, zero-padded according to the number of tasks.'
+        return zeropad(task_idx, len(self) - 1)
+
     @requires_path_exists
     def get_task_path(self, task_idx):
         'Get the path to a task directory.'
@@ -225,7 +229,7 @@ class Workflow(object):
             msg = f'Workflow has only {len(self)} tasks.'
             raise ValueError(msg)
         task = self.tasks[task_idx]
-        task_idx_fmt = str(zeropad(task_idx, len(self) - 1))
+        task_idx_fmt = self.get_task_idx_padded(task_idx)
         task_path = self.path.joinpath(f'task_{task_idx_fmt}_{task.name}')
         return task_path
 
@@ -359,6 +363,7 @@ class Workflow(object):
             # (SGE specific)
             process_so = {'l': 'short'}
             environment = task.software_instance.get('environment', [])
+            task_idx_fmt = self.get_task_idx_padded(task.task_idx)
             command_groups.extend([
                 {
                     'directory': '.',
@@ -369,6 +374,7 @@ class Workflow(object):
                     'environment': environment,
                     'stats': False,
                     'scheduler_options': process_so,
+                    'name': f't{task_idx_fmt}_pre',
                 },
                 {
                     'directory': '<<{}_dirs>>'.format(task_path_rel),
@@ -377,6 +383,7 @@ class Workflow(object):
                     'environment': environment,
                     'stats': task.stats,
                     'scheduler_options': scheduler_opts,
+                    'name': f'task_{task_idx_fmt}',
                 },
                 {
                     'directory': '.',
@@ -386,6 +393,7 @@ class Workflow(object):
                     ],
                     'stats': False,
                     'scheduler_options': process_so,
+                    'name': f't{task_idx_fmt}_post',
                 },
             ])
 
