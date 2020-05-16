@@ -131,6 +131,7 @@ class Config(object):
         print('OK!')
 
         Config.__conf['config_dir'] = config_dir
+        Config.__conf['hpcflow_config_dir'] = config_dir.joinpath('.hpcflow')
         Config.__conf['software'] = SOFTWARE
         Config.__conf['task_schemas'] = TASK_SCHEMAS
 

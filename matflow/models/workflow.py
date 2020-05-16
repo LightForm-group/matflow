@@ -419,9 +419,17 @@ class Workflow(object):
     @requires_path_exists
     def submit(self):
         hf_path = self.path.joinpath('1.hf.yml')
-        hf_wid = hpcflow.make_workflow(dir_path=self.path, profile_list=[hf_path])
+        hf_wid = hpcflow.make_workflow(
+            dir_path=self.path,
+            profile_list=[hf_path],
+            config_dir=Config.get('hpcflow_config_dir'),
+        )
         self._append_history(WorkflowAction.submit, hpcflow_version=hpcflow.__version__)
-        hpcflow.submit_workflow(workflow_id=hf_wid, dir_path=self.path)
+        hpcflow.submit_workflow(
+            workflow_id=hf_wid,
+            dir_path=self.path,
+            config_dir=Config.get('hpcflow_config_dir'),
+        )
 
     def get_extended_workflows(self):
         if self.extend_paths:
@@ -794,7 +802,12 @@ class Workflow(object):
         out_map_lookup = Config.get('output_maps').get(schema_id)
 
         # Save hpcflow task stats
-        hf_stats_all = hpcflow.get_stats(self.path, jsonable=True, datetime_dicts=True)
+        hf_stats_all = hpcflow.get_stats(
+            self.path,
+            jsonable=True,
+            datetime_dicts=True,
+            config_dir=Config.get('hpcflow_config_dir'),
+        )
 
         workflow_idx = 0
         submission_idx = 0
