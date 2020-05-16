@@ -11,6 +11,7 @@ from pprint import pprint
 
 import pyperclip
 from ruamel.yaml import YAML
+from hpcflow import kill as hpcflow_kill
 
 from matflow.config import Config
 from matflow.extensions import load_extensions
@@ -111,3 +112,8 @@ def prepend_schema_source(schema_source_path):
 
 def validate():
     load_extensions()
+
+
+def kill(directory):
+    Config.set_config()
+    hpcflow_kill(dir_path=directory, config_dir=Config.get('hpcflow_config_dir'))

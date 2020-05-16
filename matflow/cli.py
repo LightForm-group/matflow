@@ -79,5 +79,12 @@ def validate():
     api.validate()
 
 
+@cli.command()
+@click.argument('directory', type=click.Path(exists=True))
+def kill(directory):
+    'Kill all pending and executing tasks.'
+    api.kill(directory)
+
+
 if __name__ == '__main__':
     cli()
