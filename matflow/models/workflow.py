@@ -358,7 +358,7 @@ class Workflow(object):
 
             # (SGE specific)
             process_so = {'l': 'short'}
-            sources = task.software_instance.get('sources', [])
+            environment = task.software_instance.get('environment', [])
             command_groups.extend([
                 {
                     'directory': '.',
@@ -366,7 +366,7 @@ class Workflow(object):
                     'commands': [
                         'matflow prepare-task --task-idx={}'.format(task.task_idx)
                     ],
-                    'sources': sources,
+                    'environment': environment,
                     'stats': False,
                     'scheduler_options': process_so,
                 },
@@ -374,7 +374,7 @@ class Workflow(object):
                     'directory': '<<{}_dirs>>'.format(task_path_rel),
                     'nesting': 'hold',
                     'commands': fmt_commands,
-                    'sources': sources,
+                    'environment': environment,
                     'stats': task.stats,
                     'scheduler_options': scheduler_opts,
                 },
