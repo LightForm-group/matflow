@@ -85,6 +85,12 @@ class CommandGroup(object):
             if command.stdout:
                 cmd_fmt += ' > {}'.format(command.stdout)
 
+            if command.stderr:
+                if command.stderr == command.stdout:
+                    cmd_fmt += ' 2>&1'
+                else:
+                    cmd_fmt += ' 2> {}'.format(command.stderr)
+
             fmt_commands.append(cmd_fmt)
 
         return (fmt_commands, var_names)
@@ -93,13 +99,15 @@ class CommandGroup(object):
 class Command(object):
     'Class to represent a command to be executed by a shell.'
 
-    def __init__(self, command, options=None, parameters=None, stdin=None, stdout=None):
+    def __init__(self, command, options=None, parameters=None, stdin=None, stdout=None,
+                 stderr=None):
 
         self.command = command
         self.options = options or []
         self.parameters = parameters or []
         self.stdin = stdin
         self.stdout = stdout
+        self.stderr = stderr
 
     def __repr__(self):
         out = f'{self.__class__.__name__}({self.command!r}'
@@ -111,5 +119,7 @@ class Command(object):
             out += f', stdin={self.stdin!r}'
         if self.stdout:
             out += f', stdout={self.stdout!r}'
+        if self.stderr:
+            out += f', stderr={self.stderr!r}'
         out += ')'
         return out
