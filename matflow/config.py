@@ -14,7 +14,7 @@ class Config(object):
 
     __conf = {}
 
-    is_set = False
+    _is_set = False
 
     @staticmethod
     def append_schema_source(schema_source_path, config_dir=None):
@@ -40,7 +40,7 @@ class Config(object):
         else:
             config_dir = Path(config_dir)
 
-        if Config.is_set:
+        if Config._is_set:
             if config_dir != Config.get('config_dir'):
                 warn(f'Config is already set, but `config_dir` changed from '
                      f'"{Config.get("config_dir")}" to "{config_dir}".')
@@ -86,7 +86,7 @@ class Config(object):
 
         config_dir = Config.resolve_config_dir(config_dir)
 
-        if Config.is_set:
+        if Config._is_set:
             return
 
         config_dat, _ = Config.get_config_file(config_dir)
@@ -131,10 +131,10 @@ class Config(object):
         Config.__conf['software'] = SOFTWARE
         Config.__conf['task_schemas'] = TASK_SCHEMAS
 
-        Config.is_set = True
+        Config._is_set = True
 
     @staticmethod
     def get(name):
-        if not Config.is_set:
+        if not Config._is_set:
             raise ConfigurationError('Configuration is not yet set.')
         return Config.__conf[name]
