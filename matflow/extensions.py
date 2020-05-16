@@ -2,66 +2,73 @@ import functools
 import pkg_resources
 import warnings
 
-from matflow import (
-    TASK_INPUT_MAP,
-    TASK_OUTPUT_MAP,
-    TASK_FUNC_MAP,
-    COMMAND_LINE_ARG_MAP,
-    TASK_OUTPUT_FILES_MAP,
-    SOFTWARE_VERSIONS,
-    EXTENSIONS,
-    SCHEMA_IS_VALID,
-)
 from matflow.config import Config
-from matflow.errors import MatflowExtensionError
-from matflow.validate import validate_task_schemas
+from matflow.errors import MatflowExtensionError, ConfigurationError
+from matflow.validation import validate_task_schemas
 
 
 def load_extensions():
 
-    Config.set_config()
-    # Config.unlock_extensions()
+    print('loading extensions.')
+
+    Config.set_config(raise_on_set=True)
+    Config.unlock_extensions()
 
     extensions_entries = pkg_resources.iter_entry_points('matflow.extension')
     if extensions_entries:
         print('Loading extensions...')
-        indent = '  '
         for entry_point in extensions_entries:
+
             loaded = entry_point.load()
+            unload = False
+
             if not hasattr(loaded, '__version__'):
-                warnings.warn(f'Matflow extension {entry_point.module_name} has no '
-                              f'`__version__` attribute. This extension will not be loaded.')
+                warnings.warn(f'Matflow extension "{entry_point.module_name}" has no '
+                              f'`__version__` attribute. This extension will not be '
+                              f'loaded.')
+                unload = True
+
+            if Config.get('software_versions').get(loaded.SOFTWARE) is None:
+                msg = (f'Matflow extension "{entry_point.module_name}" does not register '
+                       f'a function for getting software versions. This extension will '
+                       f'not be loaded.')
+                warnings.warn(msg)
+                unload = True
+
+            if unload:
+                Config.unload_extension(entry_point.name)
                 continue
-            EXTENSIONS.update({
-                entry_point.name: {
-                    'module_name': entry_point.module_name,
-                    'version': loaded.__version__,
-                }
-            })
-            print(f'{indent}"{entry_point.name}" from {entry_point.module_name} '
-                  f'(version {loaded.__version__})', flush=True)
+
+            Config.set_extension_info(
+                entry_point.name,
+                {'module_name': entry_point.module_name, 'version': loaded.__version__},
+            )
+            print(f'  "{entry_point.name}" (software: "{loaded.SOFTWARE}") from '
+                  f'{entry_point.module_name} (version {loaded.__version__})', flush=True)
 
         # Validate task schemas against loaded extensions:
         print('Validating task schemas against loaded extensions...', end='')
         try:
-            SCHEMA_IS_VALID.update(
+            Config.set_schema_validities(
                 validate_task_schemas(
                     Config.get('task_schemas'),
-                    TASK_INPUT_MAP,
-                    TASK_OUTPUT_MAP,
-                    TASK_FUNC_MAP,
+                    Config.get('input_maps'),
+                    Config.get('output_maps'),
+                    Config.get('func_maps'),
                 )
             )
         except Exception as err:
             print('Failed.', flush=True)
             raise err
-        num_valid = sum(SCHEMA_IS_VALID.values())
-        print(f'OK! {num_valid}/{len(SCHEMA_IS_VALID)} schemas are valid.', flush=True)
+
+        num_valid = sum(Config.get('schema_validity').values())
+        num_total = len(Config.get('schema_validity'))
+        print(f'OK! {num_valid}/{num_total} schemas are valid.', flush=True)
 
     else:
         print('No extensions found.')
 
-    # Config.lock_extensions()
+    Config.lock_extensions()
 
 
 def input_mapper(input_file, task, method, software):
@@ -71,12 +78,7 @@ def input_mapper(input_file, task, method, software):
         def func_wrap(*args, **kwargs):
             return func(*args, **kwargs)
         key = (task, method, software)
-        if key not in TASK_INPUT_MAP:
-            TASK_INPUT_MAP.update({key: {}})
-        if input_file in TASK_INPUT_MAP[key]:
-            msg = (f'Input file name "{input_file}" already exists in the input map.')
-            raise MatflowExtensionError(msg)
-        TASK_INPUT_MAP[key].update({input_file: func_wrap})
+        Config.set_input_map(key, input_file, func_wrap)
         return func_wrap
     return _input_mapper
 
@@ -88,12 +90,7 @@ def output_mapper(output_name, task, method, software):
         def func_wrap(*args, **kwargs):
             return func(*args, **kwargs)
         key = (task, method, software)
-        if key not in TASK_OUTPUT_MAP:
-            TASK_OUTPUT_MAP.update({key: {}})
-        if output_name in TASK_OUTPUT_MAP[key]:
-            msg = (f'Output name "{output_name}" already exists in the output map.')
-            raise MatflowExtensionError(msg)
-        TASK_OUTPUT_MAP[key].update({output_name: func_wrap})
+        Config.set_output_map(key, output_name, func_wrap)
         return func_wrap
     return _output_mapper
 
@@ -105,10 +102,7 @@ def func_mapper(task, method, software):
         def func_wrap(*args, **kwargs):
             return func(*args, **kwargs)
         key = (task, method, software)
-        if key in TASK_FUNC_MAP:
-            msg = (f'Function map "{key}" already exists in the function map.')
-            raise MatflowExtensionError(msg)
-        TASK_FUNC_MAP.update({key: func_wrap})
+        Config.set_func_map(key, func_wrap)
         return func_wrap
     return _func_mapper
 
@@ -120,12 +114,7 @@ def cli_format_mapper(input_name, task, method, software):
         def func_wrap(*args, **kwargs):
             return func(*args, **kwargs)
         key = (task, method, software)
-        if key not in COMMAND_LINE_ARG_MAP:
-            COMMAND_LINE_ARG_MAP.update({key: {}})
-        if input_name in COMMAND_LINE_ARG_MAP[key]:
-            msg = (f'Input name "{input_name}" already exists in the CLI formatter map.')
-            raise MatflowExtensionError(msg)
-        COMMAND_LINE_ARG_MAP[key].update({input_name: func_wrap})
+        Config.set_CLI_arg_map(key, input_name, func_wrap)
         return func_wrap
     return _cli_format_mapper
 
@@ -137,20 +126,11 @@ def software_versions(software):
         @functools.wraps(func)
         def func_wrap(*args, **kwargs):
             return func(*args, **kwargs)
-        if software in SOFTWARE_VERSIONS:
-            msg = (f'Software "{software}" has already registered a `software_versions` '
-                   f'function.')
-            raise MatflowExtensionError(msg)
-        SOFTWARE_VERSIONS[software] = func_wrap
+        Config.set_software_version_func(software, func_wrap)
+
     return _software_versions
 
 
 def register_output_file(file_reference, file_name, task, method, software):
     key = (task, method, software)
-    if key not in TASK_OUTPUT_FILES_MAP:
-        TASK_OUTPUT_FILES_MAP.update({key: {}})
-    file_ref_full = '__file__' + file_reference
-    if file_ref_full in TASK_OUTPUT_FILES_MAP[key]:
-        msg = (f'File name "{file_name}" already exists in the output files map.')
-        raise MatflowExtensionError(msg)
-    TASK_OUTPUT_FILES_MAP[key].update({file_ref_full: file_name})
+    Config.set_output_file_map(key, file_reference, file_name)

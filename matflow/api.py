@@ -17,8 +17,6 @@ from matflow.extensions import load_extensions
 from matflow.profile import parse_workflow_profile
 from matflow.models.workflow import Workflow
 
-from matflow import TASK_INPUT_MAP
-
 
 def make_workflow(profile_path, directory=None, write_dirs=True):
     """Generate a new Workflow from a profile file.
@@ -37,7 +35,6 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
 
     """
 
-    Config.set_config()
     load_extensions()
 
     profile_path = Path(profile_path)

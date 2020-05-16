@@ -20,15 +20,8 @@ import hpcflow
 import numpy as np
 from ruamel.yaml import YAML
 
-from matflow import (
-    TASK_INPUT_MAP,
-    TASK_OUTPUT_MAP,
-    COMMAND_LINE_ARG_MAP,
-    TASK_OUTPUT_FILES_MAP,
-    TASK_FUNC_MAP,
-    SOFTWARE_VERSIONS,
-    __version__,
-)
+from matflow import __version__
+from matflow.config import Config
 from matflow.errors import (
     IncompatibleTaskNesting,
     MissingMergePriority,
@@ -308,7 +301,7 @@ class Workflow(object):
                         values = [local_in['vals'][i] for i in local_in['vals_idx']]
 
                         # Format values:
-                        fmt_func_scope = COMMAND_LINE_ARG_MAP.get((
+                        fmt_func_scope = Config.get('CLI_arg_maps').get((
                             task.schema.name,
                             task.schema.method,
                             task.schema.implementation
@@ -730,7 +723,7 @@ class Workflow(object):
 
         # Run any input maps:
         schema_id = (task.name, task.method, task.software)
-        in_map_lookup = TASK_INPUT_MAP.get(schema_id)
+        in_map_lookup = Config.get('input_maps').get(schema_id)
         for elem_idx, elem_inputs in zip(range(num_elems), task.inputs):
 
             task_elem_path = self.get_element_path(task.task_idx, elem_idx)
@@ -758,7 +751,8 @@ class Workflow(object):
         task.files = files
 
         # Get software versions:
-        software_versions = SOFTWARE_VERSIONS[task.software]()
+        software_versions_func = Config.get('software_versions')[task.software]
+        software_versions = software_versions_func()
         self._append_history(
             WorkflowAction.prepare_task,
             software_versions=software_versions,
@@ -770,7 +764,7 @@ class Workflow(object):
 
         task = self.tasks[task_idx]
         schema_id = (task.name, task.method, task.software)
-        func = TASK_FUNC_MAP.get(schema_id)
+        func = Config.get('func_maps')[schema_id]
         inputs = task.inputs[element_idx]
         try:
             outputs = func(**inputs)
@@ -797,7 +791,7 @@ class Workflow(object):
         outputs = [{} for _ in range(num_elems)]
 
         schema_id = (task.name, task.method, task.software)
-        out_map_lookup = TASK_OUTPUT_MAP.get(schema_id)
+        out_map_lookup = Config.get('output_maps').get(schema_id)
 
         # Save hpcflow task stats
         hf_stats_all = hpcflow.get_stats(self.path, jsonable=True, datetime_dicts=True)
@@ -843,7 +837,7 @@ class Workflow(object):
             # Save output files specified explicitly as outputs:
             for output_name in task.schema.outputs:
                 if output_name.startswith('__file__'):
-                    file_name = TASK_OUTPUT_FILES_MAP[schema_id].get(output_name)
+                    file_name = Config.get('output_file_maps')[schema_id].get(output_name)
                     if not file_name:
                         msg = 'Output file map missing for output name: "{}"'
                         raise ValueError(msg.format(output_name))

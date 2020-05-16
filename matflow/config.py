@@ -4,7 +4,7 @@ from warnings import warn
 
 from ruamel.yaml import YAML
 
-from matflow.errors import ConfigurationError
+from matflow.errors import ConfigurationError, MatflowExtensionError
 from matflow.models.task import TaskSchema
 
 
@@ -15,6 +15,7 @@ class Config(object):
     __conf = {}
 
     _is_set = False
+    _is_extension_locked = True
 
     @staticmethod
     def append_schema_source(schema_source_path, config_dir=None):
@@ -81,12 +82,14 @@ class Config(object):
         return config_dat, config_file
 
     @staticmethod
-    def set_config(config_dir=None):
+    def set_config(config_dir=None, raise_on_set=False):
         'Load configuration from a YAML file.'
 
         config_dir = Config.resolve_config_dir(config_dir)
 
         if Config._is_set:
+            if raise_on_set:
+                raise ConfigurationError('Configuration is already set.')
             return
 
         config_dat, _ = Config.get_config_file(config_dir)
@@ -119,7 +122,7 @@ class Config(object):
                     for s_dict in s_list]
 
         # Load and validate self-consistency of task schemas:
-        print('Loading task schemas...', end='')
+        print(f'Loading task schemas from {len(schema_sources)} file(s)...', end='')
         try:
             TASK_SCHEMAS = TaskSchema.load_from_hierarchy(_TASK_SCHEMAS)
         except Exception as err:
@@ -131,6 +134,15 @@ class Config(object):
         Config.__conf['software'] = SOFTWARE
         Config.__conf['task_schemas'] = TASK_SCHEMAS
 
+        Config.__conf['input_maps'] = {}
+        Config.__conf['output_maps'] = {}
+        Config.__conf['func_maps'] = {}
+        Config.__conf['CLI_arg_maps'] = {}
+        Config.__conf['output_file_maps'] = {}
+        Config.__conf['software_versions'] = {}
+        Config.__conf['extension_info'] = {}
+        Config.__conf['schema_validity'] = {}
+
         Config._is_set = True
 
     @staticmethod
@@ -138,3 +150,129 @@ class Config(object):
         if not Config._is_set:
             raise ConfigurationError('Configuration is not yet set.')
         return Config.__conf[name]
+
+    @staticmethod
+    def lock_extensions():
+        Config._is_extension_locked = True
+
+    @staticmethod
+    def unlock_extensions():
+        Config._is_extension_locked = False
+
+    @staticmethod
+    def _validate_extension_setter():
+        if not Config._is_set:
+            warn(f'Configuration is not yet set. Matflow extension functions will not '
+                 'be mapped to task schemas unless matflow is loaded.')
+            return False
+        if Config._is_extension_locked:
+            msg = 'Configuration is locked against modifying extension data.'
+            raise ConfigurationError(msg)
+        return True
+
+    @staticmethod
+    def set_input_map(key, input_file, func):
+        if Config._validate_extension_setter():
+            if key not in Config.__conf['input_maps']:
+                Config.__conf['input_maps'].update({key: {}})
+            if input_file in Config.__conf['input_maps'][key]:
+                msg = (f'Input file name "{input_file}" already exists in the input map.')
+                raise MatflowExtensionError(msg)
+            Config.__conf['input_maps'][key][input_file] = func
+
+    @staticmethod
+    def set_output_map(key, output_name, func):
+        if Config._validate_extension_setter():
+            if key not in Config.__conf['output_maps']:
+                Config.__conf['output_maps'].update({key: {}})
+            if output_name in Config.__conf['output_maps'][key]:
+                msg = (f'Output name "{output_name}" already exists in the output map.')
+                raise MatflowExtensionError(msg)
+            Config.__conf['output_maps'][key][output_name] = func
+
+    @staticmethod
+    def set_func_map(key, func):
+        if Config._validate_extension_setter():
+            if key in Config.__conf['func_maps']:
+                msg = (f'Function map "{key}" already exists in the function map.')
+                raise MatflowExtensionError(msg)
+            Config.__conf['func_maps'][key] = func
+
+    @staticmethod
+    def set_CLI_arg_map(key, input_name, func):
+        if Config._validate_extension_setter():
+            if key not in Config.__conf['CLI_arg_maps']:
+                Config.__conf['CLI_arg_maps'].update({key: {}})
+            if input_name in Config.__conf['CLI_arg_maps'][key]:
+                msg = (f'Input name "{input_name}" already exists in the CLI formatter '
+                       f'map.')
+                raise MatflowExtensionError(msg)
+            Config.__conf['CLI_arg_maps'][key][input_name] = func
+
+    @staticmethod
+    def set_software_version_func(software, func):
+        if Config._validate_extension_setter():
+            if software in Config.__conf['software_versions']:
+                msg = (f'Software "{software}" has already registered a '
+                       f'`software_versions` function.')
+                raise MatflowExtensionError(msg)
+            Config.__conf['software_versions'][software] = func
+
+    @staticmethod
+    def set_output_file_map(key, file_reference, file_name):
+        if Config._validate_extension_setter():
+            if key not in Config.__conf['output_file_maps']:
+                Config.__conf['output_file_maps'].update({key: {}})
+            file_ref_full = '__file__' + file_reference
+            if file_ref_full in Config.__conf['output_file_maps'][key]:
+                msg = (f'File name "{file_name}" already exists in the output files map.')
+                raise MatflowExtensionError(msg)
+            Config.__conf['output_file_maps'][key].update({file_ref_full: file_name})
+
+    @staticmethod
+    def set_extension_info(name, info):
+        if Config._validate_extension_setter():
+            if name in Config.__conf['extension_info']:
+                msg = f'Extension with name "{name}" already loaded.'
+                raise MatflowExtensionError(msg)
+            Config.__conf['extension_info'][name] = info
+
+    @staticmethod
+    def set_schema_validities(validities):
+        if Config._validate_extension_setter():
+            Config.__conf['schema_validity'].update(validities)
+
+    @staticmethod
+    def unload_extension(name):
+
+        in_map = [k for k in Config.__conf['input_maps'] if k[2] == name]
+        for k in in_map:
+            del Config.__conf['input_maps'][k]
+
+        out_map = [k for k in Config.__conf['output_maps'] if k[2] == name]
+        for k in out_map:
+            del Config.__conf['output_maps'][k]
+
+        func_map = [k for k in Config.__conf['func_maps'] if k[2] == name]
+        for k in func_map:
+            del Config.__conf['func_maps'][k]
+
+        CLI_map = [k for k in Config.__conf['CLI_arg_maps'] if k[2] == name]
+        for k in CLI_map:
+            del Config.__conf['CLI_arg_maps'][k]
+
+        out_file_map = [k for k in Config.__conf['output_file_maps'] if k[2] == name]
+        for k in out_file_map:
+            del Config.__conf['output_file_maps'][k]
+
+        soft_vers = [k for k in Config.__conf['software_versions'] if k == name]
+        for k in soft_vers:
+            del Config.__conf['software_versions'][k]
+
+        ext_info = [k for k in Config.__conf['extension_info'] if k == name]
+        for k in ext_info:
+            del Config.__conf['extension_info'][k]
+
+        schema_valid = [k for k in Config.__conf['schema_validity'] if k[2] == name]
+        for k in schema_valid:
+            del Config.__conf['schema_validity'][k]
