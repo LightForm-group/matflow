@@ -6,6 +6,7 @@ and includes functions that are called by the command line interface (CLI; in
 
 """
 
+import copy
 from pathlib import Path
 from pprint import pprint
 
@@ -44,8 +45,8 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
     with profile_path.open('r') as handle:
         profile_str = handle.read()
 
-    workflow = Workflow(**workflow_dict, stage_directory=directory)
-    workflow.profile_str = profile_str
+    profile = {'file': profile_str, 'parsed': copy.deepcopy(workflow_dict)}
+    workflow = Workflow(**workflow_dict, stage_directory=directory, profile=profile)
     workflow.set_ids()
 
     if write_dirs:

@@ -67,7 +67,7 @@ class Workflow(object):
     __slots__ = [
         '_id',
         '_human_id',
-        '_profile_str',
+        '_profile',
         '_is_from_file',
         '_name',
         '_extend_paths',
@@ -79,11 +79,10 @@ class Workflow(object):
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extend=None,
-                 check_integrity=True, __is_from_file=False):
+                 check_integrity=True, profile=None, __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
-        self._profile_str = None    # Assigned once in `profile_str` setter
 
         self._is_from_file = __is_from_file
         self._name = name
@@ -91,6 +90,7 @@ class Workflow(object):
                               for i in extend['paths']] if extend else None
         self._extend_nest_idx = extend['nest_idx'] if extend else None
         self._stage_directory = str(Path(stage_directory or '').resolve())
+        self._profile = profile
 
         tasks, elements_idx = init_tasks(tasks, self.is_from_file, check_integrity)
         self._tasks = tasks
@@ -157,16 +157,12 @@ class Workflow(object):
         return self.name.replace(' ', '_')
 
     @property
-    def profile_str(self):
-        'Get, as a string, the profile file that was used to construct this workflow.'
-        return self._profile_str
+    def profile_file(self):
+        return self._profile['file']
 
-    @profile_str.setter
-    def profile_str(self, profile_str):
-        if self._profile_str:
-            raise ValueError(f'`profile_str` is already set for the workflow')
-        else:
-            self._profile_str = profile_str
+    @property
+    def profile(self):
+        return self._profile['dict']
 
     @property
     def tasks(self):
@@ -684,6 +680,7 @@ class Workflow(object):
             'name': obj_json['name'],
             'tasks': obj_json['tasks'],
             'stage_directory': obj_json['stage_directory'],
+            'profile': obj_json['profile'],
             'extend': extend,
         }
 
@@ -693,7 +690,6 @@ class Workflow(object):
             check_integrity=check_integrity,
         )
 
-        workflow.profile_str = obj_json['profile_str']
         workflow._human_id = obj_json['human_id']
         workflow._id = obj_json['id']
 
