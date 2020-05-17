@@ -1,6 +1,6 @@
 # Change Log
 
-## [0.1.2] - 2020.xx.xx
+## [0.2.0] - 2020.xx.xx
 
 ### Added
 
@@ -22,6 +22,10 @@
 - hpcflow configuration directory is generated within the matflow configuration directory.
 - Jobscript names refer to the task to which they prepare/execute/process
 - hpcflow profile is passed as a `dict` to hpcflow. For information, the hpcflow profile is still dumped to a file.
+
+## [0.1.2] - 2020.05.12
+
+- Latest dev branch merged...
 
 ## [0.1.1] - 2020.05.07
 
