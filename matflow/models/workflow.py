@@ -383,7 +383,7 @@ class Workflow(object):
                     'environment': environment,
                     'stats': task.stats,
                     'scheduler_options': scheduler_opts,
-                    'name': f'task_{task_idx_fmt}',
+                    'name': f't{task_idx_fmt}',
                 },
                 {
                     'directory': '.',
