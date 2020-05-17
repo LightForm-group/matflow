@@ -10,7 +10,10 @@ from matflow.models.task import TaskSchema
 
 class Config(object):
 
-    __ALLOWED_CONFIG = ['task_schema_sources']
+    __ALLOWED_CONFIG = [
+        'task_schema_sources',
+        'prepare_process_scheduler_options',
+    ]
 
     __conf = {}
 
@@ -94,6 +97,7 @@ class Config(object):
 
         config_dat, _ = Config.get_config_file(config_dir)
         schema_sources = config_dat['task_schema_sources']
+        pp_scheduler_opts = config_dat.get('prepare_process_scheduler_options', {})
 
         # Load task_schemas list and software list from all specified task schema files:
         _TASK_SCHEMAS = {}
@@ -131,6 +135,7 @@ class Config(object):
         print('OK!')
 
         Config.__conf['config_dir'] = config_dir
+        Config.__conf['prepare_process_scheduler_options'] = pp_scheduler_opts
         Config.__conf['hpcflow_config_dir'] = config_dir.joinpath('.hpcflow')
         Config.__conf['software'] = SOFTWARE
         Config.__conf['task_schemas'] = TASK_SCHEMAS

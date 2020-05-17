@@ -352,6 +352,7 @@ class Workflow(object):
                             handle.write(in_val + '\n')
 
             scheduler_opts = {}
+            scheduler_opts_process = Config.get('prepare_process_scheduler_options')
             for k, v in task.run_options.items():
                 if k != 'num_cores':
                     if k == 'pe':
@@ -360,8 +361,6 @@ class Workflow(object):
 
             task_path_rel = str(self.get_task_path(task.task_idx).name)
 
-            # (SGE specific)
-            process_so = {'l': 'short'}
             environment = task.software_instance.get('environment', [])
             task_idx_fmt = self.get_task_idx_padded(task.task_idx)
             command_groups.extend([
@@ -373,7 +372,7 @@ class Workflow(object):
                     ],
                     'environment': environment,
                     'stats': False,
-                    'scheduler_options': process_so,
+                    'scheduler_options': scheduler_opts_process,
                     'name': f't{task_idx_fmt}_pre',
                 },
                 {
@@ -392,7 +391,7 @@ class Workflow(object):
                         'matflow process-task --task-idx={}'.format(task.task_idx)
                     ],
                     'stats': False,
-                    'scheduler_options': process_so,
+                    'scheduler_options': scheduler_opts_process,
                     'name': f't{task_idx_fmt}_post',
                 },
             ])
