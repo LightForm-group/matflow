@@ -49,6 +49,28 @@ task_schemas:
               - files:
                   - odf.txt
                 output: ODF
+      - name: unimodal
+        inputs:
+          - modal_orientation
+          - crystal_symmetry
+          - specimen_symmetry
+          - halfwidth
+        implementations:
+          - name: matlab_mtex
+            version: 1
+            input_map:
+              - inputs:
+                - modal_orientation
+                - crystal_symmetry
+                - specimen_symmetry
+                - halfwidth
+                file: create_model_ODF.m
+            commands:
+              - cmd: matlab -nodisplay -nosplash -nodesktop -r -wait "run('create_model_ODF.m'); exit;"
+            output_map:
+              - files:
+                  - odf.txt
+                output: ODF                
 
   - name: sample_texture
     version: 1

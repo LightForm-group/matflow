@@ -198,9 +198,38 @@ def prepare_script_model_ODF_uniform(path, crystal_symmetry, specimen_symmetry):
         handle.write(script_txt)
 
 
+def prepare_script_model_ODF_unimodal(path, modal_orientation, crystal_symmetry,
+                                      specimen_symmetry, halfwidth):
+    script_txt = f"""    
+        cs = crystalSymmetry('{crystal_symmetry}');
+        ss = specimenSymmetry('{specimen_symmetry}');
+
+        ori = orientation('Euler', {modal_orientation}*degree, cs, ss);
+        odf = unimodalODF(ori, 'halfwidth', {halfwidth}*degree);
+
+        figure()
+        plotPDF(...
+            odf,...
+            Miller(1,1,1, cs),...
+            'antipodal',...
+            'complete'...
+        );
+        colorbar;
+        saveas(gcf,'pole_figs.png')         
+        
+        export(odf, 'odf.txt', 'Bunge', 'MTEX');
+    """
+    script_txt = dedent(script_txt).strip()
+    with Path(path).open('w') as handle:
+        handle.write(script_txt)
+
+
 TASK_INPUT_MAP.update({
     ('model_ODF', 'uniform_ODF', 'matlab_mtex'): {
         'create_model_ODF.m': prepare_script_model_ODF_uniform,
+    },
+    ('model_ODF', 'unimodal', 'matlab_mtex'): {
+        'create_model_ODF.m': prepare_script_model_ODF_unimodal,
     },
     ('estimate_ODF', 'from_CTF_file', 'matlab_mtex'): {
         'estimate_ODF_from_CTF.m': prepare_script_estimate_ODF,
@@ -212,6 +241,9 @@ TASK_INPUT_MAP.update({
 
 TASK_OUTPUT_MAP.update({
     ('model_ODF', 'uniform_ODF', 'matlab_mtex'): {
+        'ODF': parse_mtex_ODF_file,
+    },
+    ('model_ODF', 'unimodal', 'matlab_mtex'): {
         'ODF': parse_mtex_ODF_file,
     },
     ('estimate_ODF', 'from_CTF_file', 'matlab_mtex'): {
