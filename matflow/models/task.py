@@ -423,7 +423,9 @@ class Task(object):
 
     def as_dict(self):
         'Return attributes dict with preceding underscores removed.'
-        return {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
+        self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
+        self_dict['status'] = (self.status.name, self.status.value)
+        return self_dict
 
     def generate_id(self):
         self.id = secrets.token_hex(10)
@@ -471,8 +473,8 @@ class Task(object):
 
     @status.setter
     def status(self, status):
-        'Set task status'
-        # TODO validate, maybe with enum.
+        if status not in TaskStatus:
+            raise TypeError('`status` must be a `TaskStatus`.')
         self._status = status
 
     @property

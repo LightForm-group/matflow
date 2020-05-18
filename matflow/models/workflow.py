@@ -32,6 +32,7 @@ from matflow.hicklable import to_hicklable
 from matflow.utils import parse_times, zeropad, datetime_to_dict
 from matflow.models.command import DEFAULT_FORMATTERS
 from matflow.models.construction import init_tasks
+from matflow.models.task import TaskStatus
 
 
 def requires_ids(func):
@@ -708,6 +709,9 @@ class Workflow(object):
                 'nest_idx': obj_json['extend_nest_idx']
             }
 
+        for i in obj_json['tasks']:
+            i['status'] = TaskStatus(i['status'][1])
+
         obj = {
             'name': obj_json['name'],
             'tasks': obj_json['tasks'],
@@ -811,6 +815,7 @@ class Workflow(object):
         # Get software versions:
         software_versions_func = Config.get('software_versions')[task.software]
         software_versions = software_versions_func()
+        task.status = TaskStatus.running
         self._append_history(
             WorkflowAction.prepare_task,
             software_versions=software_versions,
@@ -911,4 +916,5 @@ class Workflow(object):
                         outputs[elem_idx].update({output_name: handle.read()})
 
         task.outputs = outputs
+        task.status = TaskStatus.complete
         self._append_history(WorkflowAction.process_task)
