@@ -1,11 +1,16 @@
 """`matflow.utils.py`"""
 
+import sys
+import io
 import collections
 import copy
 import itertools
 import numpy as np
 import random
 import time
+from contextlib import redirect_stdout
+
+from ruamel.yaml import YAML
 
 
 def parse_times(format_str):
@@ -246,3 +251,12 @@ def datetime_to_dict(dt):
         'second': dt.second,
         'microsecond': dt.microsecond,
     }
+
+
+def dump_to_yaml_string(data):
+    yaml = YAML()
+    yaml.indent(mapping=2, sequence=4, offset=2)
+    with redirect_stdout(io.StringIO()) as buffer:
+        yaml.dump(data, sys.stdout)
+        output = buffer.getvalue()
+    return output

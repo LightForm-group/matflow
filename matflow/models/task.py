@@ -4,6 +4,7 @@ Module containing the Task and TaskSchema classes.
 
 """
 
+import enum
 import re
 import secrets
 from pprint import pprint
@@ -12,20 +13,12 @@ import numpy as np
 
 from matflow.models import CommandGroup
 from matflow.errors import TaskSchemaError, TaskParameterError
+from matflow.hicklable import to_hicklable
+from matflow.utils import dump_to_yaml_string
 
 
 class TaskSchema(object):
-    """Class to represent the schema of a particular method/implementation of a task.
-
-            'name': self.name,
-            'method': self.method,
-            'implementation': self.software,
-            'inputs': inputs,
-            'outputs': outputs,
-            'input_map': in_map,
-            'output_map': out_map,
-            'command_group': command_group,
-    """
+    """Class to represent the schema of a particular method/implementation of a task."""
 
     def __init__(self, name, outputs, method=None, implementation=None, inputs=None,
                  input_map=None, output_map=None, command_group=None):
@@ -42,6 +35,26 @@ class TaskSchema(object):
         self.command_group = CommandGroup(**command_group) if command_group else None
 
         self._validate_inputs_outputs()
+
+    def __repr__(self):
+        return (
+            f'{self.__class__.__name__}('
+            f'name={self.name!r}, '
+            f'method={self.method!r}, '
+            f'implementation={self.implementation!r}, '
+            f'inputs={self.inputs_condensed!r}, '
+            f'outputs={self.outputs!r}, '
+            f'command_group={self.command_group!r}'
+            f')'
+        )
+
+    def __str__(self):
+        self_dict = self.as_dict()
+        self_dict['inputs'] = self.inputs_condensed
+        return dump_to_yaml_string(self_dict)
+
+    def as_dict(self):
+        return to_hicklable(self)
 
     @classmethod
     def load_from_hierarchy(cls, schema_lst):
@@ -102,6 +115,24 @@ class TaskSchema(object):
     @property
     def input_contexts(self):
         return list(set([i.get('context', None) for i in self.inputs]))
+
+    @property
+    def inputs_condensed(self):
+        'Get inputs list in their string format.'
+        out = []
+        for i in self.inputs:
+            extra = ''
+            i_fmt = f'{i["name"]}'
+            if i['alias'] != i['name']:
+                extra += f'alias={i["alias"]}'
+            if i['context']:
+                extra += f'context={i["context"]}'
+            if i['group'] != 'default':
+                extra += f'group={i["group"]}'
+            if extra:
+                i_fmt += f'[{extra}]'
+            out.append(i_fmt)
+        return out
 
     def _validate_inputs_outputs(self):
         'Basic checks on inputs and outputs.'
@@ -277,14 +308,6 @@ class TaskSchema(object):
     def is_func(self):
         return not self.command_group.commands
 
-    def __repr__(self):
-        out = (
-            f'{self.__class__.__name__}('
-            f'name={self.name!r}, method={self.method!r}, '
-            f'inputs={self.inputs!r}, outputs={self.outputs!r})'
-        )
-        return out
-
     def get_input_by_name(self, input_name):
         for i in self.inputs:
             if i['name'] == input_name:
@@ -298,6 +321,13 @@ class TaskSchema(object):
         raise ValueError(f'No input alias "{input_alias}" in schema.')
 
 
+class TaskStatus(enum.Enum):
+
+    pending = 1
+    running = 2
+    complete = 3
+
+
 class Task(object):
     """
 
@@ -308,8 +338,6 @@ class Task(object):
     save/load cycles.
 
     """
-
-    INIT_STATUS = 'pending'
 
     __slots__ = [
         '_id',
@@ -349,7 +377,7 @@ class Task(object):
         self._software_instance = software_instance
         self._task_idx = task_idx
         self._run_options = run_options
-        self._status = status or Task.INIT_STATUS  # | 'paused' | 'complete'
+        self._status = status or TaskStatus.pending
         self._stats = stats
         self._context = context
         self._local_inputs = local_inputs
@@ -369,18 +397,26 @@ class Task(object):
         self._merge_priority = merge_priority
 
     def __repr__(self):
+
         out = (
             f'{self.__class__.__name__}('
             f'name={self.name!r}, '
-            f'status={self.status!r}, '
             f'method={self.method!r}, '
-            f'software_instance={self.software_instance!r}, '
-            f'run_options={self.run_options!r}, '
-            f'context={self.context!r}, '
-            f'schema={self.schema!r}'
+            f'software={self.software!r}'
             f')'
         )
         return out
+
+    def __str__(self):
+        return (
+            f'{"ID:":10}{self.id!s}\n'
+            f'{"Index:":10}{self.task_idx!s}\n'
+            f'{"Status:":10}{self.status!s}\n'
+            f'{"Name:":10}{self.name!s}\n'
+            f'{"Method:":10}{self.method!s}\n'
+            f'{"Software:":10}{self.software!s}\n'
+            f'{"Context:":10}{(self.context or "DEFAULT")!s}\n'
+        )
 
     def __len__(self):
         return self.local_inputs['length']
@@ -406,6 +442,12 @@ class Task(object):
     @property
     def name(self):
         return self._name
+
+    @property
+    def name_friendly(self):
+        'Capitalise and remove underscores'
+        name = '{}{}'.format(self.name[0].upper(), self.name[1:]).replace('_', ' ')
+        return name
 
     @property
     def method(self):
@@ -517,12 +559,6 @@ class Task(object):
     @property
     def merge_priority(self):
         return self._merge_priority
-
-    @property
-    def name_friendly(self):
-        'Capitalise and remove underscores'
-        name = '{}{}'.format(self.name[0].upper(), self.name[1:]).replace('_', ' ')
-        return name
 
     @property
     def software(self):

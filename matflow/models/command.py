@@ -8,6 +8,9 @@ from pathlib import Path, PureWindowsPath, PurePosixPath
 from subprocess import run, PIPE
 from pprint import pprint
 
+from matflow.utils import dump_to_yaml_string
+from matflow.hicklable import to_hicklable
+
 
 def list_formatter(lst):
     return ' '.join([f'{i}' for i in lst])
@@ -40,6 +43,12 @@ class CommandGroup(object):
         out += ', '.join([f'{i!r}' for i in self.commands]) + ']'
         out += ')'
         return out
+
+    def __str__(self):
+        return dump_to_yaml_string(self.as_dict())
+
+    def as_dict(self):
+        return to_hicklable(self)
 
     def get_formatted_commands(self, inputs_list):
         'Format commands into strings with hpcflow variable substitutions where required.'
@@ -123,3 +132,23 @@ class Command(object):
             out += f', stderr={self.stderr!r}'
         out += ')'
         return out
+
+    def __str__(self):
+
+        cmd_fmt = ' '.join(
+            [self.command] +
+            [' '.join(i) for i in self.options] +
+            self.parameters
+        )
+
+        if self.stdin:
+            cmd_fmt += ' < {}'.format(self.stdin)
+        if self.stdout:
+            cmd_fmt += ' > {}'.format(self.stdout)
+        if self.stderr:
+            if self.stderr == self.stdout:
+                cmd_fmt += ' 2>&1'
+            else:
+                cmd_fmt += ' 2> {}'.format(self.stderr)
+
+        return cmd_fmt

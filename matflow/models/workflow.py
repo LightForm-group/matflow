@@ -100,6 +100,32 @@ class Workflow(object):
             self._history = []
             self._append_history(WorkflowAction.generate)
 
+    def __repr__(self):
+        out = (
+            f'{self.__class__.__name__}('
+            f'human_id={self.human_id!r}, '
+            f'version={self.version}'
+            f')'
+        )
+        return out
+
+    def __str__(self):
+        tasks = '\n'.join([
+            (
+                f'  {i.name}\n'
+                f'    Method: {i.method}\n'
+                f'    Software: {i.software}\n'
+            )
+            for i in self.tasks
+        ])
+        out = (
+            f'{"ID:":10}{self.id!s}\n'
+            f'{"Name:":10}{self.name!s}\n'
+            f'{"Human ID:":10}{self.human_id!s}\n'
+            f'Tasks:\n\n{tasks}'
+        )
+        return out
+
     def set_ids(self):
         if self._id:
             raise ValueError(f'IDs are already set for workflow. ID is: "{self.id}"; '
@@ -155,6 +181,12 @@ class Workflow(object):
     def name_safe(self):
         'Get name without spaces'
         return self.name.replace(' ', '_')
+
+    @property
+    def name_friendly(self):
+        'Capitalise and remove underscores'
+        name = '{}{}'.format(self.name[0].upper(), self.name[1:]).replace('_', ' ')
+        return name
 
     @property
     def profile_file(self):
@@ -489,7 +521,7 @@ class Workflow(object):
 
         directory = Path(directory)
         if not directory.is_dir():
-            raise TypeError('`directory` is not an existing directory!')
+            raise TypeError(f'The following path is not a directory: {directory}.')
 
         existing_files = {}
         for i in directory.glob('*'):
