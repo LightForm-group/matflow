@@ -66,9 +66,31 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
     return workflow
 
 
-def submit_workflow(profile_path, directory=None):
-    'Generate and submit a new workflow from a profile file.'
-    workflow = make_workflow(profile_path, directory=directory, write_dirs=True)
+def submit_workflow(workflow_path, directory=None):
+    """Generate and submit a new workflow from a profile file.    
+
+    Parameters
+    ----------
+    workflow_path : str or Path
+        Path to either a profile file or a workflow project directory that contains a 
+        previously generated workflow HDF5 file.
+    directory : str or Path, optional
+        Applicable if `workflow_path` points to a profile file. The directory in which the
+        Workflow will be generated. By default, this is the working (i.e. invoking)
+        directory.
+
+    Returns
+    -------
+    None
+
+    """
+
+    if Path(workflow_path).is_file():
+        workflow = make_workflow(workflow_path, directory=directory, write_dirs=True)
+    else:
+        load_extensions()
+        workflow = load_workflow(workflow_path)
+
     workflow.submit()
 
 

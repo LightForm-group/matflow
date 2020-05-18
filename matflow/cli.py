@@ -29,11 +29,11 @@ def make(profile, directory=None):
 
 @cli.command()
 @click.option('--directory', '-d')
-@click.argument('profile', type=click.Path(exists=True))
-def go(profile, directory=None):
+@click.argument('workflow_path', type=click.Path(exists=True))
+def go(workflow_path, directory=None):
     """Generate and submit a new Workflow."""
     print('matflow.cli.go', flush=True)
-    api.submit_workflow(profile_path=profile, directory=directory)
+    api.submit_workflow(workflow_path, directory=directory)
 
 
 @cli.command()
