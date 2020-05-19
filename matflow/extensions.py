@@ -127,7 +127,7 @@ def software_versions(software):
         def func_wrap(*args, **kwargs):
             return func(*args, **kwargs)
         Config.set_software_version_func(software, func_wrap)
-
+        return func_wrap
     return _software_versions
 
 
