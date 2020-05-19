@@ -71,15 +71,14 @@ class Workflow(object):
         '_profile',
         '_is_from_file',
         '_name',
-        '_extend_paths',
-        '_extend_nest_idx',
+        '_extends',
         '_stage_directory',
         '_tasks',
         '_elements_idx',
         '_history',
     ]
 
-    def __init__(self, name, tasks, stage_directory=None, extend=None,
+    def __init__(self, name, tasks, stage_directory=None, extends=None,
                  check_integrity=True, profile=None, __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
@@ -87,9 +86,7 @@ class Workflow(object):
 
         self._is_from_file = __is_from_file
         self._name = name
-        self._extend_paths = [str(Path(i).resolve())
-                              for i in extend['paths']] if extend else None
-        self._extend_nest_idx = extend['nest_idx'] if extend else None
+        self._extends = [str(Path(i).resolve()) for i in (extends or [])]
         self._stage_directory = str(Path(stage_directory or '').resolve())
         self._profile = profile
 
@@ -206,15 +203,8 @@ class Workflow(object):
         return self._elements_idx
 
     @property
-    def extend_paths(self):
-        if self._extend_paths:
-            return [Path(i) for i in self._extend_paths]
-        else:
-            return None
-
-    @property
-    def extend_nest_idx(self):
-        return self._extend_nest_idx
+    def extends(self):
+        return [Path(i) for i in self._extends]
 
     @property
     def stage_directory(self):
@@ -702,13 +692,6 @@ class Workflow(object):
             msg = f'Could not load workflow file with `hickle`: "{path}": {err}.'
             raise WorkflowPersistenceError(msg)
 
-        extend = None
-        if obj_json['extend_paths']:
-            extend = {
-                'paths': obj_json['extend_paths'],
-                'nest_idx': obj_json['extend_nest_idx']
-            }
-
         for i in obj_json['tasks']:
             i['status'] = TaskStatus(i['status'][1])
 
@@ -717,7 +700,7 @@ class Workflow(object):
             'tasks': obj_json['tasks'],
             'stage_directory': obj_json['stage_directory'],
             'profile': obj_json['profile'],
-            'extend': extend,
+            'extends': obj_json['extends'],
         }
 
         workflow = cls(
