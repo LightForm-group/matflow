@@ -9,8 +9,6 @@ from matflow.validation import validate_task_schemas
 
 def load_extensions():
 
-    print('loading extensions.')
-
     Config.set_config(raise_on_set=True)
     Config.unlock_extensions()
 

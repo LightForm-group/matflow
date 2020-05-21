@@ -2,16 +2,20 @@ import os
 from pathlib import Path
 from warnings import warn
 
+from pprint import pprint
+
 from ruamel.yaml import YAML
 
 from matflow.errors import ConfigurationError, MatflowExtensionError
 from matflow.models.task import TaskSchema
+from matflow.models.software import SoftwareInstance
 
 
 class Config(object):
 
     __ALLOWED_CONFIG = [
         'task_schema_sources',
+        'software_sources',
         'prepare_process_scheduler_options',
     ]
 
@@ -61,14 +65,22 @@ class Config(object):
         yaml = YAML()
         config_file = config_dir.joinpath('config.yml')
         def_schema_file = config_dir.joinpath('task_schemas.yml')
+        def_software_file = config_dir.joinpath('software.yml')
         if not config_file.is_file():
             print('No config.yml found. Generating a config.yml file.')
-            def_config = {'task_schema_sources': [str(def_schema_file)]}
+            def_config = {
+                'task_schema_sources': [str(def_schema_file)],
+                'software_sources': [str(def_software_file)],
+            }
             yaml.dump(def_config, config_file)
 
         if not def_schema_file.is_file():
-            def_schemas = {'software': {}, 'task_schemas': []}
-            yaml.dump(def_schemas, def_schema_file)
+            print('Generating a default task schema file.')
+            yaml.dump([], def_schema_file)
+
+        if not def_software_file.is_file():
+            print('Generating a default software file.')
+            yaml.dump({}, def_software_file)
 
         print(f'Loading matflow config from {config_file}')
         config_dat = yaml.load(config_file)
@@ -80,6 +92,10 @@ class Config(object):
         if 'task_schema_sources' not in config_dat:
             msg = (f'Missing `task_schema_sources` from configuration file: '
                    f'{config_file}.')
+            raise ConfigurationError(msg)
+
+        if 'software_sources' not in config_dat:
+            msg = (f'Missing `software_sources` from configuration file: {config_file}')
             raise ConfigurationError(msg)
 
         return config_dat, config_file
@@ -96,49 +112,62 @@ class Config(object):
             return
 
         config_dat, _ = Config.get_config_file(config_dir)
-        schema_sources = config_dat['task_schema_sources']
+        schema_sources = [Path(i) for i in config_dat['task_schema_sources']]
+        software_sources = [Path(i) for i in config_dat['software_sources']]
         pp_scheduler_opts = config_dat.get('prepare_process_scheduler_options', {})
 
-        # Load task_schemas list and software list from all specified task schema files:
-        _TASK_SCHEMAS = {}
-        _SOFTWARE = {}
-        yaml = YAML()
+        # Load task_schemas list from all specified task schema files:
+        task_schema_dicts = {}
+        yaml = YAML(typ='safe')
         for task_schema_file in schema_sources[::-1]:
-
-            file_dat = yaml.load(Path(task_schema_file))
-            task_schemas = file_dat.get('task_schemas', [])
-            software = file_dat.get('software', {})
-
-            for i in task_schemas:
+            if not task_schema_file.is_file():
+                msg = f'Task schema source is not a file: "{task_schema_file}".'
+                raise ConfigurationError(msg)
+            for i in yaml.load(task_schema_file):
                 if 'name' not in i:
                     raise ValueError('Task schema definition is missing a "name" key.')
                 # Overwrite any task schema with the same name (hence we order files in
                 # reverse so e.g. the first task schema file takes precedence):
-                _TASK_SCHEMAS.update({i['name']: i})
-
-            for k, v in software.items():
-                _SOFTWARE.update({k: v})
+                task_schema_dicts.update({i['name']: i})
 
         # Convert to lists:
-        _TASK_SCHEMAS = [v for k, v in _TASK_SCHEMAS.items()]
-        SOFTWARE = [{**s_dict, 'name': s_name}
-                    for s_name, s_list in _SOFTWARE.items()
-                    for s_dict in s_list]
+        task_schema_dicts = [v for k, v in task_schema_dicts.items()]
 
         # Load and validate self-consistency of task schemas:
         print(f'Loading task schemas from {len(schema_sources)} file(s)...', end='')
         try:
-            TASK_SCHEMAS = TaskSchema.load_from_hierarchy(_TASK_SCHEMAS)
+            task_schemas = TaskSchema.load_from_hierarchy(task_schema_dicts)
         except Exception as err:
             print('Failed.')
             raise err
         print('OK!')
 
+        print(f'Loading software definitions from {len(software_sources)} '
+              f'file(s)...', end='')
+        software = {}
+        for software_file in software_sources:
+            if not software_file.is_file():
+                msg = f'Software source is not a file: "{software_file}".'
+                raise ConfigurationError(msg)
+            try:
+                soft_loaded = SoftwareInstance.load_multiple(yaml.load(software_file))
+            except Exception as err:
+                print(f'\nFailed to load software definitions from: "{software_file}".')
+                raise err
+
+            # Combine software instances from multiple software source files:
+            for soft_name, instances in soft_loaded.items():
+                if soft_name in software:
+                    software[soft_name].extend(instances)
+                else:
+                    software.update({soft_name: instances})
+        print('OK!')
+
         Config.__conf['config_dir'] = config_dir
         Config.__conf['prepare_process_scheduler_options'] = pp_scheduler_opts
         Config.__conf['hpcflow_config_dir'] = config_dir.joinpath('.hpcflow')
-        Config.__conf['software'] = SOFTWARE
-        Config.__conf['task_schemas'] = TASK_SCHEMAS
+        Config.__conf['software'] = software
+        Config.__conf['task_schemas'] = task_schemas
 
         Config.__conf['input_maps'] = {}
         Config.__conf['output_maps'] = {}

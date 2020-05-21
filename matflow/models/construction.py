@@ -30,7 +30,7 @@ from matflow.errors import (
     UnsatisfiedSchemaError,
 )
 from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list,
-                           to_sub_list)
+                           to_sub_list, get_specifier_dict)
 from matflow.models.task import Task, TaskSchema
 
 
@@ -193,22 +193,71 @@ def get_local_inputs(schema_inputs, base=None, num_repeats=1, sequences=None,
     return local_ins
 
 
-def get_software_instance(software_name, num_cores, all_software):
+def get_software_instance(software, run_options, all_software):
     """Find a software instance in the software.yml file that matches the software
-    requirements of a given task."""
+    requirements of a given task.
 
-    for soft_inst in all_software:
+    Parameters
+    ----------
+    software : dict
+        Dict with the following keys:
+            name : str
+                Name of the software whose SoftwareInstance is to be returned.
+            label : str
+                Additional specifier used to distinguish, e.g., a software version.
+            options : list of str
+                Additional specifiers used to state additional requirements.
+    run_options : dict
+        Dict with keys:
+            num_cores : int
+                Number of cores specified in the task.
+            **scheduler_options
+                Any other options to be passed to the scheduler.
+    all_software : dict of list of SoftwareInstance
+        Dict whose keys are software names and whose values are lists of SoftwareInstance
+        objects.    
 
-        if soft_inst['name'] != software_name:
+    Returns
+    -------
+    SoftwareInstance
+        The first matching software instance.
+
+    Raises
+    ------
+    MissingSoftware
+        If no matching software instance can be found.
+
+    """
+
+    for name, instances in all_software.items():
+
+        if name != software['name']:
             continue
 
-        core_range = soft_inst['num_cores']
-        all_num_cores = list(range(*core_range)) + [core_range[1]]
-        if num_cores in all_num_cores:
-            return soft_inst
+        for inst in instances:
 
-    raise MissingSoftware(f'Could not find suitable software "{software_name}", with'
-                          f' `num_cores={num_cores}`.')
+            if run_options['num_cores'] not in inst.cores_range:
+                continue
+            if inst.label != software['label']:
+                continue
+            if (set(software['options']) - set(inst.options)):
+                continue
+
+            # Check no conflicting scheduler options
+            keep_looking = False
+            for k, v in inst.scheduler_options.items():
+                if k in run_options and v != run_options[k]:
+                    keep_looking = True
+                    break
+
+            if keep_looking:
+                continue
+
+        return inst
+
+    msg = (f'Could not find suitable software "{software["name"]}", with '
+           f'`num_cores={run_options["num_cores"]}` and `label={software["label"]}`.')
+    raise MissingSoftware(msg)
 
 
 def get_dependency_idx(task_info_lst):
@@ -306,7 +355,9 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
     is_from_file : bool
         Has this task dict been loaded from a workflow file or is it associated
         with a brand new workflow?
-    all_software
+    all_software : dict of list of SoftwareInstance
+        Dict whose keys are software names and whose values are lists of SoftwareInstance
+        objects.
     all_task_schemas : dict of (tuple : TaskSchema)
         All available TaskSchema objects, keyed by a (name, method, software) tuple.
     check_integrity : bool, optional
@@ -423,24 +474,32 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
 
     else:
         # Find the software instance:
-        soft_inst = get_software_instance(
+        software = get_specifier_dict(
             task.pop('software'),
-            task['run_options']['num_cores'],
+            name_key='name',
+            base_key='label',
+            list_specifiers=['options'],
+            defaults={'label': None, 'options': []},
+        )
+
+        soft_inst = get_software_instance(
+            software,
+            task['run_options'],
             all_software,
         )
         task['software_instance'] = soft_inst
 
         # Find the schema:
-        schema_key = (task['name'], task['method'], soft_inst['name'])
-        if not Config.get('schema_validity')[schema_key]:
-            msg = (f'No matching extension function found for the schema with '
-                   f'implementation: {soft_inst["name"]}.')
-            raise UnsatisfiedSchemaError(msg)
+        schema_key = (task['name'], task['method'], soft_inst.software)
         schema = all_task_schemas.get(schema_key)
         if not schema:
             msg = (f'No matching task schema found for task name "{task["name"]}" with '
-                   f'method "{task["method"]}" and software "{soft_inst["name"]}".')
+                   f'method "{task["method"]}" and software "{soft_inst.software}".')
             raise MissingSchemaError(msg)
+        if not Config.get('schema_validity')[schema_key]:
+            msg = (f'No matching extension function found for the schema with '
+                   f'implementation: {soft_inst.software}.')
+            raise UnsatisfiedSchemaError(msg)
 
     local_ins = get_local_inputs(
         schema.input_names,

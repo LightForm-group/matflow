@@ -14,7 +14,7 @@ import numpy as np
 from matflow.models import CommandGroup
 from matflow.errors import TaskSchemaError, TaskParameterError
 from matflow.hicklable import to_hicklable
-from matflow.utils import dump_to_yaml_string
+from matflow.utils import dump_to_yaml_string, get_specifier_dict
 
 
 class TaskSchema(object):
@@ -59,14 +59,76 @@ class TaskSchema(object):
     @classmethod
     def load_from_hierarchy(cls, schema_lst):
 
+        REQ = ['name', 'methods']
+        ALLOWED = REQ + ['inputs', 'outputs', 'notes']
+
+        REQ_METHOD = ['name', 'implementations']
+        ALLOWED_METHOD = REQ_METHOD + ['inputs', 'outputs', 'notes']
+
+        REQ_IMPL = ['name']
+        ALLOWED_IMPL = REQ_IMPL + [
+            'inputs',
+            'outputs',
+            'input_map',
+            'output_map',
+            'commands',
+            'notes',
+        ]
+
         all_schema_dicts = {}
         for schema in schema_lst:
 
-            name = schema['name']
+            name = schema.get('name', 'MISSING NAME')
+
+            bad_keys = set(schema.keys()) - set(ALLOWED)
+            miss_keys = set(REQ) - set(schema.keys())
+
+            if bad_keys:
+                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+                msg = (f'Unknown task schema keys for task schema "{name}": '
+                       f'{bad_keys_fmt}.')
+                raise TaskSchemaError(msg)
+
+            if miss_keys:
+                miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+                msg = (f'Missing task schema keys for task schema "{name}": '
+                       f'{miss_keys_fmt}.')
+                raise TaskSchemaError(msg)
 
             for method in schema['methods']:
 
+                bad_keys = set(method.keys()) - set(ALLOWED_METHOD)
+                miss_keys = set(REQ_METHOD) - set(method.keys())
+
+                if bad_keys:
+                    bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+                    msg = (f'Unknown task schema method keys for task schema '
+                           f'"{name}": {bad_keys_fmt}.')
+                    raise TaskSchemaError(msg)
+
+                if miss_keys:
+                    miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+                    msg = (f'Missing task schema method keys for task schema '
+                           f'"{name}": {miss_keys_fmt}.')
+                    raise TaskSchemaError(msg)
+
                 for imp in method['implementations']:
+
+                    bad_keys = set(imp.keys()) - set(ALLOWED_IMPL)
+                    miss_keys = set(REQ_IMPL) - set(imp.keys())
+
+                    if bad_keys:
+                        bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+                        msg = (f'Unknown task schema implementation keys for task schema '
+                               f'"{name}" and method "{method["name"]}": {bad_keys_fmt}.')
+                        raise TaskSchemaError(msg)
+
+                    if miss_keys:
+                        miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+                        msg = (f'Missing task schema method keys for task schema '
+                               f'"{name}" and method "{method["name"]}": '
+                               f'{miss_keys_fmt}.')
+                        raise TaskSchemaError(msg)
 
                     key = (name, method['name'], imp['name'])
                     if key in all_schema_dicts:
@@ -148,40 +210,13 @@ class TaskSchema(object):
         # Normalise schema inputs:
         for inp_idx, inp in enumerate(self.inputs):
 
-            if isinstance(inp, str):
-
-                # Parse additional input specifiers:
-                match = re.search(r'([\w-]+)(\[(.*?)\])*', inp)
-                inp_name = match.group(1)
-                inp = {'name': inp_name}
-
-                specifiers_str = match.group(3)
-                if specifiers_str:
-                    specs = specifiers_str.split(',')
-                    for s in specs:
-                        s_key, s_val = s.split('=')
-                        inp.update({s_key.strip(): s_val.strip()})
-
-                    if 'context' in inp and inp['context'] and 'alias' not in inp:
-                        msg = ('Task schema inputs for which a `context` is specified '
-                               'must also be given an `alias`.')
-                        raise TaskSchemaError(err + msg)
-
-            elif not isinstance(inp, dict):
-                raise TypeError(err + 'Task schema input must be a str or a dict.')
+            inp_defs = {'context': None, 'group': 'default'}
+            inp = get_specifier_dict(inp, name_key='name', defaults=inp_defs)
 
             for r in req_inp_keys:
                 if r not in inp:
                     msg = f'Task schema input must include key {r}.'
                     raise TaskSchemaError(err + msg)
-
-            if 'context' not in inp:
-                # Add default parameter context:
-                inp['context'] = None
-
-            if 'group' not in inp:
-                # Add default group:
-                inp['group'] = 'default'
 
             if 'alias' not in inp:
                 # Add default alias:
@@ -425,6 +460,7 @@ class Task(object):
         'Return attributes dict with preceding underscores removed.'
         self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
         self_dict['status'] = (self.status.name, self.status.value)
+        self_dict['software_instance'] = self_dict['software_instance'].as_dict()
         return self_dict
 
     def generate_id(self):
@@ -564,4 +600,4 @@ class Task(object):
 
     @property
     def software(self):
-        return self.software_instance['name']
+        return self.software_instance.software

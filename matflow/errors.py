@@ -64,3 +64,8 @@ class TaskElementExecutionError(Exception):
 
 class ConfigurationError(Exception):
     'For malformed configuration files.'
+
+
+class SoftwareInstanceError(Exception):
+    'For malformed SoftwareInstance definitions.'
+    pass

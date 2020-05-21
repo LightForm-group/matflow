@@ -7,6 +7,7 @@ import copy
 import itertools
 import numpy as np
 import random
+import re
 import time
 from contextlib import redirect_stdout
 
@@ -260,3 +261,94 @@ def dump_to_yaml_string(data):
         yaml.dump(data, sys.stdout)
         output = buffer.getvalue()
     return output
+
+
+def get_specifier_dict(key, name_key=None, base_key=None, defaults=None,
+                       list_specifiers=None):
+    """Resolve a string key with additional specifiers using square-brackets into a dict.
+
+    Parameters
+    ----------
+    key : str or dict
+    name_key : str
+    base_key : str
+    defaults : dict
+    list_specifiers : list of str
+        Any specifier in this list will be added to the returned dict as a list element.
+
+    Returns
+    -------
+    dict
+
+    Examples
+    --------
+    >>> get_specifier_dict(
+        'parameter_1[hey, label_2=hi]',        
+        name_key='param_name',
+        base_key='label_1',
+        defaults={'a': 1},
+    )
+    {
+        'param_name': 'parameter_1',
+        'label_1': 'hey'
+        'label_2': 'hi',
+        'a': 1,
+    }
+
+    """
+
+    list_specifiers = list_specifiers or []
+    out = {}
+
+    if isinstance(key, str):
+
+        if name_key is None:
+            raise TypeError('`name_key` must be specified.')
+
+        match = re.search(r'([\w-]+)(\[(.*?)\])*', key)
+        name = match.group(1)
+        out.update({name_key: name})
+
+        specifiers_str = match.group(3)
+        if specifiers_str:
+            base_keys = []
+            for s in specifiers_str.split(','):
+                if not s:
+                    continue
+                if '=' in s:
+                    s_key, s_val = [i.strip() for i in s.split('=')]
+                    if s_key in list_specifiers:
+                        if s_key in out:
+                            out[s_key].append(s_val)
+                        else:
+                            out[s_key] = [s_val]
+                    else:
+                        if s_key in out:
+                            raise ValueError(
+                                f'Specifier "{s_key}" multiply defined. Add this '
+                                f'specifier to `list_specifiers` to add multiple values '
+                                f'to the returned dict (in a list).'
+                            )
+                        out.update({s_key: s_val})
+                else:
+                    base_keys.append(s.strip())
+
+            if len(base_keys) > 1:
+                raise ValueError('Only one specifier may be specified without a key.')
+
+            if base_keys:
+                if base_key is None:
+                    raise ValueError('Base key found but `base_key` name not specified.')
+                out.update({base_key: base_keys[0]})
+
+    elif isinstance(key, dict):
+        out.update(key)
+
+    else:
+        raise TypeError('`key` must be a dict or str to allow specifiers to be resolved.')
+
+    for k, v in (defaults or {}).items():
+        if k not in out:
+            out[k] = copy.deepcopy(v)
+
+    return out

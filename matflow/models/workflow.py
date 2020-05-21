@@ -32,6 +32,7 @@ from matflow.hicklable import to_hicklable
 from matflow.utils import parse_times, zeropad, datetime_to_dict
 from matflow.models.command import DEFAULT_FORMATTERS
 from matflow.models.construction import init_tasks
+from matflow.models.software import SoftwareInstance
 from matflow.models.task import TaskStatus
 
 
@@ -380,7 +381,7 @@ class Workflow(object):
 
             task_path_rel = str(self.get_task_path(task.task_idx).name)
 
-            environment = task.software_instance.get('environment', [])
+            environment = task.software_instance.environment_lines
             task_idx_fmt = self.get_task_idx_padded(task.task_idx)
             command_groups.extend([
                 {
@@ -490,6 +491,7 @@ class Workflow(object):
             hist['timestamp'] = datetime_to_dict(hist['timestamp'])
             history.append(hist)
         out['history'] = history
+        out['tasks'] = [i.as_dict() for i in out['tasks']]
 
         return out
 
@@ -590,7 +592,6 @@ class Workflow(object):
 
         workflow_as_dict = self.as_dict()
         del workflow_as_dict['is_from_file']
-        workflow_as_dict['tasks'] = [i.as_dict() for i in self.tasks]
 
         err_msg = None
         try:
@@ -694,6 +695,11 @@ class Workflow(object):
 
         for i in obj_json['tasks']:
             i['status'] = TaskStatus(i['status'][1])
+            soft_inst_dict = i['software_instance']
+            machine = soft_inst_dict.pop('machine')
+            soft_inst = SoftwareInstance(**soft_inst_dict)
+            soft_inst.machine = machine
+            i['software_instance'] = soft_inst
 
         obj = {
             'name': obj_json['name'],
