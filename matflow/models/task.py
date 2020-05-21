@@ -501,7 +501,10 @@ class Task(object):
 
     @property
     def run_options(self):
-        return self._run_options
+        return {
+            **(self.software_instance.scheduler_options or {}),
+            **(self._run_options or {}),
+        }
 
     @property
     def status(self):

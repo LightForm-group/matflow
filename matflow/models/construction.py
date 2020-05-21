@@ -451,14 +451,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
     if 'num_cores' not in task['run_options']:
         task['run_options'].update({'num_cores': 1})
 
-    # (SGE specific):
-    if task['run_options']['num_cores'] > 1:
-        if 'pe' not in task['run_options']:
-            msg = ('Parallel environment (`pe`) key must be specified in `run_options`, '
-                   'since `num_cores > 1`.')
-            raise TaskError(msg)
-
-    elif task['run_options']['num_cores'] <= 0:
+    if task['run_options']['num_cores'] <= 0:
         msg = 'Specify `num_cores` (in `run_options`) as an integer greater than 0.'
         raise TaskError(msg)
 
@@ -488,6 +481,17 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             all_software,
         )
         task['software_instance'] = soft_inst
+
+        if task['run_options']['num_cores'] > 1:
+            all_run_opts = {
+                **soft_inst.scheduler_options,
+                **task['run_options'],
+            }
+            # (SGE specific):
+            if 'pe' not in all_run_opts:
+                msg = ('Parallel environment (`pe`) key must be specified in '
+                       '`run_options`, since `num_cores > 1`.')
+                raise TaskError(msg)
 
         # Find the schema:
         schema_key = (task['name'], task['method'], soft_inst.software)
