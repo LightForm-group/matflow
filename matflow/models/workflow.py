@@ -238,9 +238,12 @@ class Workflow(object):
     def hdf5_path(self):
         return self.path.joinpath(f'workflow_v{self.version:03}.hdf5')
 
-    def get_task_idx_padded(self, task_idx):
+    def get_task_idx_padded(self, task_idx, ret_zero_based=True):
         'Get a task index, zero-padded according to the number of tasks.'
-        return zeropad(task_idx, len(self) - 1)
+        if ret_zero_based:
+            return zeropad(task_idx, len(self) - 1)
+        else:
+            return zeropad(task_idx + 1, len(self))
 
     @requires_path_exists
     def get_task_path(self, task_idx):
@@ -249,7 +252,7 @@ class Workflow(object):
             msg = f'Workflow has only {len(self)} tasks.'
             raise ValueError(msg)
         task = self.tasks[task_idx]
-        task_idx_fmt = self.get_task_idx_padded(task_idx)
+        task_idx_fmt = self.get_task_idx_padded(task_idx, ret_zero_based=False)
         task_path = self.path.joinpath(f'task_{task_idx_fmt}_{task.name}')
         return task_path
 
@@ -313,7 +316,7 @@ class Workflow(object):
         if job_type not in ALLOWED:
             raise ValueError(f'Invalid `job_type`. Allowed values are: {ALLOWED}.')
 
-        task_idx_fmt = self.get_task_idx_padded(task.task_idx)
+        task_idx_fmt = self.get_task_idx_padded(task.task_idx, ret_zero_based=False)
 
         base = 't' if not is_stats else 's'
 
@@ -325,7 +328,10 @@ class Workflow(object):
                 out = f'{base}{task_idx_fmt}_aux'
             else:
                 prev_task = self.tasks[task.task_idx - 1]
-                prev_task_idx_fmt = self.get_task_idx_padded(prev_task.task_idx)
+                prev_task_idx_fmt = self.get_task_idx_padded(
+                    prev_task.task_idx,
+                    ret_zero_based=False,
+                )
                 out = f't{prev_task_idx_fmt}+{task_idx_fmt}_aux'
 
         elif job_type == 'process-task':
@@ -333,7 +339,10 @@ class Workflow(object):
                 out = f'{base}{task_idx_fmt}_aux'
             else:
                 next_task = self.tasks[task.task_idx + 1]
-                next_task_idx_fmt = self.get_task_idx_padded(next_task.task_idx)
+                next_task_idx_fmt = self.get_task_idx_padded(
+                    next_task.task_idx,
+                    ret_zero_based=False,
+                )
                 out = f'{base}{task_idx_fmt}+{next_task_idx_fmt}_aux'
 
         elif job_type == 'prepare-sources':
