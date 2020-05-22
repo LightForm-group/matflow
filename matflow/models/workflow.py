@@ -920,10 +920,6 @@ class Workflow(object):
         submission_idx = 0
         hf_sub_stats = hf_stats_all[workflow_idx]['submissions'][submission_idx]
 
-        # Every third hpcflow task, since there are two additional hpcflow tasks for
-        # each matflow task:
-        # hf_task_stats = hf_sub_stats['command_group_submissions'][1::3][task_idx]['tasks']
-
         job_name = self.get_hpcflow_job_name(task, 'run')
         for i in hf_sub_stats['command_group_submissions']:
             if i['name'] == job_name:
