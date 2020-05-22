@@ -293,7 +293,7 @@ class Workflow(object):
             for i in range(num_elems):
                 self.get_element_path(task.task_idx, i).mkdir(exist_ok=True)
 
-    def get_hpcflow_job_name(self, task, job_type):
+    def get_hpcflow_job_name(self, task, job_type, is_stats=False):
         """Get the scheduler job name for a given task index and job type.
 
         Parameters
@@ -301,6 +301,7 @@ class Workflow(object):
         task : Task
         job_type : str 
             One of "prepare-task", "process-task", "run", "prepare-sources"
+        is_stats : bool, optional
 
         Returns
         -------
@@ -314,12 +315,14 @@ class Workflow(object):
 
         task_idx_fmt = self.get_task_idx_padded(task.task_idx)
 
+        base = 't' if not is_stats else 's'
+
         if job_type == 'run':
-            out = f't{task_idx_fmt}'
+            out = f'{base}{task_idx_fmt}'
 
         elif job_type == 'prepare-task':
             if task.task_idx == 0:
-                out = f't{task_idx_fmt}_aux'
+                out = f'{base}{task_idx_fmt}_aux'
             else:
                 prev_task = self.tasks[task.task_idx - 1]
                 prev_task_idx_fmt = self.get_task_idx_padded(prev_task.task_idx)
@@ -327,14 +330,14 @@ class Workflow(object):
 
         elif job_type == 'process-task':
             if task.task_idx == (len(self) - 1):
-                out = f't{task_idx_fmt}_aux'
+                out = f'{base}{task_idx_fmt}_aux'
             else:
                 next_task = self.tasks[task.task_idx + 1]
                 next_task_idx_fmt = self.get_task_idx_padded(next_task.task_idx)
-                out = f't{task_idx_fmt}+{next_task_idx_fmt}_aux'
+                out = f'{base}{task_idx_fmt}+{next_task_idx_fmt}_aux'
 
         elif job_type == 'prepare-sources':
-            out = f't{task_idx_fmt}_src'
+            out = f'{base}{task_idx_fmt}_src'
 
         return out
 
@@ -446,9 +449,10 @@ class Workflow(object):
                 'nesting': 'hold',
                 'commands': fmt_commands,
                 'environment': environment,
-                'stats': task.stats,
                 'scheduler_options': scheduler_opts,
                 'name': self.get_hpcflow_job_name(task, 'run'),
+                'stats': task.stats,
+                'stats_name': self.get_hpcflow_job_name(task, 'run', is_stats=True),
             })
 
             if task.task_idx < (len(self) - 1):
@@ -919,7 +923,6 @@ class Workflow(object):
         workflow_idx = 0
         submission_idx = 0
         hf_sub_stats = hf_stats_all[workflow_idx]['submissions'][submission_idx]
-
         job_name = self.get_hpcflow_job_name(task, 'run')
         for i in hf_sub_stats['command_group_submissions']:
             if i['name'] == job_name:
