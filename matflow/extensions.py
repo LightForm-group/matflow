@@ -129,6 +129,19 @@ def software_versions(software):
     return _software_versions
 
 
+def sources_mapper(task, method, software, **sources_dict):
+    """Function decorator to register an extension function that generate task source
+    files."""
+    def _sources_mapper(func):
+        @functools.wraps(func)
+        def func_wrap(*args, **kwargs):
+            return func(*args, **kwargs)
+        key = (task, method, software)
+        Config.set_source_map(key, func_wrap, **sources_dict)
+        return func_wrap
+    return _sources_mapper
+
+
 def register_output_file(file_reference, file_name, task, method, software):
     key = (task, method, software)
     Config.set_output_file_map(key, file_reference, file_name)

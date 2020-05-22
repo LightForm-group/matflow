@@ -352,3 +352,28 @@ def get_specifier_dict(key, name_key=None, base_key=None, defaults=None,
             out[k] = copy.deepcopy(v)
 
     return out
+
+
+def extract_variable_names(source_str, delimiters):
+    """Given a specified syntax for embedding variable names within a string,
+    extract all variable names.
+
+    Parameters
+    ----------
+    source_str : str
+        The string within which to search for variable names.
+    delimiters : two-tuple of str
+        The left and right delimiters of a variable name.
+
+    Returns
+    -------
+    var_names : list of str
+        The variable names embedded in the original string.   
+
+    """
+
+    delim_esc = [re.escape(i) for i in delimiters]
+    pattern = delim_esc[0] + r'(.\S+?)' + delim_esc[1]
+    var_names = re.findall(pattern, source_str)
+
+    return var_names

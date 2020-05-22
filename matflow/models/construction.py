@@ -28,6 +28,7 @@ from matflow.errors import (
     UnsatisfiedGroupParameter,
     MissingSchemaError,
     UnsatisfiedSchemaError,
+    MissingSoftwareSourcesError,
 )
 from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list,
                            to_sub_list, get_specifier_dict)
@@ -343,7 +344,7 @@ def get_dependency_idx(task_info_lst):
 
 
 def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
-                       check_integrity=True):
+                       all_sources_maps, check_integrity=True):
     """Validate a task dict.
 
     Parameters
@@ -360,6 +361,8 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
         objects.
     all_task_schemas : dict of (tuple : TaskSchema)
         All available TaskSchema objects, keyed by a (name, method, software) tuple.
+    all_sources_maps : dict of (tuple : dict)
+        All available sources maps.
     check_integrity : bool, optional
         Applicable if `is_from_file` is True. If True, re-generate `local_inputs`
         and compare them to those loaded from the file. If the equality test
@@ -480,6 +483,12 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             task['run_options'],
             all_software,
         )
+
+        schema_key = (task['name'], task['method'], soft_inst.software)
+        # Check any sources required by the software instance are defined in the sources
+        # map:
+        soft_inst.validate_source_maps(*schema_key, all_sources_maps)
+
         task['software_instance'] = soft_inst
 
         if task['run_options']['num_cores'] > 1:
@@ -494,7 +503,6 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
                 raise TaskError(msg)
 
         # Find the schema:
-        schema_key = (task['name'], task['method'], soft_inst.software)
         schema = all_task_schemas.get(schema_key)
         if not schema:
             msg = (f'No matching task schema found for task name "{task["name"]}" with '
@@ -992,6 +1000,7 @@ def init_tasks(task_lst, is_from_file, check_integrity=True):
             is_from_file,
             Config.get('software'),
             Config.get('task_schemas'),
+            Config.get('sources_maps'),
             check_integrity
         )
         for i in task_lst

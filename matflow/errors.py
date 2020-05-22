@@ -69,3 +69,7 @@ class ConfigurationError(Exception):
 class SoftwareInstanceError(Exception):
     'For malformed SoftwareInstance definitions.'
     pass
+
+
+class MissingSoftwareSourcesError(Exception):
+    'For when a software instance requires source variables, but none are forthcoming.'

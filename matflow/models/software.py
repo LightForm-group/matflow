@@ -1,7 +1,8 @@
 import copy
 import socket
 
-from matflow.errors import SoftwareInstanceError
+from matflow.errors import SoftwareInstanceError, MissingSoftwareSourcesError
+from matflow.utils import extract_variable_names
 
 
 class SoftwareInstance(object):
@@ -121,6 +122,26 @@ class SoftwareInstance(object):
         self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
         return self_dict
 
+    def validate_source_maps(self, task, method, software, all_sources_maps):
+        """Check that any sources required in the preparation commands or executable are
+        available in the sources map."""
+
+        source_vars = self.source_variables
+        if source_vars:
+            if (task, method, software) not in all_sources_maps:
+                msg = (f'No extension defines a sources map for the task "{task}" with '
+                       f'method "{method}" and software "{software}".')
+                raise MissingSoftwareSourcesError(msg)
+            else:
+                sources_map = all_sources_maps[(task, method, software)]
+
+            for i in source_vars:
+                if i not in sources_map:
+                    msg = (f'Source variable name "{i}" is not in the sources map for '
+                           f'task "{task}" with method "{method}" and software '
+                           f'"{software}".')
+                    raise MissingSoftwareSourcesError(msg)
+
     @classmethod
     def load_multiple(cls, software_dict=None):
         """Load many SoftwareInstance objects from a dict of software instance
@@ -225,6 +246,27 @@ class SoftwareInstance(object):
             all_instances.update({name: all_name_instances})
 
         return all_instances
+
+    @property
+    def requires_sources(self):
+        if (
+            '<<sources_dir>>' in self.preparation['commands'] or
+            '<<sources_dir>>' in self.executable
+        ):
+            return True
+        else:
+            return False
+
+    @property
+    def source_variables(self):
+        if not self.requires_sources:
+            return []
+        else:
+            source_vars = extract_variable_names(
+                self.preparation['commands'] + self.executable,
+                ['<<', '>>'],
+            )
+            return list(set(source_vars) - set(['sources_dir']))
 
     @property
     def software(self):
