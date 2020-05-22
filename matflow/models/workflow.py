@@ -257,6 +257,11 @@ class Workflow(object):
         return task_path
 
     @requires_path_exists
+    def get_task_sources_path(self, task_idx):
+        task_path = self.get_task_path(task_idx)
+        return task_path.joinpath('sources')
+
+    @requires_path_exists
     def get_element_path(self, task_idx, element_idx):
         'Get the path to an element directory.'
         num_elements = self.elements_idx[task_idx]['num_elements']
@@ -290,6 +295,9 @@ class Workflow(object):
 
             # Generate task directory:
             self.get_task_path(task.task_idx).mkdir()
+
+            if task.software_instance.requires_sources:
+                self.get_task_sources_path(task.task_idx).mkdir()
 
             num_elems = elems_idx['num_elements']
             # Generate element directories:
