@@ -293,6 +293,51 @@ class Workflow(object):
             for i in range(num_elems):
                 self.get_element_path(task.task_idx, i).mkdir(exist_ok=True)
 
+    def get_hpcflow_job_name(self, task, job_type):
+        """Get the scheduler job name for a given task index and job type.
+
+        Parameters
+        ----------
+        task : Task
+        job_type : str 
+            One of "prepare-task", "process-task", "run", "prepare-sources"
+
+        Returns
+        -------
+        job_name : str
+            The job name to be used in the hpcflow workflow.
+
+        """
+        ALLOWED = ['prepare-task', 'process-task', 'run', 'prepare-sources']
+        if job_type not in ALLOWED:
+            raise ValueError(f'Invalid `job_type`. Allowed values are: {ALLOWED}.')
+
+        task_idx_fmt = self.get_task_idx_padded(task.task_idx)
+
+        if job_type == 'run':
+            out = f't{task_idx_fmt}'
+
+        elif job_type == 'prepare-task':
+            if task.task_idx == 0:
+                out = f't{task_idx_fmt}_aux'
+            else:
+                prev_task = self.tasks[task.task_idx - 1]
+                prev_task_idx_fmt = self.get_task_idx_padded(prev_task.task_idx)
+                out = f't{prev_task_idx_fmt}+{task_idx_fmt}_aux'
+
+        elif job_type == 'process-task':
+            if task.task_idx == (len(self) - 1):
+                out = f't{task_idx_fmt}_aux'
+            else:
+                next_task = self.tasks[task.task_idx + 1]
+                next_task_idx_fmt = self.get_task_idx_padded(next_task.task_idx)
+                out = f't{task_idx_fmt}+{next_task_idx_fmt}_aux'
+
+        elif job_type == 'prepare-sources':
+            out = f't{task_idx_fmt}_src'
+
+        return out
+
     @requires_path_exists
     def get_hpcflow_workflow(self):
         'Generate an hpcflow workflow to execute this workflow.'
@@ -382,9 +427,9 @@ class Workflow(object):
             task_path_rel = str(self.get_task_path(task.task_idx).name)
 
             environment = task.software_instance.environment_lines
-            task_idx_fmt = self.get_task_idx_padded(task.task_idx)
-            command_groups.extend([
-                {
+
+            if task.task_idx == 0:
+                command_groups.append({
                     'directory': '.',
                     'nesting': 'hold',
                     'commands': [
@@ -393,18 +438,37 @@ class Workflow(object):
                     'environment': environment,
                     'stats': False,
                     'scheduler_options': scheduler_opts_process,
-                    'name': f't{task_idx_fmt}_pre',
-                },
-                {
-                    'directory': '<<{}_dirs>>'.format(task_path_rel),
+                    'name': self.get_hpcflow_job_name(task, 'prepare-task'),
+                })
+
+            command_groups.append({
+                'directory': '<<{}_dirs>>'.format(task_path_rel),
+                'nesting': 'hold',
+                'commands': fmt_commands,
+                'environment': environment,
+                'stats': task.stats,
+                'scheduler_options': scheduler_opts,
+                'name': self.get_hpcflow_job_name(task, 'run'),
+            })
+
+            if task.task_idx < (len(self) - 1):
+                next_task = self.tasks[task.task_idx + 1]
+                environment = task.software_instance.environment_lines
+                next_environment = next_task.software_instance.environment_lines
+                command_groups.append({
+                    'directory': '.',
                     'nesting': 'hold',
-                    'commands': fmt_commands,
-                    'environment': environment,
-                    'stats': task.stats,
-                    'scheduler_options': scheduler_opts,
-                    'name': f't{task_idx_fmt}',
-                },
-                {
+                    'commands': [
+                        'matflow process-task --task-idx={}'.format(task.task_idx),
+                        'matflow prepare-task --task-idx={}'.format(task.task_idx + 1),
+                    ],
+                    'environment': next_environment,
+                    'stats': False,
+                    'scheduler_options': scheduler_opts_process,
+                    'name': self.get_hpcflow_job_name(task, 'process-task'),
+                })
+            else:
+                command_groups.append({
                     'directory': '.',
                     'nesting': 'hold',
                     'commands': [
@@ -412,9 +476,8 @@ class Workflow(object):
                     ],
                     'stats': False,
                     'scheduler_options': scheduler_opts_process,
-                    'name': f't{task_idx_fmt}_post',
-                },
-            ])
+                    'name': self.get_hpcflow_job_name(task, 'process-task'),
+                })
 
             # Add variable for the task directories:
             elem_dir_regex = '/[0-9]+$' if elems_idx['num_elements'] > 1 else ''
@@ -859,8 +922,13 @@ class Workflow(object):
 
         # Every third hpcflow task, since there are two additional hpcflow tasks for
         # each matflow task:
-        hf_task_stats = hf_sub_stats['command_group_submissions'][1::3][task_idx]['tasks']
-        task.resource_usage = hf_task_stats
+        # hf_task_stats = hf_sub_stats['command_group_submissions'][1::3][task_idx]['tasks']
+
+        job_name = self.get_hpcflow_job_name(task, 'run')
+        for i in hf_sub_stats['command_group_submissions']:
+            if i['name'] == job_name:
+                task.resource_usage = i['tasks']
+                break
 
         for elem_idx in range(num_elems):
 
