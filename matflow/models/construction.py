@@ -252,8 +252,8 @@ def get_software_instance(software, run_options, all_software):
 
             if keep_looking:
                 continue
-
-        return inst
+            else:
+                return inst
 
     msg = (f'Could not find suitable software "{software["name"]}", with '
            f'`num_cores={run_options["num_cores"]}` and `label={software["label"]}`.')

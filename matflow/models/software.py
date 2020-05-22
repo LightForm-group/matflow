@@ -160,8 +160,8 @@ class SoftwareInstance(object):
         all_instances = {}
         for name, definition in software_dict.items():
 
-            bad_keys = set(definition) - set(ALLOWED)
-            miss_keys = set(REQUIRED) - set(definition)
+            bad_keys = set(definition.keys()) - set(ALLOWED)
+            miss_keys = set(REQUIRED) - set(definition.keys())
             if bad_keys:
                 bad_keys_fmt = ', '.join([f'"{i}"' for i in bad_keys])
                 msg = (f'Unknown keys in software instance definitions for software '
