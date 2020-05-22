@@ -373,6 +373,12 @@ class Workflow(object):
                 fmt_commands, input_vars = cmd_group.get_formatted_commands(
                     task.local_inputs['inputs'].keys())
 
+                # Replace any "<<executable>>":
+                fmt_commands = [
+                    i.replace('<<executable>>', task.software_instance.executable)
+                    for i in fmt_commands
+                ]
+
                 cmd_line_inputs = {}
                 for local_in_name, local_in in task.local_inputs['inputs'].items():
                     if local_in_name in input_vars:
