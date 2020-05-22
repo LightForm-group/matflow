@@ -266,7 +266,7 @@ class Workflow(object):
 
         element_path = self.get_task_path(task_idx)
         if num_elements > 1:
-            element_idx_fmt = str(zeropad(element_idx, num_elements - 1))
+            element_idx_fmt = f'element_{zeropad(element_idx + 1, num_elements)}'
             element_path = element_path.joinpath(element_idx_fmt)
 
         return element_path
@@ -493,7 +493,7 @@ class Workflow(object):
                 })
 
             # Add variable for the task directories:
-            elem_dir_regex = '/[0-9]+$' if elems_idx['num_elements'] > 1 else ''
+            elem_dir_regex = '/element_[0-9]+$' if elems_idx['num_elements'] > 1 else ''
             variables.update({
                 '{}_dirs'.format(task_path_rel): {
                     'file_regex': {
