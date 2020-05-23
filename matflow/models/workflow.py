@@ -27,6 +27,7 @@ from matflow.errors import (
     MissingMergePriority,
     WorkflowPersistenceError,
     TaskElementExecutionError,
+    UnexpectedSourceMapReturnError,
 )
 from matflow.hicklable import to_hicklable
 from matflow.utils import parse_times, zeropad, datetime_to_dict
@@ -366,6 +367,40 @@ class Workflow(object):
         variables = {}
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
+            src_prep_cmd_group = []
+            executable = task.software_instance.executable
+            scheduler_opts_process = Config.get('prepare_process_scheduler_options')
+
+            if task.software_instance.requires_sources:
+
+                sources_dir = str(self.get_task_sources_path(task.task_idx))
+                prep_env = task.software_instance.preparation['environment'] or ''
+                prep_cmds = task.software_instance.preparation['commands'] or ''
+
+                source_map = Config.get('sources_maps')[
+                    (task.name, task.method, task.software)
+                ]
+                src_vars = source_map['sources']
+                for src_var_name, src_name in src_vars.items():
+
+                    prep_cmds = prep_cmds.replace(f'<<{src_var_name}>>', src_name)
+                    executable = executable.replace(f'<<{src_var_name}>>', src_name)
+
+                    prep_cmds = prep_cmds.replace('<<sources_dir>>', sources_dir)
+                    executable = executable.replace('<<sources_dir>>', sources_dir)
+
+                src_prep_cmd_group = [{
+                    'directory': str(self.get_task_sources_path(task.task_idx)),
+                    'nesting': 'hold',
+                    'commands': [
+                        'matflow prepare-sources --task-idx={}'.format(task.task_idx)
+                    ] + prep_cmds.splitlines(),
+                    'environment': prep_env.splitlines(),
+                    'stats': False,
+                    'scheduler_options': scheduler_opts_process,
+                    'name': self.get_hpcflow_job_name(task, 'prepare-sources'),
+                }]
+
             if task.schema.is_func:
                 # The task is to be run directly in Python:
                 # (SGE specific)
@@ -381,11 +416,8 @@ class Workflow(object):
                 fmt_commands, input_vars = cmd_group.get_formatted_commands(
                     task.local_inputs['inputs'].keys())
 
-                # Replace any "<<executable>>":
-                fmt_commands = [
-                    i.replace('<<executable>>', task.software_instance.executable)
-                    for i in fmt_commands
-                ]
+                fmt_commands = [i.replace('<<executable>>', executable)
+                                for i in fmt_commands]
 
                 cmd_line_inputs = {}
                 for local_in_name, local_in in task.local_inputs['inputs'].items():
@@ -443,7 +475,6 @@ class Workflow(object):
                             handle.write(in_val + '\n')
 
             scheduler_opts = {}
-            scheduler_opts_process = Config.get('prepare_process_scheduler_options')
             for k, v in task.run_options.items():
                 if k != 'num_cores':
                     if k == 'pe':
@@ -466,6 +497,9 @@ class Workflow(object):
                     'scheduler_options': scheduler_opts_process,
                     'name': self.get_hpcflow_job_name(task, 'prepare-task'),
                 })
+
+            if task.software_instance.requires_sources:
+                command_groups += src_prep_cmd_group
 
             command_groups.append({
                 'directory': '<<{}_dirs>>'.format(task_path_rel),
@@ -511,7 +545,7 @@ class Workflow(object):
             variables.update({
                 '{}_dirs'.format(task_path_rel): {
                     'file_regex': {
-                        'pattern': f'({task_path_rel}{elem_dir_regex})',
+                        'pattern': f'({task_path_rel}{elem_dir_regex})$',
                         'is_dir': True,
                         'group': 0,
                     },
@@ -814,6 +848,48 @@ class Workflow(object):
         workflow._history = obj_json['history']
 
         return workflow
+
+    @requires_path_exists
+    def prepare_sources(self, task_idx):
+        'Prepare source files for the task preparation commands.'
+
+        # Note: in future, we might want to parametrise the source function, which is
+        # why we delay its invocation until task run time.
+
+        task = self.tasks[task_idx]
+
+        if not task.software_instance.requires_sources:
+            raise RuntimeError('The task has no sources to prepare.')
+
+        source_map = Config.get('sources_maps')[(task.name, task.method, task.software)]
+        source_func = source_map['func']
+        source_files = source_func()
+
+        print(f'source_files:\n{source_files}')
+
+        expected_src_vars = set(source_map['sources'].keys())
+        returned_src_vars = set(source_files.keys())
+        bad_keys = returned_src_vars - expected_src_vars
+        if bad_keys:
+            bad_keys_fmt = ', '.join([f'"{i}"' for i in bad_keys])
+            msg = (f'The following source variable names were returned by the sources '
+                   f'mapper function "{source_func}", but were not expected: '
+                   f'{bad_keys_fmt}.')
+            raise UnexpectedSourceMapReturnError(msg)
+
+        miss_keys = expected_src_vars - returned_src_vars
+        if miss_keys:
+            miss_keys_fmt = ', '.join([f'"{i}"' for i in miss_keys])
+            msg = (f'The following source variable names were not returned by the sources'
+                   f' mapper function "{source_func}": {miss_keys_fmt}.')
+            raise UnexpectedSourceMapReturnError(msg)
+
+        for src_var, src_name in source_map['sources'].items():
+            file_str = source_files[src_var]['content']
+            file_name = source_files[src_var]['filename']
+            file_path = self.get_task_sources_path(task_idx).joinpath(file_name)
+            with file_path.open('w') as handle:
+                handle.write(file_str)
 
     @requires_path_exists
     def prepare_task(self, task_idx):

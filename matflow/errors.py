@@ -73,3 +73,7 @@ class SoftwareInstanceError(Exception):
 
 class MissingSoftwareSourcesError(Exception):
     'For when a software instance requires source variables, but none are forthcoming.'
+
+
+class UnexpectedSourceMapReturnError(Exception):
+    'For when a source map function does not return the expected dict.'

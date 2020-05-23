@@ -248,17 +248,12 @@ class Config(object):
     @staticmethod
     def set_source_map(key, func, **sources_dict):
         if Config._validate_extension_setter():
-            if key not in Config.__conf['CLI_arg_maps']:
-                Config.__conf['sources_maps'].update({key: {}})
-            for source_var_name, source_name in sources_dict.items():
-                if source_var_name in Config.__conf['sources_maps'][key]:
-                    msg = (f'Source variable name "{source_var_name}" already exists in '
-                           f'the sources map.')
-                    raise MatflowExtensionError(msg)
-                Config.__conf['sources_maps'][key][source_var_name] = {
-                    'source_name': source_name,
-                    'func': func,
-                }
+            if key in Config.__conf['sources_maps']:
+                msg = f'Sources map for key: {key} already exists in.'
+                raise MatflowExtensionError(msg)
+            Config.__conf['sources_maps'].update({
+                key: {'func': func, 'sources': sources_dict}
+            })
 
     @staticmethod
     def set_software_version_func(software, func):

@@ -30,7 +30,7 @@ class SoftwareInstance(object):
         ----------
         software : str
             Name of the software. This is the name that will be exposed as the `SOFTWARE`
-            attribute of a Matflow extension package.            
+            attribute of a Matflow extension package.
         label : str, optional
             Label used to distinguish software instances for the same `software`. For
             example, this could be a version string.
@@ -136,7 +136,7 @@ class SoftwareInstance(object):
                 sources_map = all_sources_maps[(task, method, software)]
 
             for i in source_vars:
-                if i not in sources_map:
+                if i not in sources_map['sources']:
                     msg = (f'Source variable name "{i}" is not in the sources map for '
                            f'task "{task}" with method "{method}" and software '
                            f'"{software}".')
@@ -154,7 +154,7 @@ class SoftwareInstance(object):
                 instances : list of dict
                     Each element is a dict
                 instance_defaults : dict, optional
-                    Default values to apply to each dict in the `instances` list.                    
+                    Default values to apply to each dict in the `instances` list.
 
         Returns
         -------
@@ -250,8 +250,8 @@ class SoftwareInstance(object):
     @property
     def requires_sources(self):
         if (
-            '<<sources_dir>>' in self.preparation['commands'] or
-            '<<sources_dir>>' in self.executable
+            (self.preparation and '<<sources_dir>>' in self.preparation['commands']) or
+            (self.executable and '<<sources_dir>>' in self.executable)
         ):
             return True
         else:
@@ -262,10 +262,13 @@ class SoftwareInstance(object):
         if not self.requires_sources:
             return []
         else:
-            source_vars = extract_variable_names(
-                self.preparation['commands'] + self.executable,
-                ['<<', '>>'],
-            )
+            source_vars = []
+            if self.preparation:
+                source_vars += extract_variable_names(
+                    self.preparation['commands'], ['<<', '>>'])
+            if self.executable:
+                source_vars += extract_variable_names(self.executable, ['<<', '>>'])
+
             return list(set(source_vars) - set(['sources_dir']))
 
     @property
