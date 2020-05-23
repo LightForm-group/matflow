@@ -62,6 +62,14 @@ def run_python_task(task_idx, element_idx, directory=None):
 
 
 @cli.command()
+@click.option('--task-idx', '-t', type=click.INT, required=True)
+@click.option('--directory', '-d', type=click.Path(exists=True))
+def prepare_sources(task_idx, directory=None):
+    print('matflow.cli.prepare_sources', flush=True)
+    api.prepare_sources(task_idx, directory)
+
+
+@cli.command()
 @click.argument('schema_source_path', type=click.Path(exists=True))
 def append_schema_source(schema_source_path):
     api.append_schema_source(schema_source_path)

@@ -123,6 +123,13 @@ def run_python_task(task_idx, element_idx, directory):
     workflow.run_python_task(task_idx, element_idx)
 
 
+def prepare_sources(task_idx, directory):
+    'Prepare source files.'
+    load_extensions()
+    workflow = load_workflow(directory)
+    workflow.prepare_sources(task_idx)
+
+
 def append_schema_source(schema_source_path):
     'Add a task schema source file to the end of the schema source list.'
     Config.append_schema_source(schema_source_path)
