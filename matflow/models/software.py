@@ -201,6 +201,8 @@ class SoftwareInstance(object):
         all_instances = {}
         for name, definition in software_dict.items():
 
+            name = SoftwareInstance.get_software_safe(name)
+
             bad_keys = set(definition.keys()) - set(ALLOWED)
             miss_keys = set(REQUIRED) - set(definition.keys())
             if bad_keys:
