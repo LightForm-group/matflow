@@ -64,6 +64,10 @@ class SoftwareInstance(object):
             can be used to label software instances for which add-ons are loaded.
         scheduler_options : dict, optional
             Scheduler options that are required for using this software instance.
+        version_info : dict, optional
+            If an extension does not provide a `software_version` function, then the
+            version info dict must be specified here. The keys are str names and the
+            values are dicts that must contain at least a key `version`.
 
         """
 
@@ -79,9 +83,11 @@ class SoftwareInstance(object):
         self._executable = executable
         self._options = options or []
         self._scheduler_options = scheduler_options or {}
+        self._version_info = version_info
 
         self._validate_num_cores()
         self._validate_preparation()
+        self._validate_version_infos()
 
     def _validate_num_cores(self):
         if self.cores_min < 1:
@@ -106,6 +112,17 @@ class SoftwareInstance(object):
                 raise SoftwareInstanceError(msg)
             if 'environment' not in self.preparation:
                 self._preparation['environment'] = None
+
+    def _validate_version_infos(self):
+        if self.version_info:
+            REQUIRED = ['version']
+            for k, v in self.version_info.items():
+                miss_keys = set(REQUIRED) - set(v.keys())
+                if miss_keys:
+                    miss_keys_fmt = ', '.join([f'"{i}"' for i in miss_keys])
+                    msg = (f'Missing required keys in version info dict for name "{k}" '
+                           f'for software definition "{self.software}": {miss_keys_fmt}.')
+                    raise SoftwareInstanceError(msg)
 
     def __repr__(self):
         return (
@@ -176,6 +193,7 @@ class SoftwareInstance(object):
             'options',
             'environment',
             'executable',
+            'version_info',
         ]
 
         all_instances = {}
