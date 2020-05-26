@@ -322,3 +322,7 @@ class Config(object):
         schema_valid = [k for k in Config.__conf['schema_validity'] if k[2] == name]
         for k in schema_valid:
             del Config.__conf['schema_validity'][k]
+
+        source_map = [k for k in Config.__conf['sources_maps'] if k[2] == name]
+        for k in source_map:
+            del Config.__conf['sources_maps'][k]
