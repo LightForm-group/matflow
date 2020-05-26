@@ -84,7 +84,7 @@ class SoftwareInstance(object):
         self._executable = executable
         self._options = options or []
         self._scheduler_options = scheduler_options or {}
-        self._version_info = version_info
+        self._version_info = version_info or None
 
         self._validate_num_cores()
         self._validate_preparation()

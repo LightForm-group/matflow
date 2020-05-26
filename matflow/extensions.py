@@ -35,13 +35,30 @@ def load_extensions():
                               f'loaded.')
                 unload = True
 
-            if Config.get('software_versions').get(loaded.SOFTWARE) is None:
-                print('Failed.', flush=True)
-                msg = (f'Matflow extension "{entry_point.module_name}" does not register '
-                       f'a function for getting software versions. This extension will '
-                       f'not be loaded.')
-                warnings.warn(msg)
-                unload = True
+            if (
+                not unload and
+                Config.get('software_versions').get(loaded.SOFTWARE) is None
+            ):
+
+                # Every defined SoftwareInstance must have a specified version_info:
+                version_defined = True
+                soft_instances = Config.get('software').get(loaded.SOFTWARE)
+                if not soft_instances:
+                    version_defined = False
+                else:
+                    for i in soft_instances:
+                        if i.version_info is None:
+                            version_defined = False
+                            break
+
+                if not version_defined:
+                    print('Failed.', flush=True)
+                    msg = (f'Matflow extension "{entry_point.module_name}" does not '
+                           f'register a function for getting software versions and one '
+                           f'or more of its software instance definitions do not '
+                           f'specify `version_info`. This extension will not be loaded.')
+                    warnings.warn(msg)
+                    unload = True
 
             if unload:
                 Config.unload_extension(entry_point.name)
