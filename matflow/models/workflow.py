@@ -968,8 +968,11 @@ class Workflow(object):
         task.files = files
 
         # Get software versions:
-        software_versions_func = Config.get('software_versions')[task.software]
-        software_versions = software_versions_func()
+        software_versions_func = Config.get('software_versions').get(task.software)
+        if software_versions_func:
+            software_versions = software_versions_func()
+        else:
+            software_versions = task.software_instance.version_info
         task.status = TaskStatus.running
         self._append_history(
             WorkflowAction.prepare_task,
