@@ -305,7 +305,7 @@ def get_specifier_dict(key, name_key=None, base_key=None, defaults=None,
         if name_key is None:
             raise TypeError('`name_key` must be specified.')
 
-        match = re.search(r'([\w-]+)(\[(.*?)\])*', key)
+        match = re.search(r'([\w\-\s]+)(\[(.*?)\])*', key)
         name = match.group(1)
         out.update({name_key: name})
 
