@@ -194,7 +194,7 @@ class Workflow(object):
 
     @property
     def profile(self):
-        return self._profile['dict']
+        return self._profile['parsed']
 
     @property
     def tasks(self):
