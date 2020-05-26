@@ -22,6 +22,12 @@ def load_extensions():
             loaded = entry_point.load()
             unload = False
 
+            if not hasattr(loaded, 'SOFTWARE'):
+                print('Failed.', flush=True)
+                warnings.warn(f'Matflow extension "{entry_point.module_name}" has no '
+                              f'`SOFTWARE` attribute. This extension will not be loaded.')
+                unload = True
+
             if not hasattr(loaded, '__version__'):
                 print('Failed.', flush=True)
                 warnings.warn(f'Matflow extension "{entry_point.module_name}" has no '
