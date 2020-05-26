@@ -17,16 +17,20 @@ def load_extensions():
         print('Loading extensions...')
         for entry_point in extensions_entries:
 
+            print(f'  "{entry_point.name}"...', end='', flush=True)
+
             loaded = entry_point.load()
             unload = False
 
             if not hasattr(loaded, '__version__'):
+                print('Failed.', flush=True)
                 warnings.warn(f'Matflow extension "{entry_point.module_name}" has no '
                               f'`__version__` attribute. This extension will not be '
                               f'loaded.')
                 unload = True
 
             if Config.get('software_versions').get(loaded.SOFTWARE) is None:
+                print('Failed.', flush=True)
                 msg = (f'Matflow extension "{entry_point.module_name}" does not register '
                        f'a function for getting software versions. This extension will '
                        f'not be loaded.')
@@ -41,7 +45,7 @@ def load_extensions():
                 entry_point.name,
                 {'module_name': entry_point.module_name, 'version': loaded.__version__},
             )
-            print(f'  "{entry_point.name}" (software: "{loaded.SOFTWARE}") from '
+            print(f'(software: "{loaded.SOFTWARE}") from '
                   f'{entry_point.module_name} (version {loaded.__version__})', flush=True)
 
         # Validate task schemas against loaded extensions:
