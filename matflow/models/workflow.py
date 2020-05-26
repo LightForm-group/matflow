@@ -971,8 +971,11 @@ class Workflow(object):
             # Get software versions:
             software_versions_func = Config.get('software_versions').get(task.software)
             if software_versions_func:
-                executable = task.software_instance.executable
-                software_versions = software_versions_func(executable)
+                if task.schema.is_func:
+                    software_versions = software_versions_func()
+                else:
+                    executable = task.software_instance.executable
+                    software_versions = software_versions_func(executable)
             else:
                 software_versions = task.software_instance.version_info
         except Exception as err:
