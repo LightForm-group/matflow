@@ -201,6 +201,7 @@ class SoftwareInstance(object):
         all_instances = {}
         for name, definition in software_dict.items():
 
+            name_friendly = name
             name = SoftwareInstance.get_software_safe(name)
 
             bad_keys = set(definition.keys()) - set(ALLOWED)
@@ -250,7 +251,7 @@ class SoftwareInstance(object):
                            f'missing keys: {miss_keys_fmt}.')
                     raise SoftwareInstanceError(msg)
 
-                inst_merged['software'] = name
+                inst_merged['software'] = name_friendly
                 num_cores = inst_merged.pop('num_cores', None)
                 cores_min = 1
                 cores_max = 1
