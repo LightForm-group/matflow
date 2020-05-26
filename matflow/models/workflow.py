@@ -967,12 +967,18 @@ class Workflow(object):
 
         task.files = files
 
-        # Get software versions:
-        software_versions_func = Config.get('software_versions').get(task.software)
-        if software_versions_func:
-            software_versions = software_versions_func()
-        else:
-            software_versions = task.software_instance.version_info
+        try:
+            # Get software versions:
+            software_versions_func = Config.get('software_versions').get(task.software)
+            if software_versions_func:
+                executable = task.software_instance.executable
+                software_versions = software_versions_func(executable)
+            else:
+                software_versions = task.software_instance.version_info
+        except Exception as err:
+            software_versions = None
+            warn(f'Failed to parse software versions: {err}')
+
         task.status = TaskStatus.running
         self._append_history(
             WorkflowAction.prepare_task,
