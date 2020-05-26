@@ -19,11 +19,12 @@ class SoftwareInstance(object):
         '_preparation',
         '_options',
         '_scheduler_options',
+        '_version_info',
     ]
 
     def __init__(self, software, label=None, environment=None, cores_min=1, cores_max=1,
                  cores_step=1, executable=None, preparation=None, options=None,
-                 scheduler_options=None):
+                 scheduler_options=None, version_info=None):
         """Initialise a SoftwareInstance object.
 
         Parameters
@@ -219,9 +220,10 @@ class SoftwareInstance(object):
 
                 inst = dict(inst)
                 inst_merged = dict(copy.deepcopy(inst_defs))
-                for key in (set(INST_ALLOWED) - set(INST_DICT_KEYS)):
-                    if key in inst:
-                        inst_merged.update({key: inst[key]})
+
+                for key, val in inst.items():
+                    if key not in INST_DICT_KEYS:
+                        inst_merged.update({key: val})
 
                 # Merge values of any `INST_DICT_KEYS` individually.
                 for key in INST_DICT_KEYS:
@@ -230,6 +232,20 @@ class SoftwareInstance(object):
                             inst_merged.update({key: {}})
                         for subkey in inst[key]:
                             inst_merged[key].update({subkey: inst[key][subkey]})
+
+                bad_keys = set(inst_merged.keys()) - set(INST_ALLOWED)
+                miss_keys = set(INST_REQUIRED) - set(inst_merged.keys())
+
+                if bad_keys:
+                    bad_keys_fmt = ', '.join([f'"{i}"' for i in bad_keys])
+                    msg = (f'Unknown keys in software instance definitions for software '
+                           f'"{name}": {bad_keys_fmt}.')
+                    raise SoftwareInstanceError(msg)
+                if miss_keys:
+                    miss_keys_fmt = ', '.join([f'"{i}"' for i in miss_keys])
+                    msg = (f'Software instance definitions for software "{name}" are '
+                           f'missing keys: {miss_keys_fmt}.')
+                    raise SoftwareInstanceError(msg)
 
                 inst_merged['software'] = name
                 num_cores = inst_merged.pop('num_cores', None)
@@ -340,6 +356,10 @@ class SoftwareInstance(object):
     @property
     def scheduler_options(self):
         return self._scheduler_options
+
+    @property
+    def version_info(self):
+        return self._version_info
 
     @property
     def machine(self):
