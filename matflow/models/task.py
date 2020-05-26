@@ -15,6 +15,7 @@ from matflow.models import CommandGroup
 from matflow.errors import TaskSchemaError, TaskParameterError
 from matflow.hicklable import to_hicklable
 from matflow.utils import dump_to_yaml_string, get_specifier_dict
+from matflow.models.software import SoftwareInstance
 
 
 class TaskSchema(object):
@@ -130,10 +131,11 @@ class TaskSchema(object):
                                f'{miss_keys_fmt}.')
                         raise TaskSchemaError(msg)
 
-                    key = (name, method['name'], imp['name'])
+                    software = SoftwareInstance.get_software_safe(imp['name'])
+                    key = (name, method['name'], software)
                     if key in all_schema_dicts:
                         msg = (f'Schema with name "{name}", method "{method["name"]}" '
-                               f'and implementation "{imp["name"]}" is multiply defined.')
+                               f'and implementation "{software}" is multiply defined.')
                         raise ValueError(msg)
 
                     input_map = imp.get('input_map', [])
@@ -153,7 +155,7 @@ class TaskSchema(object):
                         key: {
                             'name': name,
                             'method': method['name'],
-                            'implementation': imp['name'],
+                            'implementation': software,
                             'inputs': all_inputs,
                             'outputs': all_outputs,
                             'input_map': input_map,

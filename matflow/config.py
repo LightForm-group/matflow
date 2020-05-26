@@ -196,6 +196,14 @@ class Config(object):
         Config._is_extension_locked = False
 
     @staticmethod
+    def _get_software_safe(software_name):
+        return SoftwareInstance.get_software_safe(software_name)
+
+    @staticmethod
+    def _get_key_safe(key):
+        return (key[0], key[1], Config._get_software_safe(key[2]))
+
+    @staticmethod
     def _validate_extension_setter():
         if not Config._is_set:
             warn(f'Configuration is not yet set. Matflow extension functions will not '
@@ -209,6 +217,7 @@ class Config(object):
     @staticmethod
     def set_input_map(key, input_file, func):
         if Config._validate_extension_setter():
+            key = Config._get_key_safe(key)
             if key not in Config.__conf['input_maps']:
                 Config.__conf['input_maps'].update({key: {}})
             if input_file in Config.__conf['input_maps'][key]:
@@ -219,6 +228,7 @@ class Config(object):
     @staticmethod
     def set_output_map(key, output_name, func):
         if Config._validate_extension_setter():
+            key = Config._get_key_safe(key)
             if key not in Config.__conf['output_maps']:
                 Config.__conf['output_maps'].update({key: {}})
             if output_name in Config.__conf['output_maps'][key]:
@@ -229,6 +239,7 @@ class Config(object):
     @staticmethod
     def set_func_map(key, func):
         if Config._validate_extension_setter():
+            key = Config._get_key_safe(key)
             if key in Config.__conf['func_maps']:
                 msg = (f'Function map "{key}" already exists in the function map.')
                 raise MatflowExtensionError(msg)
@@ -237,6 +248,7 @@ class Config(object):
     @staticmethod
     def set_CLI_arg_map(key, input_name, func):
         if Config._validate_extension_setter():
+            key = Config._get_key_safe(key)
             if key not in Config.__conf['CLI_arg_maps']:
                 Config.__conf['CLI_arg_maps'].update({key: {}})
             if input_name in Config.__conf['CLI_arg_maps'][key]:
@@ -248,6 +260,7 @@ class Config(object):
     @staticmethod
     def set_source_map(key, func, **sources_dict):
         if Config._validate_extension_setter():
+            key = Config._get_key_safe(key)
             if key in Config.__conf['sources_maps']:
                 msg = f'Sources map for key: {key} already exists in.'
                 raise MatflowExtensionError(msg)
@@ -258,6 +271,7 @@ class Config(object):
     @staticmethod
     def set_software_version_func(software, func):
         if Config._validate_extension_setter():
+            software = Config._get_software_safe(software)
             if software in Config.__conf['software_versions']:
                 msg = (f'Software "{software}" has already registered a '
                        f'`software_versions` function.')
@@ -267,6 +281,7 @@ class Config(object):
     @staticmethod
     def set_output_file_map(key, file_reference, file_name):
         if Config._validate_extension_setter():
+            key = Config._get_key_safe(key)
             if key not in Config.__conf['output_file_maps']:
                 Config.__conf['output_file_maps'].update({key: {}})
             file_ref_full = '__file__' + file_reference
@@ -289,7 +304,9 @@ class Config(object):
             Config.__conf['schema_validity'].update(validities)
 
     @staticmethod
-    def unload_extension(name):
+    def unload_extension(software_name):
+
+        name = Config._get_software_safe(software_name)
 
         in_map = [k for k in Config.__conf['input_maps'] if k[2] == name]
         for k in in_map:

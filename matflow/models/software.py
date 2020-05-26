@@ -9,7 +9,7 @@ class SoftwareInstance(object):
 
     __slots__ = [
         '_machine',
-        '_software',
+        '_software_friendly',
         '_label',
         '_environment',
         '_cores_min',
@@ -74,7 +74,7 @@ class SoftwareInstance(object):
 
         self._machine = None  # Set once by `set_machine`
 
-        self._software = software
+        self._software_friendly = software
         self._label = label
         self._environment = environment
         self._cores_min = cores_min
@@ -138,6 +138,7 @@ class SoftwareInstance(object):
     def as_dict(self):
         'Return attributes dict with preceding underscores removed.'
         self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
+        self_dict['software'] = self_dict.pop('software_friendly')
         return self_dict
 
     def validate_source_maps(self, task, method, software, all_sources_maps):
@@ -307,7 +308,15 @@ class SoftwareInstance(object):
 
     @property
     def software(self):
-        return self._software
+        return self.get_software_safe(self.software_friendly)
+
+    @staticmethod
+    def get_software_safe(software_name):
+        return software_name.lower().replace(' ', '_')
+
+    @property
+    def software_friendly(self):
+        return self._software_friendly
 
     @property
     def label(self):

@@ -35,14 +35,16 @@ def load_extensions():
                               f'loaded.')
                 unload = True
 
+            software_safe = Config._get_software_safe(loaded.SOFTWARE)
+
             if (
                 not unload and
-                Config.get('software_versions').get(loaded.SOFTWARE) is None
+                Config.get('software_versions').get(software_safe) is None
             ):
 
                 # Every defined SoftwareInstance must have a specified version_info:
                 version_defined = True
-                soft_instances = Config.get('software').get(loaded.SOFTWARE)
+                soft_instances = Config.get('software').get(software_safe)
                 if not soft_instances:
                     version_defined = False
                 else:
@@ -61,14 +63,14 @@ def load_extensions():
                     unload = True
 
             if unload:
-                Config.unload_extension(entry_point.name)
+                Config.unload_extension(software_safe)
                 continue
 
             Config.set_extension_info(
                 entry_point.name,
                 {'module_name': entry_point.module_name, 'version': loaded.__version__},
             )
-            print(f'(software: "{loaded.SOFTWARE}") from '
+            print(f'(software: "{software_safe}") from '
                   f'{entry_point.module_name} (version {loaded.__version__})', flush=True)
 
         # Validate task schemas against loaded extensions:
