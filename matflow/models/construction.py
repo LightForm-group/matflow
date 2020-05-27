@@ -289,6 +289,7 @@ def get_dependency_idx(task_info_lst):
               - The upstream and downstream task share the same context, and,
                 for any downstream task input parameter, the parameter context
                 is `None`.
+              - The upstream task context is default (i.e. '').
 
     """
 
@@ -320,7 +321,7 @@ def get_dependency_idx(task_info_lst):
                     param_context == upstream_context or (
                         (upstream_context == downstream_context) and
                         (param_context is None)
-                    )
+                    ) or (upstream_context == '')
                 ):
                     output_idx.append(task_idx_k)
 
