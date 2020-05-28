@@ -372,9 +372,12 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
 
     Returns
     -------
-    task : dict
+    task_list : list of dict
         Copy of original `task` dict, with default keys added. If `is_from_file=False`,
-        `local_inputs` and `schema` are added.
+        `local_inputs` and `schema` are added. Usually this will just be a list of length
+        one. However, there are some scenarios where multiple task dicts will be returned.
+        For example, if multiple `contexts` are specified, the task will be repeated,
+        once for each `context`.
 
     """
 
@@ -415,6 +418,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'run_options',
             'stats',
             'context',
+            'contexts',
             'base',
             'sequences',
             'repeats',
@@ -427,7 +431,6 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
         def_keys = {
             'run_options': {},
             'stats': True,
-            'context': '',
             'base': None,
             'sequences': None,
             'repeats': 1,
@@ -470,6 +473,22 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
         schema = TaskSchema(**task['schema'])
 
     else:
+
+        # Normalise for multiple `contexts`:
+        if 'context' in task and 'contexts' in task:
+            msg = ('Specify exactly one of `context` and `contexts` (these keys are '
+                   'equivalent).')
+            raise TaskError(msg)
+
+        elif ('context' not in task) and ('contexts' not in task):
+            task['contexts'] = ''
+
+        elif 'context' in task:
+            task['contexts'] = task.pop('context')
+
+        if not isinstance(task['contexts'], list):
+            task['contexts'] = [task['contexts']]
+
         # Find the software instance:
         software = get_specifier_dict(
             task.pop('software'),
@@ -538,7 +557,18 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
     task['local_inputs'] = local_ins
     task['schema'] = schema
 
-    return task
+    if is_from_file:
+        task_list = [task]
+
+    else:
+        task_list = []
+        for context in task['contexts']:
+            task_copy = copy.deepcopy(task)
+            task_copy['context'] = context
+            del task_copy['contexts']
+            task_list.append(task_copy)
+
+    return task_list
 
 
 def check_consistent_inputs(task_lst, dep_idx):
@@ -996,7 +1026,9 @@ def init_tasks(task_lst, is_from_file, check_integrity=True):
 
     # Validate and add `schema` and `local_inputs` to each task:
     task_lst = [
-        validate_task_dict(
+        j
+        for i in task_lst
+        for j in validate_task_dict(
             i,
             is_from_file,
             Config.get('software'),
@@ -1004,7 +1036,6 @@ def init_tasks(task_lst, is_from_file, check_integrity=True):
             Config.get('sources_maps'),
             check_integrity
         )
-        for i in task_lst
     ]
 
     # Get dependencies, sort and add `task_idx` to each task:
