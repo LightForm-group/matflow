@@ -10,6 +10,7 @@ task_schemas:
         inputs: 
           - _file:CTF_file_path
           - rotation_angle
+          - sample_coordinate_system
         implementations:
           - name: matlab_mtex
             version: 1
@@ -18,11 +19,15 @@ task_schemas:
                   - _file:CTF_file_path
                   - rotation_angle
                 file: estimate_ODF_from_CTF.m
+              - inputs:
+                  - sample_coordinate_system
+                file: sample_coordinate_system.txt
             commands:
               - cmd: matlab -nodisplay -nosplash -nodesktop -r -wait "run('estimate_ODF_from_CTF.m'); exit;"
             output_map:
               - files:
                   - odf.txt
+                  - sample_coordinate_system.txt
                 output: ODF
 
   - name: model_ODF
@@ -90,11 +95,15 @@ task_schemas:
                   - ODF
                   - num_orientations
                 file: sample_texture_from_ODF.m
+              - inputs:
+                  - ODF
+                file: sample_coordinate_system.txt
             commands:
               - cmd: matlab -nodisplay -nosplash -nodesktop -r -wait "run('sample_texture_from_ODF.m'); exit;"
             output_map:
               - files:
                   - orientations.txt
+                  - sample_coordinate_system.txt
                 output: orientations
 
   - name: generate_microstructure_seeds
@@ -136,6 +145,7 @@ task_schemas:
           - microstructure_seeds
           - orientations
           - size
+          - model_coordinate_system
         implementations:
           - name: damask
             version: 1
@@ -148,9 +158,17 @@ task_schemas:
                   - microstructure_seeds
                   - orientations
                 file: orientation.seeds
+              - inputs:
+                  - orientations
+                file: sample_coordinate_system.txt
+              - inputs:
+                  - model_coordinate_system
+                file: model_coordinate_system.txt
             output_map:
               - files:
                   - volume_element.geom
+                  - sample_coordinate_system.txt
+                  - model_coordinate_system.txt
                 output: volume_element
             commands:
               - cmd: geom_fromVoronoiTessellation -o 0.0 0.0 0.0

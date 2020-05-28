@@ -8,6 +8,8 @@ TODO: refactor get_load_case_* functions.
 from textwrap import dedent
 from pathlib import Path
 
+import json
+
 import numpy as np
 from damask_parse import (read_geom, read_table,
                           write_geom, write_load_case, write_material_config)
@@ -854,12 +856,40 @@ def generate_geom_VTK(path, volume_element):
     write_damask_geom(geom_path, volume_element)
 
 
+def write_model_coordinate_system(path, model_coordinate_system):
+    print('write_coordinate_system')
+    with Path(path).open('w') as handle:
+        json.dump(model_coordinate_system, handle)
+
+
+def write_sample_coordinate_system_from_orientations(path, orientations):
+    print('write_sample_coordinate_system_from_orientations')
+    with Path(path).open('w') as handle:
+        json.dump(orientations['sample_coordinate_system'], handle)
+
+
+def read_coordinate_system(path):
+    print('read_coordinate_system')
+    with Path(path).open('r') as handle:
+        return json.load(handle)
+
+
+def parse_volume_element(geom_path, sample_coord_sys_path, model_coord_sys_path):
+    print('parse_volume_element')
+    vol_elem = read_geom(geom_path)
+    vol_elem['sample_coordinate_system'] = read_coordinate_system(sample_coord_sys_path)
+    vol_elem['model_coordinate_system'] = read_coordinate_system(model_coord_sys_path)
+    return vol_elem
+
+
 TASK_INPUT_MAP.update({
     ('generate_volume_element', 'random_voronoi', 'damask'): {
         'orientation.seeds': write_microstructure_seeds,
     },
     ('generate_volume_element', 'random_voronoi_from_orientations', 'damask'): {
         'orientation.seeds': write_microstructure_new_orientations,
+        'sample_coordinate_system.txt': write_sample_coordinate_system_from_orientations,
+        'model_coordinate_system.txt': write_model_coordinate_system,
     },
     ('simulate_volume_element_loading', 'CP_FFT', 'damask'): {
         'load.load': write_damask_load_case,
@@ -876,7 +906,7 @@ TASK_OUTPUT_MAP.update({
         'volume_element': read_geom,
     },
     ('generate_volume_element', 'random_voronoi_from_orientations', 'damask'): {
-        'volume_element': read_geom,
+        'volume_element': parse_volume_element,
     },
     ('generate_microstructure_seeds', 'random', 'damask'): {
         'microstructure_seeds': read_seeds_from_random,

@@ -8,6 +8,7 @@ from pathlib import Path
 from textwrap import dedent
 
 import numpy as np
+import json
 
 from matflow import TASK_INPUT_MAP, TASK_OUTPUT_MAP
 
@@ -89,8 +90,10 @@ def prepare_script_estimate_ODF(path, CTF_file_path, rotation_angle):
         handle.write(script_txt)
 
 
-def parse_mtex_ODF_file(path):
+def parse_mtex_ODF_file(path, sample_coord_sys_path=None):
     print('parse_mtex_ODF_file')
+
+    samp_coord_sys = read_sample_coordinate_system(sample_coord_sys_path)
 
     crystal_sym = None
     specimen_sym = None
@@ -119,6 +122,7 @@ def parse_mtex_ODF_file(path):
         'euler_angle_labels': euler_angle_labels,
         'euler_angles': euler_angles,
         'weights': weights,
+        'sample_coordinate_system': samp_coord_sys,
     }
     return ODF
 
@@ -168,8 +172,10 @@ def prepare_script_sample_texture(path, ODF, num_orientations):
         handle.write(script_txt)
 
 
-def parse_orientations(path):
+def parse_orientations(path, sample_coord_sys_path=None):
     print('parse_orientations')
+
+    samp_coord_sys = read_sample_coordinate_system(sample_coord_sys_path)
 
     with Path(path).open() as handle:
         ln = handle.readline()
@@ -180,6 +186,7 @@ def parse_orientations(path):
     orientations = {
         'euler_angle_labels': euler_angle_labels,
         'euler_angles': euler_angles,
+        'sample_coordinate_system': samp_coord_sys,
     }
     return orientations
 
@@ -224,6 +231,24 @@ def prepare_script_model_ODF_unimodal(path, modal_orientation, crystal_symmetry,
         handle.write(script_txt)
 
 
+def write_sample_coordinate_system(path, sample_coordinate_system):
+    print('write_sample_coordinate_system')
+    with Path(path).open('w') as handle:
+        json.dump(sample_coordinate_system, handle)
+
+
+def write_sample_coordinate_system_from_ODF(path, ODF):
+    print('write_sample_coordinate_system')
+    with Path(path).open('w') as handle:
+        json.dump(ODF['sample_coordinate_system'], handle)
+
+
+def read_sample_coordinate_system(path):
+    print('read_sample_coordinate_system')
+    with Path(path).open('r') as handle:
+        return json.load(handle)
+
+
 TASK_INPUT_MAP.update({
     ('model_ODF', 'uniform_ODF', 'matlab_mtex'): {
         'create_model_ODF.m': prepare_script_model_ODF_uniform,
@@ -233,9 +258,11 @@ TASK_INPUT_MAP.update({
     },
     ('estimate_ODF', 'from_CTF_file', 'matlab_mtex'): {
         'estimate_ODF_from_CTF.m': prepare_script_estimate_ODF,
+        'sample_coordinate_system.txt': write_sample_coordinate_system,
     },
     ('sample_texture', 'from_ODF', 'matlab_mtex'): {
         'sample_texture_from_ODF.m': prepare_script_sample_texture,
+        'sample_coordinate_system.txt': write_sample_coordinate_system_from_ODF,
     }
 })
 
