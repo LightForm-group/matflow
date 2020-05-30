@@ -483,16 +483,11 @@ class Workflow(object):
 
             task_path_rel = str(self.get_task_path(task.task_idx).name)
 
-            environment = task.software_instance.environment_lines
-
             if task.task_idx == 0:
                 command_groups.append({
                     'directory': '.',
                     'nesting': 'hold',
-                    'commands': [
-                        'matflow prepare-task --task-idx={}'.format(task.task_idx)
-                    ],
-                    'environment': environment,
+                    'commands': task.prepare_task_commands,
                     'stats': False,
                     'scheduler_options': scheduler_opts_process,
                     'name': self.get_hpcflow_job_name(task, 'prepare-task'),
@@ -505,7 +500,7 @@ class Workflow(object):
                 'directory': '<<{}_dirs>>'.format(task_path_rel),
                 'nesting': 'hold',
                 'commands': fmt_commands,
-                'environment': environment,
+                'environment': task.software_instance.environment_lines,
                 'scheduler_options': scheduler_opts,
                 'name': self.get_hpcflow_job_name(task, 'run'),
                 'stats': task.stats,
@@ -514,16 +509,12 @@ class Workflow(object):
 
             if task.task_idx < (len(self) - 1):
                 next_task = self.tasks[task.task_idx + 1]
-                environment = task.software_instance.environment_lines
-                next_environment = next_task.software_instance.environment_lines
                 command_groups.append({
                     'directory': '.',
                     'nesting': 'hold',
-                    'commands': [
-                        'matflow process-task --task-idx={}'.format(task.task_idx),
-                        'matflow prepare-task --task-idx={}'.format(task.task_idx + 1),
-                    ],
-                    'environment': next_environment,
+                    'commands': (
+                        task.process_task_commands + next_task.prepare_task_commands
+                    ),
                     'stats': False,
                     'scheduler_options': scheduler_opts_process,
                     'name': self.get_hpcflow_job_name(task, 'process-task'),
@@ -532,9 +523,7 @@ class Workflow(object):
                 command_groups.append({
                     'directory': '.',
                     'nesting': 'hold',
-                    'commands': [
-                        'matflow process-task --task-idx={}'.format(task.task_idx)
-                    ],
+                    'commands': task.process_task_commands,
                     'stats': False,
                     'scheduler_options': scheduler_opts_process,
                     'name': self.get_hpcflow_job_name(task, 'process-task'),
@@ -681,7 +670,7 @@ class Workflow(object):
 
         Raises
         ------
-        WorkflowPersistenceError 
+        WorkflowPersistenceError
             If saving was not successful.
 
         """

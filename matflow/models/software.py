@@ -20,11 +20,14 @@ class SoftwareInstance(object):
         '_options',
         '_scheduler_options',
         '_version_info',
+        '_prepare_task_env',
+        '_process_task_env',
     ]
 
     def __init__(self, software, label=None, environment=None, cores_min=1, cores_max=1,
                  cores_step=1, executable=None, preparation=None, options=None,
-                 scheduler_options=None, version_info=None):
+                 scheduler_options=None, version_info=None, prepare_task_env=None,
+                 process_task_env=None):
         """Initialise a SoftwareInstance object.
 
         Parameters
@@ -69,6 +72,12 @@ class SoftwareInstance(object):
             If an extension does not provide a `software_version` function, then the
             version info dict must be specified here. The keys are str names and the
             values are dicts that must contain at least a key `version`.
+        prepare_task_env : str, optional
+            Multi-line string containing commands to be executed by the shell that are
+            necessary to set up the environment for running `matflow prepare-task`.
+        process_task_env : str, optional
+            Multi-line string containing commands to be executed by the shell that are
+            necessary to set up the environment for running `matflow process-task`.
 
         """
 
@@ -85,6 +94,8 @@ class SoftwareInstance(object):
         self._options = options or []
         self._scheduler_options = scheduler_options or {}
         self._version_info = version_info or None
+        self._prepare_task_env = prepare_task_env
+        self._process_task_env = process_task_env
 
         self._validate_num_cores()
         self._validate_preparation()
@@ -196,6 +207,8 @@ class SoftwareInstance(object):
             'environment',
             'executable',
             'version_info',
+            'prepare_task_env',
+            'process_task_env',
         ]
 
         all_instances = {}
@@ -331,11 +344,35 @@ class SoftwareInstance(object):
 
     @property
     def environment_str(self):
-        return self._environment or ''
+        return self.environment or ''
 
     @property
     def environment_lines(self):
         return self.environment_str.splitlines()
+
+    @property
+    def prepare_task_env(self):
+        return self._prepare_task_env
+
+    @property
+    def prepare_task_env_str(self):
+        return self.prepare_task_env or ''
+
+    @property
+    def prepare_task_env_lines(self):
+        return self.prepare_task_env_str.splitlines()
+
+    @property
+    def process_task_env(self):
+        return self._process_task_env
+
+    @property
+    def process_task_env_str(self):
+        return self.process_task_env or ''
+
+    @property
+    def process_task_env_lines(self):
+        return self.process_task_env_str.splitlines()
 
     @property
     def cores_min(self):

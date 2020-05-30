@@ -606,3 +606,17 @@ class Task(object):
     @property
     def software(self):
         return self.software_instance.software
+
+    @property
+    def prepare_task_commands(self):
+        out = [f'matflow prepare-task --task-idx={self.task_idx}']
+        if self.software_instance.prepare_task_env:
+            out = ['('] + self.software_instance.prepare_task_env_lines + out + [')']
+        return out
+
+    @property
+    def process_task_commands(self):
+        out = [f'matflow process-task --task-idx={self.task_idx}']
+        if self.software_instance.process_task_env:
+            out = ['('] + self.software_instance.process_task_env_lines + out + [')']
+        return out
