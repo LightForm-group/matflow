@@ -33,6 +33,7 @@ from matflow.errors import (
 from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list,
                            to_sub_list, get_specifier_dict)
 from matflow.models.task import Task, TaskSchema
+from matflow.models.element import Element
 
 
 def normalise_local_inputs(base=None, sequences=None):
@@ -389,6 +390,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'id',
             'name',
             'method',
+            'elements',
             'software_instance',
             'task_idx',
             'run_options',
@@ -396,10 +398,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'stats',
             'context',
             'local_inputs',
-            'inputs',
-            'outputs',
             'schema',
-            'files',
             'resource_usage',
             'base',
             'sequences',
@@ -995,7 +994,7 @@ def get_element_idx(task_lst, dep_idx):
     return element_idx
 
 
-def init_tasks(task_lst, is_from_file, check_integrity=True):
+def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
     """Construct and validate Task objects and the element indices
     from which to populate task inputs.
 
@@ -1045,10 +1044,19 @@ def init_tasks(task_lst, is_from_file, check_integrity=True):
     element_idx = get_element_idx(task_lst, dep_idx)
 
     task_objs = []
-    for i in task_lst:
+    for task_idx, task_dict in enumerate(task_lst):
 
-        task_id = i.pop('id') if is_from_file else None
-        task = Task(**i)
+        if is_from_file:
+            task_id = task_dict.pop('id')
+            elements = task_dict.pop('elements')
+        else:
+            task_id = None
+            elements = [{'element_idx': elem_idx}
+                        for elem_idx, _ in enumerate(element_idx[task_idx])]
+
+        task = Task(workflow=workflow, **task_dict)
+        task.init_elements(elements)
+
         if is_from_file:
             task.id = task_id
         else:

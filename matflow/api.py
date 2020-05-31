@@ -52,7 +52,7 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
     if write_dirs:
         workflow.write_directories()
         workflow.dump_hpcflow_workflow_file('hpcflow_workflow.yml')
-        workflow.save()
+        workflow.write_HDF5_file()
 
         # Copy profile to workflow directory:
         workflow.path.joinpath(profile_path).write_bytes(profile_path.read_bytes())
@@ -97,7 +97,7 @@ def submit_workflow(workflow_path, directory=None):
 def load_workflow(directory, full_path=False):
     Config.set_config()
     path = Path(directory or '').resolve()
-    workflow = Workflow.load(path, full_path)
+    workflow = Workflow.load_HDF5_file(path, full_path)
 
     return workflow
 
