@@ -51,9 +51,10 @@ class Parameters(object):
         self._parameters, self._name_map = self._normalise_params_dict(parameters)
 
     def __getattr__(self, name):
-        if name in self._parameters:
+        if self._name_map[name] in self._parameters:
             wkflow = self._element.task.workflow
-            return wkflow.get_element_data(self.get_data_idx(name))[name]
+            data_idx = self.get_data_idx(name)
+            return wkflow.get_element_data(data_idx)
         else:
             msg = f'{self.__class__.__name__!r} object has no attribute {name!r}.'
             raise AttributeError(msg)
@@ -110,6 +111,12 @@ class Parameters(object):
             return {name_inv[k]: v for k, v in self._parameters.items()}
         return self._parameters
 
+    def get(self, name):
+        return getattr(self, name)
+
+    def get_all(self):
+        return {k: self.get(k) for k in self._name_map.keys()}
+
     def get_element(self):
         'Not a property to reduce chance of attribute collisions.'
         return self._element
@@ -119,7 +126,11 @@ class Parameters(object):
         return self._name_map
 
     def get_data_idx(self, name):
-        return self._parameters[self._name_map[name]]
+        'Name is original name'
+        out = self._parameters[self._name_map[name]]
+        if isinstance(out, list):
+            out = tuple(out)
+        return out
 
     def add_parameter(self, name, param_type, value=None, data_idx=None):
 
@@ -155,3 +166,5 @@ class Parameters(object):
 
         self._name_map.update({name: name_normed})
         self._parameters.update({name_normed: data_idx})
+
+        return data_idx

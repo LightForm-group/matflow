@@ -543,7 +543,13 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
     )
 
     if is_from_file and check_integrity:
-        if local_ins != task['local_inputs']:
+
+        # Don't compare the vals_data_idx:
+        loaded_local_inputs = copy.deepcopy(task['local_inputs'])
+        for vals_dict in loaded_local_inputs['inputs'].values():
+            del vals_dict['vals_data_idx']
+
+        if local_ins != loaded_local_inputs:
             msg = (
                 f'Regenerated local inputs (task: "{task["name"]}") '
                 f'are not equivalent to those loaded from the '
@@ -552,6 +558,8 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
                 f'inputs are:\n{local_ins}\n.'
             )
             raise WorkflowPersistenceError(msg)
+
+        local_ins = task['local_inputs']
 
     task['local_inputs'] = local_ins
     task['schema'] = schema
@@ -1051,8 +1059,8 @@ def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
             elements = task_dict.pop('elements')
         else:
             task_id = None
-            elements = [{'element_idx': elem_idx}
-                        for elem_idx, _ in enumerate(element_idx[task_idx])]
+            num_elements = element_idx[task_idx]['num_elements']
+            elements = [{'element_idx': elem_idx} for elem_idx in range(num_elements)]
 
         task = Task(workflow=workflow, **task_dict)
         task.init_elements(elements)

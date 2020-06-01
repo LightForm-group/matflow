@@ -85,10 +85,10 @@ class Element(object):
         return self.task.HDF5_path + f'/\'elements\'/data_0/data_{self.element_idx}'
 
     def add_input(self, input_name, value=None, data_idx=None):
-        self.inputs.add_parameter(input_name, 'inputs', value, data_idx)
+        return self.inputs.add_parameter(input_name, 'inputs', value, data_idx)
 
     def add_output(self, output_name, value=None, data_idx=None):
-        self.outputs.add_parameter(output_name, 'outputs', value, data_idx)
+        return self.outputs.add_parameter(output_name, 'outputs', value, data_idx)
 
     def add_file(self, file_name, value=None, data_idx=None):
-        self.files.add_parameter(file_name, 'files', value, data_idx)
+        return self.files.add_parameter(file_name, 'files', value, data_idx)
