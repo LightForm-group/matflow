@@ -16,6 +16,7 @@ from matflow.errors import TaskSchemaError, TaskParameterError
 from matflow.hicklable import to_hicklable
 from matflow.utils import dump_to_yaml_string, get_specifier_dict
 from matflow.models.software import SoftwareInstance
+from matflow.models.element import Element
 
 
 class TaskSchema(object):
@@ -387,11 +388,8 @@ class Task(object):
         '_stats',
         '_context',
         '_local_inputs',
-        '_inputs',
-        '_outputs',
         '_output_map_options',
         '_schema',
-        '_files',
         '_resource_usage',
         '_base',
         '_sequences',
@@ -399,16 +397,20 @@ class Task(object):
         '_groups',
         '_nest',
         '_merge_priority',
+        '_workflow',
+        '_elements',
     ]
 
-    def __init__(self, name, method, software_instance, task_idx, run_options=None,
-                 status=None, stats=True, context='', local_inputs=None, inputs=None,
-                 outputs=None, schema=None, files=None, resource_usage=None,
-                 base=None, sequences=None, repeats=None, groups=None, nest=None,
-                 merge_priority=None, output_map_options=None):
+    def __init__(self, workflow, name, method, software_instance, task_idx,
+                 run_options=None, status=None, stats=True, context='', local_inputs=None,
+                 schema=None, resource_usage=None, base=None, sequences=None,
+                 repeats=None, groups=None, nest=None, merge_priority=None,
+                 output_map_options=None):
 
-        self._id = None  # Generated once by generate_id()
+        self._id = None         # Generated once by generate_id()
+        self._elements = None   # Assigned in init_elements()
 
+        self._workflow = workflow
         self._name = name
         self._method = method
         self._software_instance = software_instance
@@ -418,11 +420,8 @@ class Task(object):
         self._stats = stats
         self._context = context
         self._local_inputs = local_inputs
-        self._inputs = inputs
-        self._outputs = outputs
         self._output_map_options = output_map_options
         self._schema = schema
-        self._files = files
         self._resource_usage = resource_usage
 
         # Saved for completeness, and to allow regeneration of `local_inputs`:
@@ -458,15 +457,24 @@ class Task(object):
     def __len__(self):
         return self.local_inputs['length']
 
+    def init_elements(self, elements):
+        self._elements = [Element(self, **i) for i in elements]
+
     def as_dict(self):
         'Return attributes dict with preceding underscores removed.'
         self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
+        self_dict.pop('workflow')
         self_dict['status'] = (self.status.name, self.status.value)
         self_dict['software_instance'] = self_dict['software_instance'].as_dict()
+        self_dict['elements'] = [i.as_dict() for i in self_dict['elements']]
         return self_dict
 
     def generate_id(self):
         self.id = secrets.token_hex(10)
+
+    @property
+    def workflow(self):
+        return self._workflow
 
     @property
     def id(self):
@@ -492,6 +500,10 @@ class Task(object):
     @property
     def method(self):
         return self._method
+
+    @property
+    def elements(self):
+        return tuple(self._elements)
 
     @property
     def software_instance(self):
@@ -531,45 +543,12 @@ class Task(object):
         return self._local_inputs
 
     @property
-    def inputs(self):
-        return self._inputs
-
-    @inputs.setter
-    def inputs(self, inputs):
-        'Set the task inputs (i.e. from `Workflow.prepare_task`).'
-        if not isinstance(inputs, list) or not isinstance(inputs[0], dict):
-            raise ValueError('Inputs must be a list of dict.')
-        self._inputs = inputs
-
-    @property
-    def outputs(self):
-        return self._outputs
-
-    @outputs.setter
-    def outputs(self, outputs):
-        'Set the task outputs (i.e. from `Workflow.process_task`).'
-        if not isinstance(outputs, list) or not isinstance(outputs[0], dict):
-            raise ValueError('Outputs must be a list of dict.')
-        self._outputs = outputs
-
-    @property
     def output_map_options(self):
         return self._output_map_options
 
     @property
     def schema(self):
         return self._schema
-
-    @property
-    def files(self):
-        return self._files
-
-    @files.setter
-    def files(self, files):
-        'Set the task files (i.e. from `Workflow.prepare_task`).'
-        if not isinstance(files, list) or not isinstance(files[0], dict):
-            raise ValueError('Files must be a list of dict.')
-        self._files = files
 
     @property
     def resource_usage(self):
@@ -620,3 +599,8 @@ class Task(object):
         if self.software_instance.process_task_env:
             out = ['('] + self.software_instance.process_task_env_lines + out + [')']
         return out
+
+    @property
+    def HDF5_path(self):
+        'Get the HDF5 path to this task.'
+        return self.workflow.HDF5_path + f'/\'tasks\'/data_0/data_{self.task_idx}'

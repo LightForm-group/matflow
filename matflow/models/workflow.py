@@ -15,6 +15,7 @@ from pprint import pprint
 from subprocess import run, PIPE
 from warnings import warn
 
+import h5py
 import hickle
 import hpcflow
 import numpy as np
@@ -70,6 +71,7 @@ class Workflow(object):
     __slots__ = [
         '_id',
         '_human_id',
+        '_loaded_path',
         '_profile',
         '_is_from_file',
         '_name',
@@ -85,6 +87,7 @@ class Workflow(object):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
+        self._loaded_path = None    # Assigned on save or on load.
 
         self._is_from_file = __is_from_file
         self._name = name
@@ -92,7 +95,7 @@ class Workflow(object):
         self._stage_directory = str(Path(stage_directory or '').resolve())
         self._profile = profile
 
-        tasks, elements_idx = init_tasks(tasks, self.is_from_file, check_integrity)
+        tasks, elements_idx = init_tasks(self, tasks, self.is_from_file, check_integrity)
         self._tasks = tasks
         self._elements_idx = elements_idx
 
@@ -150,8 +153,26 @@ class Workflow(object):
             'action_info': kwargs,
         }
         self._history.append(new)
+
         if action is not WorkflowAction.generate:
-            self.save()
+
+            new_json = copy.deepcopy(new)
+            new_json['action'] = (new_json['action'].name, new_json['action'].value)
+            new_json['timestamp'] = datetime_to_dict(new_json['timestamp'])
+
+            with h5py.File(self.loaded_path, 'r+') as handle:
+
+                key = '\'history\''
+                path = self.HDF5_path + '/' + key
+
+                all_data = hickle.load(handle, path)
+                del handle[path]
+                all_data.append(new_json)
+
+                hickle.dump(all_data, handle, path=path)
+                handle[path].attrs['type'] = [b'dict_item']
+                handle[path].attrs['key_type'] = [
+                    str(type(key)).encode('ascii', 'ignore')]
 
     @property
     def version(self):
@@ -168,6 +189,16 @@ class Workflow(object):
     @property
     def human_id(self):
         return self._human_id
+
+    @property
+    def loaded_path(self):
+        return Path(self._loaded_path)
+
+    @loaded_path.setter
+    def loaded_path(self, loaded_path):
+        if not loaded_path.is_file():
+            raise TypeError('`loaded_path` is not a file.')
+        self._loaded_path = loaded_path
 
     @property
     def is_from_file(self):
@@ -238,6 +269,36 @@ class Workflow(object):
     @property
     def hdf5_path(self):
         return self.path.joinpath(f'workflow_v{self.version:03}.hdf5')
+
+    @property
+    def default_file_path(self):
+        return self.path.joinpath('workflow.hdf5')
+
+    @property
+    def HDF5_path(self):
+        return '/workflow_obj/data_0'
+
+    @functools.lru_cache()
+    def get_element_data(self, idx):
+        with h5py.File(self.loaded_path, 'r') as handle:
+
+            path = f'/element_data/data_0'
+            num_dat = len(handle[path])
+            is_list = True if isinstance(idx, tuple) else False
+            if not is_list:
+                idx = [idx]
+            out = []
+            for i in idx:
+                if i > (num_dat - 1):
+                    raise ValueError(f'Element data has {num_dat} member(s), but idx={i} '
+                                     f'requested.')
+                dat_path = path + f'/{i}'
+                out.append(hickle.load(handle, path=dat_path))
+
+            out = [list(i.values())[0] for i in out]
+            if not is_list:
+                out = out[0]
+            return out
 
     def get_task_idx_padded(self, task_idx, ret_zero_based=True):
         'Get a task index, zero-padded according to the number of tasks.'
@@ -606,6 +667,9 @@ class Workflow(object):
         out['history'] = history
         out['tasks'] = [i.as_dict() for i in out['tasks']]
 
+        del out['is_from_file']
+        del out['loaded_path']
+
         return out
 
     @classmethod
@@ -647,99 +711,81 @@ class Workflow(object):
 
         return existing_files
 
-    @requires_path_exists
-    def save(self, path=None, keep_previous_versions=False):
-        """Save workflow to an HDF5 file.
+    @classmethod
+    def get_workflow_files(cls, directory):
+
+        directory = Path(directory)
+        if not directory.is_dir():
+            raise TypeError(f'The following path is not a directory: {directory}.')
+
+        existing_files = {}
+        for i in directory.glob('*'):
+            if i.is_file():
+                try:
+                    with h5py.File(i, 'r') as handle:
+                        id_ = handle.attrs['workflow_id']
+                        version = handle.attrs['workflow_version']
+                except Exception as err:
+                    continue
+                existing_files.update({i: {'id': id_, 'version': version}})
+
+        return existing_files
+
+    def write_HDF5_file(self, path=None):
+        """Save the initial workflow to an HDF5 file and add task local inputs to the 
+        element data list.
 
         Parameters
         ----------
         path : str or Path, optional
             If specified, must be the full path (including file name) where the workflow
-            file should be saved. By default, `None`, in which case the `hdf5_path`
-            attribute will be used as the full path.
-        keep_previous_versions : bool, optional
-            If False, all workflow files with the same ID and lower (or equal) version
-            numbers in the same directory as the save location will be deleted. By
-            default, False. If True, no existing workflow files in the save directory
-            will be deleted.
-
-        Notes
-        -----
-        - A warning is issued if an existing workflow file exists with the same ID and
-          version. The file will be removed if `keep_previous_versions=False`.
-
-        Raises
-        ------
-        WorkflowPersistenceError
-            If saving was not successful.
+            file should be saved. By default, `None`, in which case the
+            `default_file_path` attribute will be used as the full path.
 
         """
 
-        path = Path(path or self.hdf5_path)
-        save_dir = path.parent
-
-        if not keep_previous_versions:
-            remove_tag = f'.remove_{secrets.token_hex(8)}'
-
-            same_IDs = {k: v
-                        for k, v in self.get_existing_workflow_files(save_dir).items()
-                        if v['id'] == self.id}
-
-            to_delete = {k: v for k, v in same_IDs.items()
-                         if v['version'] <= self.version}
-
-            if self.version in [v['version'] for k, v in to_delete.items()]:
-                warn('A saved workflow with the same ID and version already exists in '
-                     'this directory. This will be removed.')
-
-            # Mark older versions for deletion:
-            for del_path_i in to_delete.keys():
-                tagged_name = del_path_i.with_name(del_path_i.name + remove_tag)
-                del_path_i.rename(tagged_name)
-                msg = f'Marking old workflow file for deletion: {del_path_i}'
-                print(msg, flush=True)
-
+        path = Path(path or self.default_file_path)
         if path.exists():
             msg = f'Workflow cannot be saved to a path that already exists: "{path}".'
             raise WorkflowPersistenceError(msg)
 
+        # Add local inputs to element_data list:
+        element_data = {}
+        for task in self.tasks:
+
+            for input_name, vals_dict in task.local_inputs['inputs'].items():
+
+                all_data_idx = []
+                for val in vals_dict['vals']:
+                    data_idx = len(element_data)
+                    element_data.update({data_idx: {input_name: val}})
+                    all_data_idx.append(data_idx)
+
+                task.local_inputs['inputs'][input_name].update({
+                    'vals_data_idx': [all_data_idx[i] for i in vals_dict['vals_idx']]
+                })
+
         workflow_as_dict = self.as_dict()
-        del workflow_as_dict['is_from_file']
+        obj_json = to_hicklable(workflow_as_dict)
 
-        err_msg = None
-        try:
-            obj_json = to_hicklable(workflow_as_dict)
-            try:
-                with path.open('w') as handle:
-                    hickle.dump(obj_json, handle)
-            except Exception as err:
-                err_msg = f'Failed to save workflow to path: "{path}": {err}.'
-        except Exception as err:
-            err_msg = (f'Failed to convert Workflow object to `hickle`-compatible '
-                       f'dict: {err}.')
+        with h5py.File(path, 'w-') as handle:
 
-        if err_msg:
-            if not keep_previous_versions:
-                # Revert older versions back to original file names (don't delete):
-                for del_path_i in to_delete.keys():
-                    tagged_name = del_path_i.with_name(del_path_i.name + remove_tag)
-                    tagged_name.rename(del_path_i)
-                    msg = f'Save failed. Reverting old workflow file name: {tagged_name}.'
-                    print(msg, flush=True)
+            handle.attrs['matflow_version'] = __version__
+            handle.attrs['workflow_id'] = self.id
+            handle.attrs['workflow_version'] = 0
 
-                del to_delete
-            raise WorkflowPersistenceError(err_msg)
+            workflow_group = handle.create_group('workflow_obj')
+            workflow_group.attrs['type'] = [b'hickle']
+            hickle.dump(obj_json, handle, path=workflow_group.name)
 
-        else:
-            if not keep_previous_versions:
-                # Delete older versions (same ID):
-                for del_path_i in to_delete.keys():
-                    tagged_name = del_path_i.with_name(del_path_i.name + remove_tag)
-                    print(f'Removing old workflow file: {tagged_name}', flush=True)
-                    tagged_name.unlink()
+            data_group = handle.create_group('element_data')
+            data_group.attrs['type'] = [b'hickle']
+            hickle.dump(element_data, handle, path=data_group.name)
+
+        self.loaded_path = path
 
     @classmethod
-    def load(cls, path, full_path=False, version=None, check_integrity=True):
+    def load_HDF5_file(cls, path=None, full_path=False, check_integrity=True):
         """Load workflow from an HDF5 file.
 
         Parameters
@@ -748,16 +794,10 @@ class Workflow(object):
             Either the directory in which to search for a suitable workflow file (if
             `full_path=False`), or the full path to a workflow file (if `full_path=True`).
             If multiple workflow files with distinct IDs exist in the loading directory,
-            an exception is raised. If multiple versions exist (with the same ID), the 
-            workflow with the largest version number is loaded, by default, unless
-            `version` is specified.
+            an exception is raised.
         full_path : bool, optional
             Determines whether `path` is a full workflow file path or a directory path.
             By default, False.
-        version : int, optional
-            Has effect if `full_path=False`. If specified, a workflow with the specified
-            version will be loaded, if it exists, otherwise an exception will be raised.
-            Not specified by default.
         check_integrity : bool, optional
             If True, do some checks that the loaded information makes sense. True by
             default.
@@ -774,7 +814,7 @@ class Workflow(object):
             if not path.is_file():
                 raise OSError(f'Workflow file does not exist: "{path}".')
         else:
-            existing = cls.get_existing_workflow_files(path)
+            existing = cls.get_workflow_files(path)
             if not existing:
                 raise ValueError('No workflow files found.')
             all_IDs = set([v['id'] for v in existing.values()])
@@ -784,26 +824,13 @@ class Workflow(object):
                        f'workflow file, and set `full_path=True`.')
                 raise WorkflowPersistenceError(msg)
             else:
-                if version:
-                    if not isinstance(version, int):
-                        raise TypeError('Specify `version` as an integer.')
-                    # Load this specific version:
-                    paths = [k for k, v in existing.items() if v['version'] == version]
-                    if not paths:
-                        msg = (f'Workflow with version number "{version}" not found in '
-                               f'the loading directory: "{path}".')
-                        raise WorkflowPersistenceError(msg)
-                    else:
-                        path = paths[0]
-                else:
-                    # Get full path of workflow file with the largest version number:
-                    path = sorted(existing.items(), key=lambda i: i[1]['version'])[-1][0]
-
+                # Get full path of workflow file with the largest version number:
+                path = sorted(existing.items(), key=lambda i: i[1]['version'])[-1][0]
         try:
-            with path.open() as handle:
-                obj_json = hickle.load(handle)
+            with h5py.File(path, 'r') as handle:
+                obj_json = hickle.load(handle, path='/workflow_obj')
         except Exception as err:
-            msg = f'Could not load workflow file with `hickle`: "{path}": {err}.'
+            msg = f'Could not load workflow object with `hickle`: "{path}": {err}.'
             raise WorkflowPersistenceError(msg)
 
         for i in obj_json['tasks']:
@@ -835,8 +862,64 @@ class Workflow(object):
             i['action'] = WorkflowAction(i['action'][1])
             i['timestamp'] = datetime(**i['timestamp'])
         workflow._history = obj_json['history']
+        workflow.loaded_path = path
 
         return workflow
+
+    def prepare_task_element(self, task_idx, element_idx):
+
+        task = self.tasks[task_idx]
+        element = task.elements[element_idx]
+
+        # Populate element inputs:
+        for input_alias, inputs_idx in self.elements_idx[task_idx]['inputs'].items():
+
+            task_idx = inputs_idx.get('task_idx')
+            input_name = [i['name'] for i in task.schema.inputs
+                          if i['alias'] == input_alias][0]
+
+            if task_idx is not None:
+                # Input values sourced from previous task outputs:
+
+                data_idx = []
+                for i in inputs_idx['element_idx'][element_idx]:
+                    src_element = self.tasks[task_idx].elements[i]
+                    data_idx.append(src_element.get_output_data_idx(input_name))
+
+                if inputs_idx['group'] == 'default':
+                    data_idx = data_idx[0]
+
+            else:
+                # Input values sourced from `local_inputs` of this task:
+                local_data_idx = task.local_inputs['inputs'][input_name]['vals_data_idx']
+                all_data_idx = [local_data_idx[i] for i in inputs_idx['input_idx']]
+                data_idx = all_data_idx[element_idx]
+
+            element.add_input(input_alias, data_idx=data_idx)
+
+        # Run input maps:
+        schema_id = (task.name, task.method, task.software)
+        in_map_lookup = Config.get('input_maps').get(schema_id)
+
+        task_elem_path = self.get_element_path(task.task_idx, element_idx)
+
+        # For each input file to be written, invoke the function:
+        for in_map in task.schema.input_map:
+
+            # Get inputs required for this file:
+            in_map_inputs = {
+                input_name: element.get_input(input_name)
+                for input_name in in_map['inputs']
+            }
+            file_path = task_elem_path.joinpath(in_map['file'])
+
+            # Run input map to generate required input files:
+            func = in_map_lookup[in_map['file']]
+            func(path=file_path, **in_map_inputs)
+
+            # Save generated file as string in workflow:
+            with file_path.open('r') as handle:
+                element.add_file(in_map['file'], value=handle.read())
 
     @requires_path_exists
     def prepare_sources(self, task_idx):
@@ -885,76 +968,8 @@ class Workflow(object):
         'Prepare inputs and run input maps.'
 
         task = self.tasks[task_idx]
-        elems_idx = self.elements_idx[task_idx]
-        num_elems = elems_idx['num_elements']
-        inputs = [{} for _ in range(num_elems)]
-        files = [{} for _ in range(num_elems)]
-
-        # Populate task inputs:
-        for input_alias, inputs_idx in elems_idx['inputs'].items():
-
-            task_idx = inputs_idx.get('task_idx')
-            input_name = [i['name'] for i in task.schema.inputs
-                          if i['alias'] == input_alias][0]
-
-            if task_idx is not None:
-                # Input values should be copied from a previous task's `outputs`
-                prev_task = self.tasks[task_idx]
-                prev_outs = prev_task.outputs
-
-                if not prev_outs:
-                    msg = ('Task "{}" does not have the outputs required to parametrise '
-                           'the current task: "{}".')
-                    raise ValueError(msg.format(prev_task.name, task.name))
-
-                values_all = [[prev_outs[j][input_name] for j in i]
-                              for i in inputs_idx['element_idx']]
-
-            else:
-                # Input values should be copied from this task's `local_inputs`
-
-                # Expand values for intra-task nesting:
-                local_in = task.local_inputs['inputs'][input_name]
-                values = [local_in['vals'][i] for i in local_in['vals_idx']]
-
-                # Expand values for inter-task nesting:
-                values_all = [values[i] for i in inputs_idx['input_idx']]
-
-            for element, val in zip(inputs, values_all):
-                if (task_idx is not None) and (inputs_idx['group'] == 'default'):
-                    val = val[0]
-                element.update({input_alias: val})
-
-        task.inputs = inputs
-
-        # Run any input maps:
-        schema_id = (task.name, task.method, task.software)
-        in_map_lookup = Config.get('input_maps').get(schema_id)
-        for elem_idx, elem_inputs in zip(range(num_elems), task.inputs):
-
-            task_elem_path = self.get_element_path(task.task_idx, elem_idx)
-
-            # For each input file to be written, invoke the function:
-            for in_map in task.schema.input_map:
-
-                # Filter only those inputs required for this file:
-                in_map_inputs = {
-                    key: val for key, val in elem_inputs.items()
-                    if key in in_map['inputs']
-                }
-                file_path = task_elem_path.joinpath(in_map['file'])
-
-                # TODO: check file_path exists, unit test this as well.
-
-                # Run input map to generate required input files:
-                func = in_map_lookup[in_map['file']]
-                func(path=file_path, **in_map_inputs)
-
-                # Save generated file as string in workflow:
-                with file_path.open('r') as handle:
-                    files[elem_idx].update({in_map['file']: handle.read()})
-
-        task.files = files
+        for element in task.elements:
+            self.prepare_task_element(task.task_idx, element.element_idx)
 
         try:
             # Get software versions:
@@ -982,9 +997,11 @@ class Workflow(object):
         'Execute a task that is to be run directly in Python (via the function mapper).'
 
         task = self.tasks[task_idx]
+        element = task.elements[element_idx]
         schema_id = (task.name, task.method, task.software)
         func = Config.get('func_maps')[schema_id]
-        inputs = task.inputs[element_idx]
+        inputs = element.inputs.get_all()
+
         try:
             outputs = func(**inputs)
         except Exception as err:
@@ -1000,17 +1017,10 @@ class Workflow(object):
         with outputs_path.open('wb') as handle:
             pickle.dump(outputs, handle)
 
-    @requires_path_exists
-    def process_task(self, task_idx):
-        'Process outputs from an executed task: run output map and save outputs.'
+    def process_task_element(self, task_idx, element_idx):
 
         task = self.tasks[task_idx]
-        elems_idx = self.elements_idx[task_idx]
-        num_elems = elems_idx['num_elements']
-        outputs = [{} for _ in range(num_elems)]
-
-        schema_id = (task.name, task.method, task.software)
-        out_map_lookup = Config.get('output_maps').get(schema_id)
+        element = task.elements[element_idx]
 
         # Save hpcflow task stats
         hf_stats_all = hpcflow.get_stats(
@@ -1024,53 +1034,62 @@ class Workflow(object):
         submission_idx = 0
         hf_sub_stats = hf_stats_all[workflow_idx]['submissions'][submission_idx]
         job_name = self.get_hpcflow_job_name(task, 'run')
+        resource_usage = None
         for i in hf_sub_stats['command_group_submissions']:
             if i['name'] == job_name:
-                task.resource_usage = i['tasks']
+                resource_usage = i['tasks'][element_idx]
                 break
 
-        for elem_idx in range(num_elems):
+        if task.schema.is_func:
+            func_outputs_path = self._get_element_temp_output_path(task_idx, element_idx)
+            with func_outputs_path.open('rb') as handle:
+                func_outputs = pickle.load(handle)
+            for name, out in func_outputs.items():
+                element.add_output(name, value=out)
+            func_outputs_path.unlink()
 
-            task_elem_path = self.get_element_path(task.task_idx, elem_idx)
+        task_elem_path = self.get_element_path(task.task_idx, element_idx)
+        schema_id = (task.name, task.method, task.software)
+        out_map_lookup = Config.get('output_maps').get(schema_id)
 
-            if task.schema.is_func:
-                func_outputs_path = self._get_element_temp_output_path(task_idx, elem_idx)
-                with func_outputs_path.open('rb') as handle:
-                    func_outputs = pickle.load(handle)
-                outputs[elem_idx].update(**func_outputs)
-                func_outputs_path.unlink()
+        # Run output maps:
+        for out_map in task.schema.output_map:
 
-            # For each output to be parsed, invoke the function:
-            for out_map in task.schema.output_map:
+            # Filter only those file paths required for this output:
+            file_paths = []
+            for i in out_map['files']:
+                out_file_path = task_elem_path.joinpath(i['name'])
+                file_paths.append(out_file_path)
 
-                # Filter only those file paths required for this output:
-                file_paths = []
-                for i in out_map['files']:
-                    out_file_path = task_elem_path.joinpath(i['name'])
-                    file_paths.append(out_file_path)
-
-                    # Save generated file as string in workflow:
-                    if i['save']:
-                        with out_file_path.open('r') as handle:
-                            task.files[elem_idx].update({i['name']: handle.read()})
-
-                func = out_map_lookup[out_map['output']]
-                output = func(*file_paths, **task.output_map_options)
-                outputs[elem_idx].update({out_map['output']: output})
-
-            # Save output files specified explicitly as outputs:
-            for output_name in task.schema.outputs:
-                if output_name.startswith('__file__'):
-                    file_name = Config.get('output_file_maps')[schema_id].get(output_name)
-                    if not file_name:
-                        msg = 'Output file map missing for output name: "{}"'
-                        raise ValueError(msg.format(output_name))
-                    out_file_path = task_elem_path.joinpath(file_name)
-
-                    # Save file in workflow:
+                # Save generated file as string in workflow:
+                if i['save']:
                     with out_file_path.open('r') as handle:
-                        outputs[elem_idx].update({output_name: handle.read()})
+                        element.add_file(i['name'], value=handle.read())
 
-        task.outputs = outputs
+            func = out_map_lookup[out_map['output']]
+            output = func(*file_paths, **task.output_map_options)
+            element.add_output(out_map['output'], value=output)
+
+        # Save output files specified explicitly as outputs:
+        for output_name in task.schema.outputs:
+            if output_name.startswith('__file__'):
+                file_name = Config.get('output_file_maps')[schema_id].get(output_name)
+                if not file_name:
+                    msg = 'Output file map missing for output name: "{}"'
+                    raise ValueError(msg.format(output_name))
+                out_file_path = task_elem_path.joinpath(file_name)
+
+                # Save file in workflow:
+                with out_file_path.open('r') as handle:
+                    element.add_output(output_name, value=handle.read())
+
+    @requires_path_exists
+    def process_task(self, task_idx):
+        'Process outputs from an executed task: run output map and save outputs.'
+
+        task = self.tasks[task_idx]
+        for element in task.elements:
+            self.process_task_element(task.task_idx, element.element_idx)
+
         task.status = TaskStatus.complete
         self._append_history(WorkflowAction.process_task)
