@@ -700,7 +700,10 @@ class Workflow(object):
                 **Config.get('archive_locations')[self.archive],
                 'root_directory_name': 'parent',
             }
-            command_groups[-1].update({'archive': self.archive})
+            command_groups[-1].update({
+                'archive': self.archive,
+                'archive_excludes': self.archive_excludes,
+            })
 
         hf_data = {
             'parallel_modes': Config.get('parallel_modes'),
