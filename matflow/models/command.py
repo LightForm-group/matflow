@@ -92,13 +92,13 @@ class CommandGroup(object):
                 cmd_fmt += ' < {}'.format(command.stdin)
 
             if command.stdout:
-                cmd_fmt += ' > {}'.format(command.stdout)
+                cmd_fmt += ' >> {}'.format(command.stdout)
 
             if command.stderr:
                 if command.stderr == command.stdout:
                     cmd_fmt += ' 2>&1'
                 else:
-                    cmd_fmt += ' 2> {}'.format(command.stderr)
+                    cmd_fmt += ' 2>> {}'.format(command.stderr)
 
             cmd_dict = {'line': cmd_fmt}
             if command.parallel_mode and num_cores > 1:
