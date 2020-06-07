@@ -382,8 +382,12 @@ class Task(object):
         '_name',
         '_method',
         '_software_instance',
+        '_prepare_software_instance',
+        '_process_software_instance',
         '_task_idx',
         '_run_options',
+        '_prepare_run_options',
+        '_process_run_options',
         '_status',
         '_stats',
         '_context',
@@ -401,11 +405,12 @@ class Task(object):
         '_elements',
     ]
 
-    def __init__(self, workflow, name, method, software_instance, task_idx,
-                 run_options=None, status=None, stats=True, context='', local_inputs=None,
-                 schema=None, resource_usage=None, base=None, sequences=None,
-                 repeats=None, groups=None, nest=None, merge_priority=None,
-                 output_map_options=None):
+    def __init__(self, workflow, name, method, software_instance,
+                 prepare_software_instance, process_software_instance, task_idx,
+                 run_options=None, prepare_run_options=None, process_run_options=None,
+                 status=None, stats=True, context='', local_inputs=None, schema=None,
+                 resource_usage=None, base=None, sequences=None, repeats=None,
+                 groups=None, nest=None, merge_priority=None, output_map_options=None):
 
         self._id = None         # Generated once by generate_id()
         self._elements = None   # Assigned in init_elements()
@@ -414,8 +419,12 @@ class Task(object):
         self._name = name
         self._method = method
         self._software_instance = software_instance
+        self._prepare_software_instance = prepare_software_instance
+        self._process_software_instance = process_software_instance
         self._task_idx = task_idx
-        self._run_options = run_options
+        self._run_options = run_options or {}
+        self._prepare_run_options = prepare_run_options or {}
+        self._process_run_options = process_run_options or {}
         self._status = status or TaskStatus.pending
         self._stats = stats
         self._context = context
@@ -465,8 +474,14 @@ class Task(object):
         self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
         self_dict.pop('workflow')
         self_dict['status'] = (self.status.name, self.status.value)
-        self_dict['software_instance'] = self_dict['software_instance'].as_dict()
         self_dict['elements'] = [i.as_dict() for i in self_dict['elements']]
+        for i in [
+            'software_instance',
+            'prepare_software_instance',
+            'process_software_instance',
+        ]:
+            self_dict[i] = self_dict[i].as_dict()
+
         return self_dict
 
     def generate_id(self):
@@ -510,15 +525,57 @@ class Task(object):
         return self._software_instance
 
     @property
+    def prepare_software_instance(self):
+        return self._prepare_software_instance
+
+    @property
+    def process_software_instance(self):
+        return self._process_software_instance
+
+    @property
     def task_idx(self):
         return self._task_idx
 
     @property
     def run_options(self):
+        return {**self.software_instance.required_scheduler_options, **self._run_options}
+
+    @property
+    def prepare_run_options(self):
         return {
-            **(self.software_instance.scheduler_options or {}),
-            **(self._run_options or {}),
+            **self.prepare_software_instance.required_scheduler_options,
+            **self._prepare_run_options,
         }
+
+    @property
+    def process_run_options(self):
+        return {
+            **self.process_software_instance.required_scheduler_options,
+            **self._process_run_options,
+        }
+
+    def get_scheduler_options(self, task_type='main'):
+        """
+        Parameters
+        ----------
+        task_type : str
+            One of "main", "prepare", "process"
+        """
+        run_opts = {
+            'main': self.run_options,
+            'prepare': self.prepare_run_options,
+            'process': self.process_run_options,
+        }[task_type]
+
+        non_scheduler_opts = ['num_cores', 'job_array']
+        scheduler_opts = {}
+        for k, v in run_opts.items():
+            if k in non_scheduler_opts:
+                continue
+            if k == 'pe':
+                v = v + ' ' + str(run_opts['num_cores'])
+            scheduler_opts.update({k: v})
+        return scheduler_opts
 
     @property
     def status(self):
@@ -586,18 +643,48 @@ class Task(object):
     def software(self):
         return self.software_instance.software
 
-    @property
-    def prepare_task_commands(self):
-        out = [f'matflow prepare-task --task-idx={self.task_idx}']
-        if self.software_instance.prepare_task_env:
-            out = ['('] + self.software_instance.prepare_task_env_lines + out + [')']
+    def get_prepare_task_commands(self, is_array=False):
+        cmd = f'matflow prepare-task --task-idx={self.task_idx}'
+        cmd += f' --array' if is_array else ''
+        cmds = [cmd]
+        if self.software_instance.task_preparation:
+            env_list = self.software_instance.task_preparation.env.as_list()
+            cmds = env_list + cmds
+        out = [{'subshell': '\n'.join(cmds)}]
         return out
 
-    @property
-    def process_task_commands(self):
-        out = [f'matflow process-task --task-idx={self.task_idx}']
-        if self.software_instance.process_task_env:
-            out = ['('] + self.software_instance.process_task_env_lines + out + [')']
+    def get_prepare_task_element_commands(self, is_array=False):
+        cmd = (f'matflow prepare-task-element --task-idx={self.task_idx} '
+               f'--element-idx=$(($SGE_TASK_ID-1)) '
+               f'--directory={self.workflow.path}')
+        cmd += f' --array' if is_array else ''
+        cmds = [cmd]
+        if self.software_instance.task_preparation:
+            env_list = self.software_instance.task_preparation.env.as_list()
+            cmds = env_list + cmds
+        out = [{'subshell': '\n'.join(cmds)}]
+        return out
+
+    def get_process_task_commands(self, is_array=False):
+        cmd = f'matflow process-task --task-idx={self.task_idx}'
+        cmd += f' --array' if is_array else ''
+        cmds = [cmd]
+        if self.software_instance.task_processing:
+            env_list = self.software_instance.task_processing.env.as_list()
+            cmds = env_list + cmds
+        out = [{'subshell': '\n'.join(cmds)}]
+        return out
+
+    def get_process_task_element_commands(self, is_array=False):
+        cmd = (f'matflow process-task-element --task-idx={self.task_idx} '
+               f'--element-idx=$(($SGE_TASK_ID-1)) '
+               f'--directory={self.workflow.path}')
+        cmd += f' --array' if is_array else ''
+        cmds = [cmd]
+        if self.software_instance.task_processing:
+            env_list = self.software_instance.task_processing.env.as_list()
+            cmds = env_list + cmds
+        out = [{'subshell': '\n'.join(cmds)}]
         return out
 
     @property

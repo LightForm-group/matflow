@@ -4,7 +4,7 @@ from warnings import warn
 
 from pprint import pprint
 
-from ruamel.yaml import YAML
+from ruamel.yaml import YAML, safe_load
 
 from matflow.errors import ConfigurationError, MatflowExtensionError
 from matflow.models.task import TaskSchema
@@ -16,7 +16,9 @@ class Config(object):
     __ALLOWED_CONFIG = [
         'task_schema_sources',
         'software_sources',
-        'prepare_process_scheduler_options',
+        'default_preparation_run_options',
+        'default_processing_run_options',
+        'parallel_modes',
     ]
 
     __conf = {}
@@ -71,6 +73,10 @@ class Config(object):
             def_config = {
                 'task_schema_sources': [str(def_schema_file)],
                 'software_sources': [str(def_software_file)],
+                'parallel_modes': {
+                    'MPI': {'command': 'mpirun -np <<num_cores>>'},
+                    'OpenMP': {'env': 'export OMP_NUM_THREADS=<<num_cores>>'},
+                }
             }
             yaml.dump(def_config, config_file)
 
@@ -83,7 +89,8 @@ class Config(object):
             yaml.dump({}, def_software_file)
 
         print(f'Loading matflow config from {config_file}')
-        config_dat = yaml.load(config_file)
+        with config_file.open() as handle:
+            config_dat = safe_load(handle)
         bad_keys = list(set(config_dat.keys()) - set(Config.__ALLOWED_CONFIG))
         if bad_keys:
             bad_keys_fmt = ', '.join([f'"{i}"' for i in bad_keys])
@@ -114,7 +121,35 @@ class Config(object):
         config_dat, _ = Config.get_config_file(config_dir)
         schema_sources = [Path(i) for i in config_dat['task_schema_sources']]
         software_sources = [Path(i) for i in config_dat['software_sources']]
-        pp_scheduler_opts = config_dat.get('prepare_process_scheduler_options', {})
+
+        # Validate parallel_modes:
+        ALLOWED_PARA_MODES = ['MPI', 'OpenMP']
+        ALLOWED_PARA_MODES_FMT = ', '.join([f'{i!r}' for i in ALLOWED_PARA_MODES])
+        ALLOWED_PARA_CONFIGS = ['env', 'command']
+        ALLOWED_PARA_CONFIGS_FMT = ', '.join([f'{i!r}' for i in ALLOWED_PARA_CONFIGS])
+        para_modes = {}
+        for name, mode_config in config_dat.get('parallel_modes', {}).items():
+            if name.lower() not in [i.lower() for i in ALLOWED_PARA_MODES]:
+                msg = (f'Parallel mode "{name}" not known. Allowed parallel modes are '
+                       f'{ALLOWED_PARA_MODES_FMT}.')
+                raise ConfigurationError(msg)
+            if not mode_config:
+                msg = (f'Specify at least one of {ALLOWED_PARA_CONFIGS_FMT} for parallel '
+                       f'mode configuration: "{name}".')
+                raise ConfigurationError(msg)
+            bad_keys = set(mode_config.keys()) - set(ALLOWED_PARA_CONFIGS)
+            if bad_keys:
+                bad_keys_fmt = ', '.join([f'{i!r}' for i in bad_keys])
+                msg = (f'Unknown parallel mode configuration keys: {bad_keys_fmt} for '
+                       f'mode "{name}".')
+                raise ConfigurationError(msg)
+
+            if 'env' in mode_config:
+                # Split into list of lines:
+                mode_config['env'] = mode_config['env'].splitlines()
+
+            # Update to be lowercase:
+            para_modes.update({name.lower(): mode_config})
 
         # Load task_schemas list from all specified task schema files:
         task_schema_dicts = {}
@@ -164,10 +199,14 @@ class Config(object):
         print('OK!')
 
         Config.__conf['config_dir'] = config_dir
-        Config.__conf['prepare_process_scheduler_options'] = pp_scheduler_opts
+
+        for i in ['default_preparation_run_options', 'default_processing_run_options']:
+            Config.__conf[i] = config_dat.get(i, {})
+
         Config.__conf['hpcflow_config_dir'] = config_dir.joinpath('.hpcflow')
         Config.__conf['software'] = software
         Config.__conf['task_schemas'] = task_schemas
+        Config.__conf['parallel_modes'] = para_modes
 
         Config.__conf['input_maps'] = {}
         Config.__conf['output_maps'] = {}

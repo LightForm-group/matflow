@@ -1,8 +1,87 @@
 import copy
 import socket
+from collections import namedtuple
 
 from matflow.errors import SoftwareInstanceError, MissingSoftwareSourcesError
 from matflow.utils import extract_variable_names
+
+
+class SourcesPreparation(object):
+
+    __slots__ = ['_commands', '_env']
+
+    def __init__(self, commands=None, env=None):
+        self._commands = commands
+        self._env = EnvironmentSpec(env)
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}(commands={self.commands!r}, env={self.env!r})'
+
+    def __bool__(self):
+        return True if self.commands else False
+
+    @property
+    def commands(self):
+        return self._commands
+
+    def get_formatted_commands(self, source_vars, sources_dir, task_idx):
+        out = [{'line': f'matflow prepare-sources --task-idx={task_idx}'}]
+        for new_cmd in self.commands.splitlines():
+            new_cmd = new_cmd.replace('<<sources_dir>>', sources_dir)
+            for src_var_name, src_name in source_vars.items():
+                new_cmd = new_cmd.replace(f'<<{src_var_name}>>', src_name)
+            out.append({'line': new_cmd})
+        return out
+
+    @property
+    def commands_fmt(self):
+        return [{'line': i} for i in self._commands]
+
+    @property
+    def env(self):
+        return self._env
+
+    def as_dict(self):
+        return {'commands': self.commands, 'env': self.env.value}
+
+
+class AuxiliaryTaskSpec(object):
+
+    __slots__ = ['_env']
+
+    def __init__(self, env=None):
+        self._env = EnvironmentSpec(env)
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}(env={self.env!r})'
+
+    @property
+    def env(self):
+        return self._env
+
+    def as_dict(self):
+        return {'env': self.env.value}
+
+
+class EnvironmentSpec(object):
+
+    __slots__ = ['_value']
+
+    def __init__(self, value=None):
+        self._value = value
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}(value={self.value!r})'
+
+    @property
+    def value(self):
+        return self._value
+
+    def as_str(self):
+        return self.value or ''
+
+    def as_list(self):
+        return self.as_str().splitlines()
 
 
 class SoftwareInstance(object):
@@ -11,23 +90,23 @@ class SoftwareInstance(object):
         '_machine',
         '_software_friendly',
         '_label',
-        '_environment',
+        '_env',
         '_cores_min',
         '_cores_max',
         '_cores_step',
         '_executable',
-        '_preparation',
+        '_sources_preparation',
         '_options',
-        '_scheduler_options',
+        '_required_scheduler_options',
         '_version_info',
-        '_prepare_task_env',
-        '_process_task_env',
+        '_task_preparation',
+        '_task_processing',
     ]
 
-    def __init__(self, software, label=None, environment=None, cores_min=1, cores_max=1,
-                 cores_step=1, executable=None, preparation=None, options=None,
-                 scheduler_options=None, version_info=None, prepare_task_env=None,
-                 process_task_env=None):
+    def __init__(self, software, label=None, env=None, cores_min=1, cores_max=1,
+                 cores_step=1, executable=None, sources_preparation=None, options=None,
+                 required_scheduler_options=None, version_info=None,
+                 task_preparation=None, task_processing=None):
         """Initialise a SoftwareInstance object.
 
         Parameters
@@ -38,7 +117,7 @@ class SoftwareInstance(object):
         label : str, optional
             Label used to distinguish software instances for the same `software`. For
             example, this could be a version string.
-        environment : str, optional
+        env : str, optional
             Multi-line string containing commands to be executed by the shell that are
             necessary to set up the environment for running this software.
         executable : str, optional
@@ -52,9 +131,9 @@ class SoftwareInstance(object):
         cores_step : int, optional
             Specifies the step size from `cores_min` to `cores_max` this software instance
             supports. By default, 1.
-        preparation : dict, optional
+        sources_preparation : dict, optional
             Dict containing the following keys:
-                environment : str
+                env : str
                     Multi-line string containing commands to be executed by the shell that
                     are necessary to set up the environment for running the preparation
                     commands.
@@ -66,18 +145,24 @@ class SoftwareInstance(object):
         options : list of str, optional
             Additional software options as string labels that this instance supports. This
             can be used to label software instances for which add-ons are loaded.
-        scheduler_options : dict, optional
+        required_scheduler_options : dict, optional
             Scheduler options that are required for using this software instance.
         version_info : dict, optional
             If an extension does not provide a `software_version` function, then the
             version info dict must be specified here. The keys are str names and the
             values are dicts that must contain at least a key `version`.
-        prepare_task_env : str, optional
-            Multi-line string containing commands to be executed by the shell that are
-            necessary to set up the environment for running `matflow prepare-task`.
-        process_task_env : str, optional
-            Multi-line string containing commands to be executed by the shell that are
-            necessary to set up the environment for running `matflow process-task`.
+        task_preparation : dict, optional
+            Dict containing the following keys:
+                env : str
+                    Multi-line string containing commands to be executed by the shell that
+                    are necessary to set up the environment for running
+                    `matflow prepare-task`.
+        task_processing : dict, optional
+            Dict containing the following keys:
+                env : str
+                    Multi-line string containing commands to be executed by the shell that
+                    are necessary to set up the environment for running
+                    `matflow process-task`.
 
         """
 
@@ -85,20 +170,19 @@ class SoftwareInstance(object):
 
         self._software_friendly = software
         self._label = label
-        self._environment = environment
+        self._env = EnvironmentSpec(env)
         self._cores_min = cores_min
         self._cores_max = cores_max
         self._cores_step = cores_step
-        self._preparation = preparation
+        self._sources_preparation = SourcesPreparation(**(sources_preparation or {}))
         self._executable = executable
         self._options = options or []
-        self._scheduler_options = scheduler_options or {}
+        self._required_scheduler_options = required_scheduler_options or {}
         self._version_info = version_info or None
-        self._prepare_task_env = prepare_task_env
-        self._process_task_env = process_task_env
+        self._task_preparation = AuxiliaryTaskSpec(**(task_preparation or {}))
+        self._task_processing = AuxiliaryTaskSpec(**(task_processing or {}))
 
         self._validate_num_cores()
-        self._validate_preparation()
         self._validate_version_infos()
 
     def _validate_num_cores(self):
@@ -109,21 +193,6 @@ class SoftwareInstance(object):
             raise SoftwareInstanceError(msg)
         if self.cores_step < 1:
             raise SoftwareInstanceError('`cores_step` must be greater than 0.')
-
-    def _validate_preparation(self):
-        if self.preparation:
-            ALLOWED = ['environment', 'commands']
-            bad_keys = set(self.preparation.keys()) - set(ALLOWED)
-            if bad_keys:
-                bad_keys_fmt = ', '.join([f'"{i}"' for i in bad_keys])
-                raise SoftwareInstanceError(
-                    f'Unknown keys for `preparation`: {bad_keys_fmt}.')
-            if 'commands' not in self.preparation:
-                msg = ('If `preparation` is specified, it must be a dict with at least a '
-                       '`commands` key (and optionally an `environment` key).')
-                raise SoftwareInstanceError(msg)
-            if 'environment' not in self.preparation:
-                self._preparation['environment'] = None
 
     def _validate_version_infos(self):
         if self.version_info:
@@ -150,6 +219,10 @@ class SoftwareInstance(object):
         'Return attributes dict with preceding underscores removed.'
         self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
         self_dict['software'] = self_dict.pop('software_friendly')
+        self_dict['env'] = self_dict['env'].value
+        self_dict['sources_preparation'] = self_dict['sources_preparation'].as_dict()
+        self_dict['task_preparation'] = self_dict['task_preparation'].as_dict()
+        self_dict['task_processing'] = self_dict['task_processing'].as_dict()
         return self_dict
 
     def validate_source_maps(self, task, method, software, all_sources_maps):
@@ -198,17 +271,17 @@ class SoftwareInstance(object):
 
         INST_REQUIRED = ['num_cores']
         INST_DICT_KEYS = [
-            'scheduler_options',
-            'preparation',
+            'required_scheduler_options',
+            'sources_preparation',
         ]
         INST_ALLOWED = INST_REQUIRED + INST_DICT_KEYS + [
             'label',
             'options',
-            'environment',
+            'env',
             'executable',
             'version_info',
-            'prepare_task_env',
-            'process_task_env',
+            'task_preparation',
+            'task_processing',
         ]
 
         all_instances = {}
@@ -301,7 +374,10 @@ class SoftwareInstance(object):
     @property
     def requires_sources(self):
         if (
-            (self.preparation and '<<sources_dir>>' in self.preparation['commands']) or
+            (
+                self.sources_preparation and
+                '<<sources_dir>>' in self.sources_preparation.commands
+            ) or
             (self.executable and '<<sources_dir>>' in self.executable)
         ):
             return True
@@ -314,9 +390,11 @@ class SoftwareInstance(object):
             return []
         else:
             source_vars = []
-            if self.preparation:
+            if self.sources_preparation:
                 source_vars += extract_variable_names(
-                    self.preparation['commands'], ['<<', '>>'])
+                    self.sources_preparation.commands,
+                    ['<<', '>>']
+                )
             if self.executable:
                 source_vars += extract_variable_names(self.executable, ['<<', '>>'])
 
@@ -339,40 +417,16 @@ class SoftwareInstance(object):
         return self._label
 
     @property
-    def environment(self):
-        return self._environment
+    def env(self):
+        return self._env
 
     @property
-    def environment_str(self):
-        return self.environment or ''
+    def task_preparation(self):
+        return self._task_preparation
 
     @property
-    def environment_lines(self):
-        return self.environment_str.splitlines()
-
-    @property
-    def prepare_task_env(self):
-        return self._prepare_task_env
-
-    @property
-    def prepare_task_env_str(self):
-        return self.prepare_task_env or ''
-
-    @property
-    def prepare_task_env_lines(self):
-        return self.prepare_task_env_str.splitlines()
-
-    @property
-    def process_task_env(self):
-        return self._process_task_env
-
-    @property
-    def process_task_env_str(self):
-        return self.process_task_env or ''
-
-    @property
-    def process_task_env_lines(self):
-        return self.process_task_env_str.splitlines()
+    def task_processing(self):
+        return self._task_processing
 
     @property
     def cores_min(self):
@@ -391,8 +445,8 @@ class SoftwareInstance(object):
         return range(self.cores_min, self.cores_max + 1, self.cores_step)
 
     @property
-    def preparation(self):
-        return self._preparation
+    def sources_preparation(self):
+        return self._sources_preparation
 
     @property
     def executable(self):
@@ -403,8 +457,8 @@ class SoftwareInstance(object):
         return self._options
 
     @property
-    def scheduler_options(self):
-        return self._scheduler_options
+    def required_scheduler_options(self):
+        return self._required_scheduler_options
 
     @property
     def version_info(self):

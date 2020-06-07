@@ -50,7 +50,7 @@ class CommandGroup(object):
     def as_dict(self):
         return to_hicklable(self)
 
-    def get_formatted_commands(self, inputs_list):
+    def get_formatted_commands(self, inputs_list, num_cores):
         'Format commands into strings with hpcflow variable substitutions where required.'
 
         fmt_commands = []
@@ -100,7 +100,11 @@ class CommandGroup(object):
                 else:
                     cmd_fmt += ' 2> {}'.format(command.stderr)
 
-            fmt_commands.append(cmd_fmt)
+            cmd_dict = {'line': cmd_fmt}
+            if command.parallel_mode and num_cores > 1:
+                cmd_dict.update({'parallel_mode': command.parallel_mode})
+
+            fmt_commands.append(cmd_dict)
 
         return (fmt_commands, var_names)
 
@@ -109,7 +113,7 @@ class Command(object):
     'Class to represent a command to be executed by a shell.'
 
     def __init__(self, command, options=None, parameters=None, stdin=None, stdout=None,
-                 stderr=None):
+                 stderr=None, parallel_mode=None):
 
         self.command = command
         self.options = options or []
@@ -117,6 +121,7 @@ class Command(object):
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
+        self.parallel_mode = parallel_mode
 
     def __repr__(self):
         out = f'{self.__class__.__name__}({self.command!r}'

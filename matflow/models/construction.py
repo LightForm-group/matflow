@@ -14,6 +14,7 @@ import copy
 from warnings import warn
 
 import numpy as np
+from hpcflow.scheduler import SunGridEngine
 
 from matflow.config import Config
 from matflow.errors import (
@@ -34,6 +35,7 @@ from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list
                            to_sub_list, get_specifier_dict)
 from matflow.models.task import Task, TaskSchema
 from matflow.models.element import Element
+from matflow.models.software import SoftwareInstance
 
 
 def normalise_local_inputs(base=None, sequences=None):
@@ -195,7 +197,7 @@ def get_local_inputs(schema_inputs, base=None, num_repeats=1, sequences=None,
     return local_ins
 
 
-def get_software_instance(software, run_options, all_software):
+def get_software_instance(software, run_options, all_software, type_label=''):
     """Find a software instance in the software.yml file that matches the software
     requirements of a given task.
 
@@ -217,7 +219,7 @@ def get_software_instance(software, run_options, all_software):
                 Any other options to be passed to the scheduler.
     all_software : dict of list of SoftwareInstance
         Dict whose keys are software names and whose values are lists of SoftwareInstance
-        objects.    
+        objects.
 
     Returns
     -------
@@ -230,10 +232,10 @@ def get_software_instance(software, run_options, all_software):
         If no matching software instance can be found.
 
     """
-
+    match = None
     for name, instances in all_software.items():
 
-        if name != software['name']:
+        if name != SoftwareInstance.get_software_safe(software['name']):
             continue
 
         for inst in instances:
@@ -247,7 +249,7 @@ def get_software_instance(software, run_options, all_software):
 
             # Check no conflicting scheduler options
             keep_looking = False
-            for k, v in inst.scheduler_options.items():
+            for k, v in inst.required_scheduler_options.items():
                 if k in run_options and v != run_options[k]:
                     keep_looking = True
                     break
@@ -255,11 +257,26 @@ def get_software_instance(software, run_options, all_software):
             if keep_looking:
                 continue
             else:
-                return inst
+                match = inst
+                break
 
-    msg = (f'Could not find suitable software "{software["name"]}", with '
-           f'`num_cores={run_options["num_cores"]}` and `label={software["label"]}`.')
-    raise MissingSoftware(msg)
+        if match:
+            break
+
+    if match:
+        if run_options['num_cores'] > 1:
+            all_run_opts = {**match.required_scheduler_options, **run_options}
+            # (SGE specific):
+            if 'pe' not in all_run_opts:
+                msg = ('Parallel environment (`pe`) key must be specified in '
+                       f'`run_options{type_label}`, since `num_cores > 1`.')
+                raise TaskError(msg)
+    else:
+        msg = (f'Could not find suitable software "{software["name"]}", with '
+               f'`num_cores={run_options["num_cores"]}` and `label={software["label"]}`.')
+        raise MissingSoftware(msg)
+
+    return match
 
 
 def get_dependency_idx(task_info_lst):
@@ -345,6 +362,40 @@ def get_dependency_idx(task_info_lst):
     return dependency_idx
 
 
+def validate_run_options(run_opts, type_label=''):
+
+    # SGE specific:
+    ALLOWED = SunGridEngine.ALLOWED_USER_OPTS + ['num_cores']
+    if 'prepare' in type_label or 'process' in type_label:
+        ALLOWED += ['job_array']
+
+    bad_keys = set(run_opts.keys()) - set(ALLOWED)
+    if bad_keys:
+        bad_keys_fmt = ', '.join([f'{i!r}' for i in bad_keys])
+        raise TaskError(f'Run options not known: {bad_keys_fmt}.')
+
+    run_opts = copy.deepcopy(run_opts)
+
+    if 'preparation' in type_label:
+        run_opts = {**Config.get('default_preparation_run_options'), **run_opts}
+    elif 'processing' in type_label:
+        run_opts = {**Config.get('default_processing_run_options'), **run_opts}
+
+    if 'num_cores' not in run_opts:
+        run_opts.update({'num_cores': 1})
+
+    if run_opts['num_cores'] <= 0:
+        msg = (f'Specify `num_cores` (in `run_options{type_label}`) as an integer '
+               f'greater than 0.')
+        raise TaskError(msg)
+    elif 'pe' in run_opts:
+        msg = (f'No need to specify parallel environment (`pe`) in '
+               f'`run_options{type_label}`, since `num_cores=1`.')
+        raise TaskError(msg)
+
+    return run_opts
+
+
 def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
                        all_sources_maps, check_integrity=True):
     """Validate a task dict.
@@ -392,8 +443,12 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'method',
             'elements',
             'software_instance',
+            'prepare_software_instance',
+            'process_software_instance',
             'task_idx',
             'run_options',
+            'prepare_run_options',
+            'process_run_options',
             'status',
             'stats',
             'context',
@@ -454,17 +509,13 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
         raise TaskError(msg)
 
     task = {**def_keys, **copy.deepcopy(task)}
-    if 'num_cores' not in task['run_options']:
-        task['run_options'].update({'num_cores': 1})
 
-    if task['run_options']['num_cores'] <= 0:
-        msg = 'Specify `num_cores` (in `run_options`) as an integer greater than 0.'
-        raise TaskError(msg)
-
-    elif 'pe' in task['run_options']:
-        msg = ('No need to specify parallel environment (`pe`) in `run_options`, since '
-               '`num_cores=1`.')
-        raise TaskError(msg)
+    all_run_opts = task.pop('run_options')
+    prep_run_opts = all_run_opts.pop('preparation', {})
+    proc_run_opts = all_run_opts.pop('processing', {})
+    task['prepare_run_options'] = validate_run_options(prep_run_opts, '.prepare')
+    task['process_run_options'] = validate_run_options(proc_run_opts, '.process')
+    task['run_options'] = validate_run_options(all_run_opts)
 
     # Make TaskSchema:
     if is_from_file:
@@ -502,24 +553,30 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             task['run_options'],
             all_software,
         )
+        prepare_soft_inst = get_software_instance(
+            software,
+            task['prepare_run_options'],
+            all_software,
+            type_label='.prepare',
+        )
+        process_soft_inst = get_software_instance(
+            software,
+            task['process_run_options'],
+            all_software,
+            type_label='.process',
+        )
+
+        # print(f'prepare_soft_inst:\n{prepare_soft_inst}')
+        # print(f'process_soft_inst:\n{process_soft_inst}')
 
         schema_key = (task['name'], task['method'], soft_inst.software)
-        # Check any sources required by the software instance are defined in the sources
-        # map:
+        # Check any sources required by the main software instance are defined in the
+        # sources map:
         soft_inst.validate_source_maps(*schema_key, all_sources_maps)
 
         task['software_instance'] = soft_inst
-
-        if task['run_options']['num_cores'] > 1:
-            all_run_opts = {
-                **soft_inst.scheduler_options,
-                **task['run_options'],
-            }
-            # (SGE specific):
-            if 'pe' not in all_run_opts:
-                msg = ('Parallel environment (`pe`) key must be specified in '
-                       '`run_options`, since `num_cores > 1`.')
-                raise TaskError(msg)
+        task['prepare_software_instance'] = prepare_soft_inst
+        task['process_software_instance'] = process_soft_inst
 
         # Find the schema:
         schema = all_task_schemas.get(schema_key)

@@ -19,7 +19,7 @@ import h5py
 import hickle
 import hpcflow
 import numpy as np
-from ruamel.yaml import YAML
+from ruamel.yaml import YAML, scalarstring
 
 from matflow import __version__
 from matflow.config import Config
@@ -345,6 +345,20 @@ class Workflow(object):
         out = element_path.joinpath(f'task_output_{task.id}_element_{element_idx}.pickle')
         return out
 
+    @requires_path_exists
+    def _get_element_temp_prepare_path(self, task_idx, element_idx):
+        task = self.tasks[task_idx]
+        element_path = self.get_element_path(task_idx, element_idx)
+        out = element_path.joinpath(f'task_prepare_{task.id}_element_{element_idx}.hdf5')
+        return out
+
+    @requires_path_exists
+    def _get_element_temp_process_path(self, task_idx, element_idx):
+        task = self.tasks[task_idx]
+        element_path = self.get_element_path(task_idx, element_idx)
+        out = element_path.joinpath(f'task_process_{task.id}_element_{element_idx}.hdf5')
+        return out
+
     def write_directories(self):
         'Generate task and element directories.'
 
@@ -373,7 +387,9 @@ class Workflow(object):
         ----------
         task : Task
         job_type : str 
-            One of "prepare-task", "process-task", "run", "prepare-sources"
+            One of "prepare-task", "process-task", "process-prepare-task", "run",
+            "prepare-sources". If "process-prepare-task", the task passed must be the
+            "processing" task.
         is_stats : bool, optional
 
         Returns
@@ -382,7 +398,8 @@ class Workflow(object):
             The job name to be used in the hpcflow workflow.
 
         """
-        ALLOWED = ['prepare-task', 'process-task', 'run', 'prepare-sources']
+        ALLOWED = ['prepare-task', 'process-task', 'process-prepare-task', 'run',
+                   'prepare-sources']
         if job_type not in ALLOWED:
             raise ValueError(f'Invalid `job_type`. Allowed values are: {ALLOWED}.')
 
@@ -393,27 +410,16 @@ class Workflow(object):
         if job_type == 'run':
             out = f'{base}{task_idx_fmt}'
 
-        elif job_type == 'prepare-task':
-            if task.task_idx == 0:
-                out = f'{base}{task_idx_fmt}_aux'
-            else:
-                prev_task = self.tasks[task.task_idx - 1]
-                prev_task_idx_fmt = self.get_task_idx_padded(
-                    prev_task.task_idx,
-                    ret_zero_based=False,
-                )
-                out = f't{prev_task_idx_fmt}+{task_idx_fmt}_aux'
+        elif job_type in ['prepare-task', 'process-task']:
+            out = f'{base}{task_idx_fmt}_{job_type[:3]}'
 
-        elif job_type == 'process-task':
-            if task.task_idx == (len(self) - 1):
-                out = f'{base}{task_idx_fmt}_aux'
-            else:
-                next_task = self.tasks[task.task_idx + 1]
-                next_task_idx_fmt = self.get_task_idx_padded(
-                    next_task.task_idx,
-                    ret_zero_based=False,
-                )
-                out = f'{base}{task_idx_fmt}+{next_task_idx_fmt}_aux'
+        elif job_type == 'process-prepare-task':
+            next_task = self.tasks[task.task_idx + 1]
+            next_task_idx_fmt = self.get_task_idx_padded(
+                next_task.task_idx,
+                ret_zero_based=False,
+            )
+            out = f'{base}{task_idx_fmt}+{next_task_idx_fmt}_aux'
 
         elif job_type == 'prepare-sources':
             out = f'{base}{task_idx_fmt}_src'
@@ -430,33 +436,33 @@ class Workflow(object):
 
             src_prep_cmd_group = []
             executable = task.software_instance.executable
-            scheduler_opts_process = Config.get('prepare_process_scheduler_options')
+            scheduler_opts_process = {}
 
             if task.software_instance.requires_sources:
 
+                sources_prep = task.software_instance.sources_preparation
                 sources_dir = str(self.get_task_sources_path(task.task_idx))
-                prep_env = task.software_instance.preparation['environment'] or ''
-                prep_cmds = task.software_instance.preparation['commands'] or ''
+                prep_env = sources_prep.env.as_str()
 
                 source_map = Config.get('sources_maps')[
                     (task.name, task.method, task.software)
                 ]
                 src_vars = source_map['sources']
+                prep_cmds = sources_prep.get_formatted_commands(
+                    src_vars,
+                    sources_dir,
+                    task.task_idx,
+                )
+
                 for src_var_name, src_name in src_vars.items():
-
-                    prep_cmds = prep_cmds.replace(f'<<{src_var_name}>>', src_name)
                     executable = executable.replace(f'<<{src_var_name}>>', src_name)
-
-                    prep_cmds = prep_cmds.replace('<<sources_dir>>', sources_dir)
                     executable = executable.replace('<<sources_dir>>', sources_dir)
 
                 src_prep_cmd_group = [{
                     'directory': str(self.get_task_sources_path(task.task_idx)),
                     'nesting': 'hold',
-                    'commands': [
-                        'matflow prepare-sources --task-idx={}'.format(task.task_idx)
-                    ] + prep_cmds.splitlines(),
-                    'environment': prep_env.splitlines(),
+                    'commands': prep_cmds,
+                    'environment': prep_env,
                     'stats': False,
                     'scheduler_options': scheduler_opts_process,
                     'name': self.get_hpcflow_job_name(task, 'prepare-sources'),
@@ -466,19 +472,26 @@ class Workflow(object):
                 # The task is to be run directly in Python:
                 # (SGE specific)
                 fmt_commands = [
-                    f'matflow run-python-task --task-idx={task.task_idx} '
-                    f'--element-idx=$(($SGE_TASK_ID-1)) '
-                    f'--directory={self.path}'
+                    {
+                        'line': (f'matflow run-python-task --task-idx={task.task_idx} '
+                                 f'--element-idx=$(($SGE_TASK_ID-1)) '
+                                 f'--directory={self.path}')
+                    }
                 ]
 
             else:
                 # `input_vars` are those inputs that appear directly in the commands:
                 cmd_group = task.schema.command_group
                 fmt_commands, input_vars = cmd_group.get_formatted_commands(
-                    task.local_inputs['inputs'].keys())
+                    task.local_inputs['inputs'].keys(),
+                    num_cores=task.run_options['num_cores'],
+                )
 
-                fmt_commands = [i.replace('<<executable>>', executable)
-                                for i in fmt_commands]
+                fmt_commands_new = []
+                for i in fmt_commands:
+                    i['line'] = i['line'].replace('<<executable>>', executable)
+                    fmt_commands_new.append(i)
+                fmt_commands = fmt_commands_new
 
                 cmd_line_inputs = {}
                 for local_in_name, local_in in task.local_inputs['inputs'].items():
@@ -535,60 +548,126 @@ class Workflow(object):
                         with var_file_path.open('w') as handle:
                             handle.write(in_val + '\n')
 
-            scheduler_opts = {}
-            for k, v in task.run_options.items():
-                if k != 'num_cores':
-                    if k == 'pe':
-                        v = v + ' ' + str(task.run_options['num_cores'])
-                    scheduler_opts.update({k: v})
-
             task_path_rel = str(self.get_task_path(task.task_idx).name)
 
+            cur_prepare_opts = task.get_scheduler_options('prepare')
             if task.task_idx == 0:
-                command_groups.append({
-                    'directory': '.',
-                    'nesting': 'hold',
-                    'commands': task.prepare_task_commands,
-                    'stats': False,
-                    'scheduler_options': scheduler_opts_process,
-                    'name': self.get_hpcflow_job_name(task, 'prepare-task'),
-                })
+                prev_task, prev_process_opts = None, None
+            else:
+                prev_task = self.tasks[task.task_idx - 1]
+                prev_process_opts = prev_task.get_scheduler_options('process')
+
+            if (
+                task.task_idx == 0 or (
+                    cur_prepare_opts != prev_process_opts or
+                    'job_array' in task.prepare_run_options or
+                    'job_array' in prev_task.process_run_options
+                )
+            ):
+                if 'job_array' in task.prepare_run_options:
+                    command_groups.extend([
+                        {
+                            'directory': '<<{}_dirs>>'.format(task_path_rel),
+                            'nesting': 'hold',
+                            'commands': task.get_prepare_task_element_commands(
+                                is_array=True
+                            ),
+                            'stats': False,
+                            'scheduler_options': cur_prepare_opts,
+                            'name': self.get_hpcflow_job_name(task, 'prepare-task'),
+                        },
+                        {
+                            'directory': '.',
+                            'nesting': 'hold',
+                            'commands': task.get_prepare_task_commands(is_array=True),
+                            'stats': False,
+                            'scheduler_options': cur_prepare_opts,
+                            'name': self.get_hpcflow_job_name(task, 'prepare-task'),
+                        }
+                    ])
+
+                else:
+                    command_groups.append({
+                        'directory': '.',
+                        'nesting': 'hold',
+                        'commands': task.get_prepare_task_commands(is_array=False),
+                        'stats': False,
+                        'scheduler_options': cur_prepare_opts,
+                        'name': self.get_hpcflow_job_name(task, 'prepare-task'),
+                    })
 
             if task.software_instance.requires_sources:
                 command_groups += src_prep_cmd_group
 
-            command_groups.append({
+            main_task = {
                 'directory': '<<{}_dirs>>'.format(task_path_rel),
                 'nesting': 'hold',
                 'commands': fmt_commands,
-                'environment': task.software_instance.environment_lines,
-                'scheduler_options': scheduler_opts,
+                'scheduler_options': task.get_scheduler_options('main'),
                 'name': self.get_hpcflow_job_name(task, 'run'),
                 'stats': task.stats,
                 'stats_name': self.get_hpcflow_job_name(task, 'run', is_stats=True),
-            })
+            }
+            env = task.software_instance.env.as_str()
+            if env:
+                main_task.update({'environment': env})
+            command_groups.append(main_task)
 
+            add_process_groups = True
+            cur_process_opts = task.get_scheduler_options('process')
             if task.task_idx < (len(self) - 1):
                 next_task = self.tasks[task.task_idx + 1]
-                command_groups.append({
-                    'directory': '.',
-                    'nesting': 'hold',
-                    'commands': (
-                        task.process_task_commands + next_task.prepare_task_commands
-                    ),
-                    'stats': False,
-                    'scheduler_options': scheduler_opts_process,
-                    'name': self.get_hpcflow_job_name(task, 'process-task'),
-                })
-            else:
-                command_groups.append({
-                    'directory': '.',
-                    'nesting': 'hold',
-                    'commands': task.process_task_commands,
-                    'stats': False,
-                    'scheduler_options': scheduler_opts_process,
-                    'name': self.get_hpcflow_job_name(task, 'process-task'),
-                })
+                next_prepare_opts = next_task.get_scheduler_options('prepare')
+                if (
+                    cur_process_opts == next_prepare_opts and
+                    'job_array' not in task.process_run_options and
+                    'job_array' not in next_task.prepare_run_options
+                ):
+                    # Combine into one command group:
+                    command_groups.append({
+                        'directory': '.',
+                        'nesting': 'hold',
+                        'commands': (
+                            task.get_process_task_commands(is_array=False) +
+                            next_task.get_prepare_task_commands(is_array=False)
+                        ),
+                        'stats': False,
+                        'scheduler_options': cur_process_opts,
+                        'name': self.get_hpcflow_job_name(task, 'process-prepare-task'),
+                    })
+                    add_process_groups = False
+
+            if add_process_groups:
+                if 'job_array' in task.process_run_options:
+                    command_groups.extend([
+                        {
+                            'directory': '<<{}_dirs>>'.format(task_path_rel),
+                            'nesting': None,
+                            'commands': task.get_process_task_element_commands(
+                                is_array=True
+                            ),
+                            'stats': False,
+                            'scheduler_options': cur_process_opts,
+                            'name': self.get_hpcflow_job_name(task, 'process-task'),
+                        },
+                        {
+                            'directory': '.',
+                            'nesting': 'hold',
+                            'commands': task.get_process_task_commands(is_array=True),
+                            'stats': False,
+                            'scheduler_options': cur_process_opts,
+                            'name': self.get_hpcflow_job_name(task, 'process-task'),
+                        }
+                    ])
+                else:
+                    command_groups.append({
+                        'directory': '.',
+                        'nesting': 'hold',
+                        'commands': task.get_process_task_commands(is_array=False),
+                        'stats': False,
+                        'scheduler_options': cur_process_opts,
+                        'name': self.get_hpcflow_job_name(task, 'process-task'),
+                    })
 
             # Add variable for the task directories:
             elem_dir_regex = '/element_[0-9]+$' if elems_idx['num_elements'] > 1 else ''
@@ -604,6 +683,7 @@ class Workflow(object):
             })
 
         hf_data = {
+            'parallel_modes': Config.get('parallel_modes'),
             'scheduler': 'sge',
             'output_dir': 'output',
             'error_dir': 'output',
@@ -625,6 +705,24 @@ class Workflow(object):
             f'\n'
         )
         hf_data = self.get_hpcflow_workflow()
+
+        # TODO: the following should be done by hpcflow?
+        yaml_literal = scalarstring.LiteralScalarString
+        for i in hf_data['command_groups']:
+
+            if 'environment' in i and i['environment']:
+                literal_str_env = yaml_literal(i['environment'].strip())
+                i['environment'] = literal_str_env
+
+            if isinstance(i['commands'], str):
+                i['commands'] = yaml_literal(i['commands'])
+
+            elif isinstance(i['commands'], list):
+                for cmd in i['commands']:
+                    if isinstance(cmd, dict) and 'subshell' in cmd:
+                        if isinstance(cmd['subshell'], str):
+                            cmd['subshell'] = yaml_literal(cmd['subshell'])
+
         with self.path.joinpath(file_name).open('w') as handle:
             handle.write(about_msg)
             yaml = YAML()
@@ -835,11 +933,16 @@ class Workflow(object):
 
         for i in obj_json['tasks']:
             i['status'] = TaskStatus(i['status'][1])
-            soft_inst_dict = i['software_instance']
-            machine = soft_inst_dict.pop('machine')
-            soft_inst = SoftwareInstance(**soft_inst_dict)
-            soft_inst.machine = machine
-            i['software_instance'] = soft_inst
+            for j in [
+                'software_instance',
+                'prepare_software_instance',
+                'process_software_instance'
+            ]:
+                soft_inst_dict = i[j]
+                machine = soft_inst_dict.pop('machine')
+                soft_inst = SoftwareInstance(**soft_inst_dict)
+                soft_inst.machine = machine
+                i[j] = soft_inst
 
         obj = {
             'name': obj_json['name'],
@@ -866,7 +969,23 @@ class Workflow(object):
 
         return workflow
 
-    def prepare_task_element(self, task_idx, element_idx):
+    def prepare_task_element(self, task_idx, element_idx, is_array=False):
+        """
+        Parameters
+        ----------
+        task_idx : int
+        element_idx : int
+        is_array : bool, optional
+            If True, do not modify the workflow file directly, but save the new inputs
+            and files to a separate HDF5 file within the element directory. After
+            all task elements have been prepared, the results will be collated into the
+            main workflow file.
+
+        """
+
+        if is_array:
+            inputs_to_update = {}
+            files_to_update = {}
 
         task = self.tasks[task_idx]
         element = task.elements[element_idx]
@@ -874,16 +993,16 @@ class Workflow(object):
         # Populate element inputs:
         for input_alias, inputs_idx in self.elements_idx[task_idx]['inputs'].items():
 
-            task_idx = inputs_idx.get('task_idx')
+            ins_task_idx = inputs_idx.get('task_idx')
             input_name = [i['name'] for i in task.schema.inputs
                           if i['alias'] == input_alias][0]
 
-            if task_idx is not None:
+            if ins_task_idx is not None:
                 # Input values sourced from previous task outputs:
 
                 data_idx = []
                 for i in inputs_idx['element_idx'][element_idx]:
-                    src_element = self.tasks[task_idx].elements[i]
+                    src_element = self.tasks[ins_task_idx].elements[i]
                     data_idx.append(src_element.get_output_data_idx(input_name))
 
                 if inputs_idx['group'] == 'default':
@@ -895,13 +1014,16 @@ class Workflow(object):
                 all_data_idx = [local_data_idx[i] for i in inputs_idx['input_idx']]
                 data_idx = all_data_idx[element_idx]
 
-            element.add_input(input_alias, data_idx=data_idx)
+            if is_array:
+                inputs_to_update.update({input_alias: data_idx})
+            else:
+                element.add_input(input_alias, data_idx=data_idx)
 
         # Run input maps:
         schema_id = (task.name, task.method, task.software)
         in_map_lookup = Config.get('input_maps').get(schema_id)
 
-        task_elem_path = self.get_element_path(task.task_idx, element_idx)
+        task_elem_path = self.get_element_path(task_idx, element_idx)
 
         # For each input file to be written, invoke the function:
         for in_map in task.schema.input_map:
@@ -919,7 +1041,17 @@ class Workflow(object):
 
             # Save generated file as string in workflow:
             with file_path.open('r') as handle:
-                element.add_file(in_map['file'], value=handle.read())
+                file_dat = handle.read()
+
+            if is_array:
+                files_to_update.update({in_map['file']: file_dat})
+            else:
+                element.add_file(in_map['file'], value=file_dat)
+
+        if is_array:
+            temp_path = self._get_element_temp_prepare_path(task_idx, element_idx)
+            dat = {'inputs': inputs_to_update, 'files': files_to_update}
+            hickle.dump(dat, temp_path)
 
     @requires_path_exists
     def prepare_sources(self, task_idx):
@@ -964,12 +1096,42 @@ class Workflow(object):
                 handle.write(file_str)
 
     @requires_path_exists
-    def prepare_task(self, task_idx):
-        'Prepare inputs and run input maps.'
+    def prepare_task(self, task_idx, is_array=False):
+        """Prepare inputs and run input maps.
+
+        Parameters
+        ----------
+        task_idx : int
+        is_array: bool, optional
+            If True, prepare_task_element is assumed to have already run for each task,
+            and we just need to collate the results from each element directory.
+
+        """
 
         task = self.tasks[task_idx]
         for element in task.elements:
-            self.prepare_task_element(task.task_idx, element.element_idx)
+
+            if is_array:
+
+                temp_path = self._get_element_temp_prepare_path(
+                    task_idx,
+                    element.element_idx,
+                )
+                dat = hickle.load(temp_path)
+                inputs_to_update, files_to_update = dat['inputs'], dat['files']
+
+                for input_alias, data_idx in inputs_to_update.items():
+                    element.add_input(input_alias, data_idx=data_idx)
+
+                for file_name, file_dat in files_to_update.items():
+                    element.add_file(file_name, value=file_dat)
+
+            else:
+                self.prepare_task_element(
+                    task.task_idx,
+                    element.element_idx,
+                    is_array=False,
+                )
 
         try:
             # Get software versions:
@@ -982,6 +1144,7 @@ class Workflow(object):
                     software_versions = software_versions_func(executable)
             else:
                 software_versions = task.software_instance.version_info
+
         except Exception as err:
             software_versions = None
             warn(f'Failed to parse software versions: {err}')
@@ -1017,7 +1180,23 @@ class Workflow(object):
         with outputs_path.open('wb') as handle:
             pickle.dump(outputs, handle)
 
-    def process_task_element(self, task_idx, element_idx):
+    def process_task_element(self, task_idx, element_idx, is_array=False):
+        """
+        Parameters
+        ----------
+        task_idx : int
+        element_idx : int
+        is_array : bool, optional
+            If True, do not modify the workflow file directly, but save the new outputs
+            and files to a separate HDF5 file within the element directory. After
+            all task elements have been processed, the results will be collated into the
+            main workflow file.
+
+        """
+
+        if is_array:
+            outputs_to_update = {}
+            files_to_update = {}
 
         task = self.tasks[task_idx]
         element = task.elements[element_idx]
@@ -1045,7 +1224,11 @@ class Workflow(object):
             with func_outputs_path.open('rb') as handle:
                 func_outputs = pickle.load(handle)
             for name, out in func_outputs.items():
-                element.add_output(name, value=out)
+                if is_array:
+                    outputs_to_update.update({name: out})
+                else:
+                    element.add_output(name, value=out)
+
             func_outputs_path.unlink()
 
         task_elem_path = self.get_element_path(task.task_idx, element_idx)
@@ -1064,11 +1247,18 @@ class Workflow(object):
                 # Save generated file as string in workflow:
                 if i['save']:
                     with out_file_path.open('r') as handle:
-                        element.add_file(i['name'], value=handle.read())
+                        file_dat = handle.read()
+                    if is_array:
+                        files_to_update.update({i['name']: file_dat})
+                    else:
+                        element.add_file(i['name'], value=file_dat)
 
             func = out_map_lookup[out_map['output']]
             output = func(*file_paths, **task.output_map_options)
-            element.add_output(out_map['output'], value=output)
+            if is_array:
+                outputs_to_update.update({out_map['output']: output})
+            else:
+                element.add_output(out_map['output'], value=output)
 
         # Save output files specified explicitly as outputs:
         for output_name in task.schema.outputs:
@@ -1081,15 +1271,53 @@ class Workflow(object):
 
                 # Save file in workflow:
                 with out_file_path.open('r') as handle:
-                    element.add_output(output_name, value=handle.read())
+                    file_dat = handle.read()
+                if is_array:
+                    outputs_to_update.update({output_name: file_dat})
+                else:
+                    element.add_output(output_name, value=file_dat)
+
+        if is_array:
+            temp_path = self._get_element_temp_process_path(task_idx, element_idx)
+            dat = {'outputs': outputs_to_update, 'files': files_to_update}
+            hickle.dump(dat, temp_path)
 
     @requires_path_exists
-    def process_task(self, task_idx):
-        'Process outputs from an executed task: run output map and save outputs.'
+    def process_task(self, task_idx, is_array=False):
+        """Process outputs from an executed task: run output map and save outputs.
+
+        Parameters
+        ----------
+        task_idx : int
+        is_array: bool, optional
+            If True, prepare_task_element is assumed to have already run for each task,
+            and we just need to collate the results from each element directory.
+
+        """
 
         task = self.tasks[task_idx]
         for element in task.elements:
-            self.process_task_element(task.task_idx, element.element_idx)
+
+            if is_array:
+
+                temp_path = self._get_element_temp_process_path(
+                    task_idx,
+                    element.element_idx,
+                )
+                dat = hickle.load(temp_path)
+
+                for output_name, value in dat['outputs'].items():
+                    element.add_output(output_name, value=value)
+
+                for file_name, file_dat in dat['files'].items():
+                    element.add_file(file_name, value=file_dat)
+
+            else:
+                self.process_task_element(
+                    task.task_idx,
+                    element.element_idx,
+                    is_array=False,
+                )
 
         task.status = TaskStatus.complete
         self._append_history(WorkflowAction.process_task)
