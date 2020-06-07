@@ -1338,6 +1338,8 @@ class Workflow(object):
                 for file_name, file_dat in dat['files'].items():
                     element.add_file(file_name, value=file_dat)
 
+                temp_path.unlink()
+
             else:
                 self.process_task_element(
                     task.task_idx,
