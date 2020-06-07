@@ -2,9 +2,9 @@ import os
 from pathlib import Path
 from warnings import warn
 
-from pprint import pprint
-
+from hpcflow.config import Config as hpcflow_config
 from ruamel.yaml import YAML, safe_load
+
 
 from matflow.errors import ConfigurationError, MatflowExtensionError
 from matflow.models.task import TaskSchema
@@ -19,6 +19,8 @@ class Config(object):
         'default_preparation_run_options',
         'default_processing_run_options',
         'parallel_modes',
+        'dropbox_token',
+        'archive_locations',
     ]
 
     __conf = {}
@@ -198,15 +200,62 @@ class Config(object):
                     software.update({soft_name: instances})
         print('OK!')
 
+        archive_locs = config_dat.get('archive_locations', {})
+        for arch_name, arch in archive_locs.items():
+            ALLOWED_ARCH_KEYS = ['path', 'cloud_provider']
+            if 'path' not in arch:
+                msg = f'Missing `path` for archive location "{arch_name}".'
+                raise ConfigurationError(msg)
+            bad_keys = set(arch.keys()) - set(ALLOWED_ARCH_KEYS)
+            if bad_keys:
+                bad_keys_fmt = ', '.join([f'{i!r}' for i in bad_keys])
+                msg = (f'Unknown archive location keys for archive "{arch_name}": '
+                       f'{bad_keys_fmt}')
+                raise ConfigurationError(msg)
+
+            ALLOWED_CLOUD_PROVIDERS = ['dropbox']
+            cloud_provider = arch.get('cloud_provider')
+            if cloud_provider and cloud_provider not in ALLOWED_CLOUD_PROVIDERS:
+                msg = (f'Unsupported cloud provider for archive "{arch_name}": '
+                       f'"{cloud_provider}". Supported cloud providers are: '
+                       f'{ALLOWED_CLOUD_PROVIDERS}.')
+                raise ConfigurationError(msg)
+
         Config.__conf['config_dir'] = config_dir
 
         for i in ['default_preparation_run_options', 'default_processing_run_options']:
             Config.__conf[i] = config_dat.get(i, {})
 
-        Config.__conf['hpcflow_config_dir'] = config_dir.joinpath('.hpcflow')
+        hpcflow_config_dir = config_dir.joinpath('.hpcflow')
+        Config.__conf['hpcflow_config_dir'] = hpcflow_config_dir
         Config.__conf['software'] = software
         Config.__conf['task_schemas'] = task_schemas
         Config.__conf['parallel_modes'] = para_modes
+        Config.__conf['archive_locations'] = archive_locs
+
+        dropbox_token = config_dat.get('dropbox_token')
+        Config.__conf['dropbox_token'] = dropbox_token
+
+        if dropbox_token:
+
+            sync_db_token = False
+            hpcflow_config.set_config(config_dir=hpcflow_config_dir)
+
+            hf_db_token = None
+            try:
+                hf_db_token = hpcflow_config.get('dropbox_token')
+            except KeyError:
+                sync_db_token = True
+
+            if hf_db_token != dropbox_token:
+                sync_db_token = True
+
+            if sync_db_token:
+                hpcflow_config.update(
+                    'dropbox_token',
+                    dropbox_token,
+                    config_dir=hpcflow_config_dir
+                )
 
         Config.__conf['input_maps'] = {}
         Config.__conf['output_maps'] = {}

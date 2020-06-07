@@ -14,7 +14,7 @@ def parse_workflow_profile(profile_path):
 
     req_keys = ['name', 'tasks']
     task_globals = ['run_options', 'stats']
-    good_keys = req_keys + task_globals + ['extends']
+    good_keys = req_keys + task_globals + ['extends', 'archive', 'archive_excludes']
 
     miss_keys = list(set(req_keys) - set(profile.keys()))
     bad_keys = list(set(profile.keys()) - set(good_keys))
@@ -37,6 +37,8 @@ def parse_workflow_profile(profile_path):
         'name': profile['name'],
         'tasks': profile['tasks'],
         'extends': profile.get('extends'),
+        'archive': profile.get('archive'),
+        'archive_excludes': profile.get('archive_excludes'),
     }
 
     return workflow_dict

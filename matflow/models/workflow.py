@@ -80,10 +80,13 @@ class Workflow(object):
         '_tasks',
         '_elements_idx',
         '_history',
+        '_archive',
+        '_archive_excludes',
     ]
 
-    def __init__(self, name, tasks, stage_directory=None, extends=None,
-                 check_integrity=True, profile=None, __is_from_file=False):
+    def __init__(self, name, tasks, stage_directory=None, extends=None, archive=None,
+                 archive_excludes=None, check_integrity=True, profile=None,
+                 __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
@@ -94,6 +97,8 @@ class Workflow(object):
         self._extends = [str(Path(i).resolve()) for i in (extends or [])]
         self._stage_directory = str(Path(stage_directory or '').resolve())
         self._profile = profile
+        self._archive = archive
+        self._archive_excludes = archive_excludes
 
         tasks, elements_idx = init_tasks(self, tasks, self.is_from_file, check_integrity)
         self._tasks = tasks
@@ -238,6 +243,14 @@ class Workflow(object):
     @property
     def extends(self):
         return [Path(i) for i in self._extends]
+
+    @property
+    def archive(self):
+        return self._archive
+
+    @property
+    def archive_excludes(self):
+        return self._archive_excludes
 
     @property
     def stage_directory(self):
@@ -682,6 +695,13 @@ class Workflow(object):
                 }
             })
 
+        if self.archive:
+            archive_defn = {
+                **Config.get('archive_locations')[self.archive],
+                'root_directory_name': 'parent',
+            }
+            command_groups[-1].update({'archive': self.archive})
+
         hf_data = {
             'parallel_modes': Config.get('parallel_modes'),
             'scheduler': 'sge',
@@ -690,6 +710,9 @@ class Workflow(object):
             'command_groups': command_groups,
             'variables': variables,
         }
+
+        if self.archive:
+            hf_data.update({'archive_locations': {self.archive: archive_defn}})
 
         return hf_data
 
