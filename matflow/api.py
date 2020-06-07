@@ -102,18 +102,32 @@ def load_workflow(directory, full_path=False):
     return workflow
 
 
-def prepare_task(task_idx, directory):
+def prepare_task(task_idx, directory, is_array=False):
     'Prepare a task for execution by setting inputs and running input maps.'
     load_extensions()
     workflow = load_workflow(directory)
-    workflow.prepare_task(task_idx)
+    workflow.prepare_task(task_idx, is_array=is_array)
 
 
-def process_task(task_idx, directory):
+def prepare_task_element(task_idx, element_idx, directory, is_array=False):
+    'Prepare a task element for execution by setting inputs and running input maps.'
+    load_extensions()
+    workflow = load_workflow(directory)
+    workflow.prepare_task_element(task_idx, element_idx, is_array=is_array)
+
+
+def process_task(task_idx, directory, is_array=False):
     'Process a completed task by running the output map.'
     load_extensions()
     workflow = load_workflow(directory)
-    workflow.process_task(task_idx)
+    workflow.process_task(task_idx, is_array=is_array)
+
+
+def process_task_element(task_idx, element_idx, directory, is_array=False):
+    'Process a task element for execution by running output maps and saving outputs.'
+    load_extensions()
+    workflow = load_workflow(directory)
+    workflow.process_task_element(task_idx, element_idx, is_array=is_array)
 
 
 def run_python_task(task_idx, element_idx, directory):

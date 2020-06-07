@@ -39,17 +39,39 @@ def go(workflow_path, directory=None):
 @cli.command()
 @click.option('--task-idx', '-t', type=click.INT, required=True)
 @click.option('--directory', '-d', type=click.Path(exists=True))
-def prepare_task(task_idx, directory=None):
+@click.option('--array', is_flag=True)
+def prepare_task(task_idx, directory=None, array=False):
     print('matflow.cli.prepare_task', flush=True)
-    api.prepare_task(task_idx, directory)
+    api.prepare_task(task_idx, directory, is_array=array)
+
+
+@cli.command()
+@click.option('--task-idx', '-t', type=click.INT, required=True)
+@click.option('--element-idx', '-e', type=click.INT, required=True)
+@click.option('--directory', '-d', type=click.Path(exists=True))
+@click.option('--array', is_flag=True)
+def prepare_task_element(task_idx, element_idx, directory=None, array=False):
+    print('matflow.cli.prepare_task_element', flush=True)
+    api.prepare_task_element(task_idx, element_idx, directory, is_array=array)
 
 
 @cli.command()
 @click.option('--task-idx', '-t', type=click.INT, required=True)
 @click.option('--directory', '-d', type=click.Path(exists=True))
-def process_task(task_idx, directory=None):
+@click.option('--array', is_flag=True)
+def process_task(task_idx, directory=None, array=False):
     print('matflow.cli.process_task', flush=True)
-    api.process_task(task_idx, directory)
+    api.process_task(task_idx, directory, is_array=array)
+
+
+@cli.command()
+@click.option('--task-idx', '-t', type=click.INT, required=True)
+@click.option('--element-idx', '-e', type=click.INT, required=True)
+@click.option('--directory', '-d', type=click.Path(exists=True))
+@click.option('--array', is_flag=True)
+def process_task_element(task_idx, element_idx, directory=None, array=False):
+    print('matflow.cli.process_task_element', flush=True)
+    api.process_task_element(task_idx, element_idx, directory, is_array=array)
 
 
 @cli.command()
