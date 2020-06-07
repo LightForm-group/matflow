@@ -23,7 +23,8 @@ class TaskSchema(object):
     """Class to represent the schema of a particular method/implementation of a task."""
 
     def __init__(self, name, outputs, method=None, implementation=None, inputs=None,
-                 input_map=None, output_map=None, command_group=None):
+                 input_map=None, output_map=None, command_group=None,
+                 archive_excludes=None):
         'Instantiate a TaskSchema.'
 
         self.name = name
@@ -33,6 +34,7 @@ class TaskSchema(object):
         self.inputs = inputs or []
         self.input_map = input_map or []
         self.output_map = output_map or []
+        self.archive_excludes = archive_excludes
 
         self.command_group = CommandGroup(**command_group) if command_group else None
 
@@ -46,7 +48,8 @@ class TaskSchema(object):
             f'implementation={self.implementation!r}, '
             f'inputs={self.inputs_condensed!r}, '
             f'outputs={self.outputs!r}, '
-            f'command_group={self.command_group!r}'
+            f'command_group={self.command_group!r}, '
+            f'archive_excludes={self.archive_excludes!r}'
             f')'
         )
 
@@ -75,6 +78,7 @@ class TaskSchema(object):
             'output_map',
             'commands',
             'notes',
+            'archive_excludes',
         ]
 
         all_schema_dicts = {}
@@ -162,6 +166,7 @@ class TaskSchema(object):
                             'input_map': input_map,
                             'output_map': output_map,
                             'command_group': command_group,
+                            'archive_excludes': imp.get('archive_excludes'),
                         }
                     })
 

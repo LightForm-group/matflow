@@ -250,7 +250,12 @@ class Workflow(object):
 
     @property
     def archive_excludes(self):
-        return self._archive_excludes
+        schema_excludes = [
+            i
+            for task in self.tasks
+            for i in task.schema.archive_excludes or []
+        ]
+        return list(set(self._archive_excludes or [] + schema_excludes))
 
     @property
     def stage_directory(self):
