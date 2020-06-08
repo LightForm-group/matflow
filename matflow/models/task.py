@@ -207,7 +207,7 @@ class TaskSchema(object):
     def _validate_inputs_outputs(self):
         'Basic checks on inputs and outputs.'
 
-        allowed_inp_specifiers = ['group', 'context', 'alias']
+        allowed_inp_specifiers = ['group', 'context', 'alias', 'file']
         req_inp_keys = ['name']
         allowed_inp_keys = req_inp_keys + allowed_inp_specifiers
         allowed_inp_keys_fmt = ', '.join(['"{}"'.format(i) for i in allowed_inp_keys])
@@ -218,7 +218,7 @@ class TaskSchema(object):
         # Normalise schema inputs:
         for inp_idx, inp in enumerate(self.inputs):
 
-            inp_defs = {'context': None, 'group': 'default'}
+            inp_defs = {'context': None, 'group': 'default', 'file': False}
             inp = get_specifier_dict(inp, name_key='name', defaults=inp_defs)
 
             for r in req_inp_keys:

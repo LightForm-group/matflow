@@ -8,6 +8,7 @@ import copy
 import functools
 import secrets
 import pickle
+import shutil
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -388,15 +389,43 @@ class Workflow(object):
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
             # Generate task directory:
-            self.get_task_path(task.task_idx).mkdir()
+            task_idx = task.task_idx
+            self.get_task_path(task_idx).mkdir()
 
             if task.software_instance.requires_sources:
-                self.get_task_sources_path(task.task_idx).mkdir()
+                self.get_task_sources_path(task_idx).mkdir()
 
             num_elems = elems_idx['num_elements']
             # Generate element directories:
             for i in range(num_elems):
-                self.get_element_path(task.task_idx, i).mkdir(exist_ok=True)
+                self.get_element_path(task_idx, i).mkdir(exist_ok=True)
+
+            # Copy any local input files to the element directories:
+            for input_alias, inputs_idx in self.elements_idx[task_idx]['inputs'].items():
+
+                schema_input = [i for i in task.schema.inputs
+                                if i['alias'] == input_alias][0]
+
+                if schema_input['file'] == False:
+                    continue
+
+                input_name = schema_input['name']
+                input_dict = task.local_inputs['inputs'][input_name]
+                local_ins = [input_dict['vals'][i] for i in input_dict['vals_idx']]
+
+                for element_idx in range(num_elems):
+
+                    file_path = local_ins[inputs_idx['input_idx'][element_idx]]
+                    file_path_full = self.stage_directory.joinpath(file_path)
+                    elem_path = self.get_element_path(task_idx, i)
+                    dst_path = elem_path.joinpath(file_path_full.name)
+
+                    if not file_path_full.is_file():
+                        msg = (f'Input "{input_name}" with relative path "{file_path}" is'
+                               f'not a file relative to {self.stage_directory}.')
+                        raise ValueError(msg)
+
+                    shutil.copyfile(file_path_full, dst_path)
 
     def get_hpcflow_job_name(self, task, job_type, is_stats=False):
         """Get the scheduler job name for a given task index and job type.
@@ -517,7 +546,8 @@ class Workflow(object):
                         # TODO: We currently only consider input_vars for local inputs.
 
                         # Expand values for intra-task nesting:
-                        values = [local_in['vals'][i] for i in local_in['vals_idx']]
+                        values = [self.get_element_data(i)
+                                  for i in local_in['vals_data_idx']]
 
                         # Format values:
                         fmt_func_scope = Config.get('CLI_arg_maps').get((
@@ -884,9 +914,15 @@ class Workflow(object):
 
             for input_name, vals_dict in task.local_inputs['inputs'].items():
 
+                # Assumes no duplicate local inputs (distinguished by alias!):
+                schema_input = task.schema.get_input_by_name(input_name)
+                is_file = (schema_input['file'] != False)
+
                 all_data_idx = []
                 for val in vals_dict['vals']:
                     data_idx = len(element_data)
+                    if is_file:
+                        val = Path(val).name
                     element_data.update({data_idx: {input_name: val}})
                     all_data_idx.append(data_idx)
 
