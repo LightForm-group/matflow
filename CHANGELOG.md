@@ -23,6 +23,10 @@
 - Jobscript names refer to the task to which they prepare/execute/process
 - hpcflow profile is passed as a `dict` to hpcflow. For information, the hpcflow profile is still dumped to a file.
 
+## [0.1.3] - 2020.05.27
+
+- New release for Zenodo archive.
+
 ## [0.1.2] - 2020.05.12
 
 - Latest dev branch merged...
