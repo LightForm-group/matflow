@@ -366,7 +366,7 @@ def validate_run_options(run_opts, type_label=''):
 
     # SGE specific:
     ALLOWED = SunGridEngine.ALLOWED_USER_OPTS + ['num_cores']
-    if 'prepare' in type_label or 'process' in type_label:
+    if 'preparation' in type_label or 'processing' in type_label:
         ALLOWED += ['job_array']
 
     bad_keys = set(run_opts.keys()) - set(ALLOWED)
@@ -513,8 +513,8 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
     all_run_opts = task.pop('run_options')
     prep_run_opts = all_run_opts.pop('preparation', {})
     proc_run_opts = all_run_opts.pop('processing', {})
-    task['prepare_run_options'] = validate_run_options(prep_run_opts, '.prepare')
-    task['process_run_options'] = validate_run_options(proc_run_opts, '.process')
+    task['prepare_run_options'] = validate_run_options(prep_run_opts, '.preparation')
+    task['process_run_options'] = validate_run_options(proc_run_opts, '.processing')
     task['run_options'] = validate_run_options(all_run_opts)
 
     # Make TaskSchema:
