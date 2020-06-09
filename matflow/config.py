@@ -19,7 +19,6 @@ class Config(object):
         'default_preparation_run_options',
         'default_processing_run_options',
         'parallel_modes',
-        'dropbox_token',
         'archive_locations',
     ]
 
@@ -232,30 +231,6 @@ class Config(object):
         Config.__conf['task_schemas'] = task_schemas
         Config.__conf['parallel_modes'] = para_modes
         Config.__conf['archive_locations'] = archive_locs
-
-        dropbox_token = config_dat.get('dropbox_token')
-        Config.__conf['dropbox_token'] = dropbox_token
-
-        if dropbox_token:
-
-            sync_db_token = False
-            hpcflow_config.set_config(config_dir=hpcflow_config_dir)
-
-            hf_db_token = None
-            try:
-                hf_db_token = hpcflow_config.get('dropbox_token')
-            except KeyError:
-                sync_db_token = True
-
-            if hf_db_token != dropbox_token:
-                sync_db_token = True
-
-            if sync_db_token:
-                hpcflow_config.update(
-                    'dropbox_token',
-                    dropbox_token,
-                    config_dir=hpcflow_config_dir
-                )
 
         Config.__conf['input_maps'] = {}
         Config.__conf['output_maps'] = {}

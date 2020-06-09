@@ -106,6 +106,7 @@ class Workflow(object):
         self._elements_idx = elements_idx
 
         if not self.is_from_file:
+            self._check_cloud_archive()
             self._history = []
             self._append_history(WorkflowAction.generate)
 
@@ -145,6 +146,11 @@ class Workflow(object):
 
     def __len__(self):
         return len(self.tasks)
+
+    def _check_cloud_archive(self):
+        if self.archive and 'cloud_provider' in self.archive_definition:
+            provider = self.archive_definition['cloud_provider']
+            hpcflow.cloud_connect(provider, config_dir=Config.get('hpcflow_config_dir'))
 
     def _append_history(self, action, **kwargs):
         'Append a new history event.'
@@ -257,6 +263,16 @@ class Workflow(object):
             for i in task.schema.archive_excludes or []
         ]
         return list(set(self._archive_excludes or [] + schema_excludes))
+
+    @property
+    def archive_definition(self):
+        if not self.archive:
+            return None
+        archive_defn = {
+            **Config.get('archive_locations')[self.archive],
+            'root_directory_name': 'parent',
+        }
+        return archive_defn
 
     @property
     def stage_directory(self):
@@ -731,10 +747,6 @@ class Workflow(object):
             })
 
         if self.archive:
-            archive_defn = {
-                **Config.get('archive_locations')[self.archive],
-                'root_directory_name': 'parent',
-            }
             command_groups[-1].update({
                 'archive': self.archive,
                 'archive_excludes': self.archive_excludes,
@@ -750,7 +762,7 @@ class Workflow(object):
         }
 
         if self.archive:
-            hf_data.update({'archive_locations': {self.archive: archive_defn}})
+            hf_data.update({'archive_locations': {self.archive: self.archive_definition}})
 
         return hf_data
 

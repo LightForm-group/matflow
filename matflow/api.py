@@ -13,6 +13,7 @@ from pprint import pprint
 import pyperclip
 from ruamel.yaml import YAML
 from hpcflow import kill as hpcflow_kill
+from hpcflow import cloud_connect as hpcflow_cloud_connect
 
 from matflow.config import Config
 from matflow.extensions import load_extensions
@@ -161,3 +162,8 @@ def validate():
 def kill(directory):
     Config.set_config()
     hpcflow_kill(dir_path=directory, config_dir=Config.get('hpcflow_config_dir'))
+
+
+def cloud_connect(provider):
+    Config.set_config()
+    hpcflow_cloud_connect(provider, config_dir=Config.get('hpcflow_config_dir'))

@@ -110,6 +110,12 @@ def validate():
 
 
 @cli.command()
+@click.option('--provider', '-p', required=True)
+def cloud_connect(provider):
+    api.cloud_connect(provider)
+
+
+@cli.command()
 @click.argument('directory', type=click.Path(exists=True))
 def kill(directory):
     'Kill all pending and executing tasks.'
