@@ -1,5 +1,12 @@
 # Change Log
 
+## [0.2.2] - 2020.06.09
+
+### Changed
+
+- Improved Dropbox authorization flow. 
+- Bump hpcflow to v0.1.9
+
 ## [0.2.1] - 2020.06.09
 
 ### Fixed
