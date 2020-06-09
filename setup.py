@@ -51,7 +51,7 @@ setup(
     },
     install_requires=[
         'matflow-demo-extension',
-        'hpcflow>=0.1.7',
+        'hpcflow>=0.1.8',
         'click>7.0',
         'hickle',
         'ruamel.yaml',
