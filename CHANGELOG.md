@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.1] - 2020.06.09
+
+### Fixed
+
+- Fix bug in reading `default_preparation_run_options` and `default_processing_run_options` dicts from the config file.
+
 ## [0.2.0] - 2020.06.09
 
 ### Added
