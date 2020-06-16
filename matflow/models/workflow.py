@@ -499,7 +499,6 @@ class Workflow(object):
 
             src_prep_cmd_group = []
             executable = task.software_instance.executable
-            scheduler_opts_process = {}
 
             if task.software_instance.requires_sources:
 
@@ -527,7 +526,7 @@ class Workflow(object):
                     'commands': prep_cmds,
                     'environment': prep_env,
                     'stats': False,
-                    'scheduler_options': scheduler_opts_process,
+                    'scheduler_options': task.get_scheduler_options('prepare'),
                     'name': self.get_hpcflow_job_name(task, 'prepare-sources'),
                 }]
 
