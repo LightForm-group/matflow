@@ -648,6 +648,21 @@ class Task(object):
     def software(self):
         return self.software_instance.software
 
+    def get_formatted_commands(self):
+        fmt_commands, input_vars = self.schema.command_group.get_formatted_commands(
+            self.local_inputs['inputs'].keys(),
+            num_cores=self.run_options['num_cores'],
+        )
+
+        # TODO: ?
+        # fmt_commands_new = []
+        # for i in fmt_commands:
+        #     i['line'] = i['line'].replace('<<executable>>', executable)
+        #     fmt_commands_new.append(i)
+        # fmt_commands = fmt_commands_new
+
+        return fmt_commands, input_vars
+
     def get_prepare_task_commands(self, is_array=False):
         cmd = f'matflow prepare-task --task-idx={self.task_idx}'
         cmd += f' --array' if is_array else ''

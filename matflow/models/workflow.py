@@ -542,12 +542,9 @@ class Workflow(object):
                 ]
 
             else:
+
+                fmt_commands, input_vars = task.get_formatted_commands()
                 # `input_vars` are those inputs that appear directly in the commands:
-                cmd_group = task.schema.command_group
-                fmt_commands, input_vars = cmd_group.get_formatted_commands(
-                    task.local_inputs['inputs'].keys(),
-                    num_cores=task.run_options['num_cores'],
-                )
 
                 fmt_commands_new = []
                 for i in fmt_commands:
