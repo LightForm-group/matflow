@@ -26,11 +26,12 @@ class SourcesPreparation(object):
 
     def get_formatted_commands(self, source_vars, sources_dir, task_idx):
         out = [{'line': f'matflow prepare-sources --task-idx={task_idx}'}]
-        for new_cmd in self.commands.splitlines():
-            new_cmd = new_cmd.replace('<<sources_dir>>', sources_dir)
-            for src_var_name, src_name in source_vars.items():
-                new_cmd = new_cmd.replace(f'<<{src_var_name}>>', src_name)
-            out.append({'line': new_cmd})
+        if self.commands:
+            for new_cmd in self.commands.splitlines():
+                new_cmd = new_cmd.replace('<<sources_dir>>', sources_dir)
+                for src_var_name, src_name in source_vars.items():
+                    new_cmd = new_cmd.replace(f'<<{src_var_name}>>', src_name)
+                out.append({'line': new_cmd})
         return out
 
     @property
