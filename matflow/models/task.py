@@ -247,11 +247,21 @@ class TaskSchema(object):
 
         # Check correct keys in supplied input/output maps:
         for in_map in self.input_map:
-            if sorted(in_map.keys()) != sorted(['inputs', 'file']):
-                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in in_map.keys()])
-                msg = (f'Input maps must map a list of `inputs` into a `file` but found '
-                       f'input map with keys {bad_keys_fmt}.')
-                raise TaskSchemaError(err + msg)
+
+            req_keys = ['inputs', 'file']
+            allowed_keys = set(req_keys + ['save'])
+            miss_keys = list(set(req_keys) - set(in_map.keys()))
+            bad_keys = list(set(in_map.keys()) - allowed_keys)
+
+            msg = (f'Input maps must map a list of `inputs` into a `file` (with an '
+                   f'optional `save` key).')
+            if miss_keys:
+                miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+                raise TaskSchemaError(err + msg + f'Missing keys are: {miss_keys_fmt}.')
+            if bad_keys:
+                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+                raise TaskSchemaError(err + msg + f'Unknown keys are: {bad_keys_fmt}.')
+
             if not isinstance(in_map['inputs'], list):
                 msg = 'Input map `inputs` must be a list.'
                 raise TaskSchemaError(err + msg)

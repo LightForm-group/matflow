@@ -1114,14 +1114,14 @@ class Workflow(object):
             func = in_map_lookup[in_map['file']]
             func(path=file_path, **in_map_inputs)
 
-            # Save generated file as string in workflow:
-            with file_path.open('r') as handle:
-                file_dat = handle.read()
-
-            if is_array:
-                files_to_update.update({in_map['file']: file_dat})
-            else:
-                element.add_file(in_map['file'], value=file_dat)
+            if in_map.get('save', False):
+                # Save generated file as string in workflow:
+                with file_path.open('r') as handle:
+                    file_dat = handle.read()
+                if is_array:
+                    files_to_update.update({in_map['file']: file_dat})
+                else:
+                    element.add_file(in_map['file'], value=file_dat)
 
         if is_array:
             temp_path = self._get_element_temp_prepare_path(task_idx, element_idx)
