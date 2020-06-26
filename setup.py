@@ -53,7 +53,7 @@ setup(
         'matflow-demo-extension',
         'hpcflow>=0.1.9',
         'click>7.0',
-        'hickle',
+        'hickle==3.4.6',
         'ruamel.yaml',
         'numpy',
         'pyperclip',
