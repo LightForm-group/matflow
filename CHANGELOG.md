@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.4] - 2020.06.26
+
+### Changed
+
+- Fix dependency `hickle` version for now, until we can assess requirements for jumping to version 4.
+
 ## [0.2.3] - 2020.06.26
 
 ### Changed
