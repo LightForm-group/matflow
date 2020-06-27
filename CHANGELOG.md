@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.5] - 2020.06.27
+
+### Fixed
+
+- Fix copying of profile file to the workflow directory when the profile file path is not in the current working directory.
+
 ## [0.2.4] - 2020.06.26
 
 ### Changed
