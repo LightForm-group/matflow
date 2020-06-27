@@ -56,7 +56,7 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
         workflow.dump_hpcflow_workflow_file('hpcflow_workflow.yml')
 
         # Copy profile to workflow directory:
-        workflow.path.joinpath(profile_path).write_bytes(profile_path.read_bytes())
+        workflow.path.joinpath(profile_path.name).write_bytes(profile_path.read_bytes())
 
         # Copy workflow human_id to clipboard, if supported:
         try:
