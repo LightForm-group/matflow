@@ -171,8 +171,8 @@ def get_local_inputs(schema_inputs, base=None, num_repeats=1, sequences=None,
     allowed_grp_fmt = ', '.join([f'"{i}"' for i in allowed_grp])
 
     def_group = {'default': {'nest': nest, 'group_by': allowed_grp}}
-    if merge_priority:
-        def_group.update({'merge_priority': merge_priority})
+    if merge_priority is not None:
+        def_group['default'].update({'merge_priority': merge_priority})
 
     user_groups = {}
     for group_name, group in (groups or {}).items():
