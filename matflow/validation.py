@@ -1,5 +1,6 @@
 
 import inspect
+import warnings
 
 from matflow.errors import UnsatisfiedSchemaError
 
@@ -37,7 +38,7 @@ def validate_function_args(func, func_type, expected_args=None, num_args=None):
         if len(func_params) != num_args:
             msg = (f'There are {len(func_params)} parameters in output mapping function '
                    f'"{func.__name__}", but {num_args} are expected.')
-            raise TypeError(msg)
+            warnings.warn(msg)
 
     if func_type in ['input_mapper', 'func_mapper']:
         non_defaulted = [k for k, v in func_params.items() if v.default == inspect._empty]
