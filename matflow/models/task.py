@@ -582,7 +582,7 @@ class Task(object):
             'process': self.process_run_options,
         }[task_type]
 
-        non_scheduler_opts = ['num_cores', 'job_array']
+        non_scheduler_opts = ['num_cores', 'job_array', 'alternate_scratch']
         scheduler_opts = {}
         for k, v in run_opts.items():
             if k in non_scheduler_opts:

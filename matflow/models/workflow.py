@@ -671,6 +671,10 @@ class Workflow(object):
             env = task.software_instance.env.as_str()
             if env:
                 main_task.update({'environment': env})
+            alt_scratch = task.run_options.get('alternate_scratch')
+            if alt_scratch:
+                main_task.update({'alternate_scratch': alt_scratch})
+
             command_groups.append(main_task)
 
             add_process_groups = True

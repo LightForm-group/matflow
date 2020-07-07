@@ -365,7 +365,7 @@ def get_dependency_idx(task_info_lst):
 def validate_run_options(run_opts, type_label=''):
 
     # SGE specific:
-    ALLOWED = SunGridEngine.ALLOWED_USER_OPTS + ['num_cores']
+    ALLOWED = SunGridEngine.ALLOWED_USER_OPTS + ['num_cores', 'alternate_scratch']
     if 'preparation' in type_label or 'processing' in type_label:
         ALLOWED += ['job_array']
 
