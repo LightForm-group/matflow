@@ -1,5 +1,19 @@
 # Change Log
 
+## [0.2.6] - 2020.07.08
+
+### Added
+
+- Add alternate scratch feature to allow a given task to be executed within a separate temporary directory.
+
+### Fixed
+
+- Fix bug if specifying `merge_priority` on the default group.
+
+### Changed
+
+- Bump hpcflow to v0.1.10
+
 ## [0.2.5] - 2020.06.27
 
 ### Fixed
