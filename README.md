@@ -11,7 +11,7 @@ See [this repository](https://github.com/LightForm-group/UoM-CSF-matflow) for in
 MatFlow uses extension packages to interact with software. Here is a list of current MatFlow extensions.
 
 ### Released/in-progress extensions
-| Name | Description | Status |
+| Software | Description | Status |
 | ------ | ------------- | ------- |
 | [DAMASK](https://damask.mpie.de/) | Düsseldorf Advanced Material Simulation Kit (crystal plasticity) | [Released](https://github.com/LightForm-group/matflow-damask) |
 | [MTEX](https://mtex-toolbox.github.io/) | Matlab toolbox for analyzing and modeling crystallographic textures | [Released](https://github.com/LightForm-group/matflow-mtex) |
