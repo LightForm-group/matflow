@@ -158,33 +158,36 @@ class Workflow(object):
         if action not in WorkflowAction:
             raise TypeError('`action` must be a `WorkflowAction`.')
 
-        new = {
+        new_hist = {
             'action': action,
             'matflow_version': __version__,
             'timestamp': datetime.now(),
             'action_info': kwargs,
         }
-        self._history.append(new)
+        self._history.append(new_hist)
 
         if action is not WorkflowAction.generate:
 
-            new_json = copy.deepcopy(new)
-            new_json['action'] = (new_json['action'].name, new_json['action'].value)
-            new_json['timestamp'] = datetime_to_dict(new_json['timestamp'])
+            # Make hickle-able:
+            new_hist = copy.deepcopy(new_hist)
+            new_hist['action'] = (new_hist['action'].name, new_hist['action'].value)
+            new_hist['timestamp'] = datetime_to_dict(new_hist['timestamp'])
 
             with h5py.File(self.loaded_path, 'r+') as handle:
 
-                key = '\'history\''
-                path = self.HDF5_path + '/' + key
-
-                all_data = hickle.load(handle, path)
+                # Load and save attributes of history list:
+                path = self.HDF5_path + "/'history'"
+                attributes = dict(handle[path].attrs)
+                history = hickle.load(handle, path=path)
                 del handle[path]
-                all_data.append(new_json)
 
-                hickle.dump(all_data, handle, path=path)
-                handle[path].attrs['type'] = [b'dict_item']
-                handle[path].attrs['key_type'] = [
-                    str(type(key)).encode('ascii', 'ignore')]
+                # Append to and re-dump history list:
+                history.append(new_hist)
+                hickle.dump(history, handle, path=path)
+
+                # Update history list attributes to maintain /workflow_obj loadability
+                for k, v in attributes.items():
+                    handle[path].attrs[k] = v
 
     @property
     def version(self):
@@ -307,13 +310,13 @@ class Workflow(object):
 
     @property
     def HDF5_path(self):
-        return '/workflow_obj/data_0'
+        return '/workflow_obj/data'
 
     @functools.lru_cache()
     def get_element_data(self, idx):
         with h5py.File(self.loaded_path, 'r') as handle:
 
-            path = f'/element_data/data_0'
+            path = f'/element_data'
             num_dat = len(handle[path])
             is_list = True if isinstance(idx, tuple) else False
             if not is_list:
@@ -909,6 +912,19 @@ class Workflow(object):
             file should be saved. By default, `None`, in which case the
             `default_file_path` attribute will be used as the full path.
 
+        Notes
+        -----
+        The HDF5 file is written with two root-level groups:
+            -  `element_data`: contains sub-groups which are hickle-loadable; each
+                sub-group can be loaded as a dict that has the element parameter name
+                and value.
+            -   `workflow_obj`: a hickle-loadable dict-representation of the Workflow
+                instance. Some sub-groups within `workflow_obj` are also hickle-loadable;
+                these are: the `history` sub-group, and the parameter index dicts within
+                each task element sub-group: `files_data_idx`, `inputs_data_idx` and
+                `outputs_data_idx`. These give the `element_data` sub-group name (an
+                integer) where that parameter data can be found.
+
         """
 
         path = Path(path or self.default_file_path)
@@ -941,6 +957,7 @@ class Workflow(object):
         workflow_as_dict = self.as_dict()
         obj_json = to_hicklable(workflow_as_dict)
 
+        # Now dump workflow_obj and element_data individually:
         with h5py.File(path, 'w-') as handle:
 
             handle.attrs['matflow_version'] = __version__
@@ -948,12 +965,58 @@ class Workflow(object):
             handle.attrs['workflow_version'] = 0
 
             workflow_group = handle.create_group('workflow_obj')
-            workflow_group.attrs['type'] = [b'hickle']
             hickle.dump(obj_json, handle, path=workflow_group.name)
 
+            # Copy element parameter indices HDF5 attributes so they can still be loaded
+            # as part of the whole workflow dict, after dumping individually:
+            PARAM_IDX_NAMES = ['files_data_idx', 'inputs_data_idx', 'outputs_data_idx']
+            elem_param_idx_attrs = {}
+            for task in self.tasks:
+                elem_param_idx_attrs.update({task.task_idx: {}})
+                for elem in task.elements:
+                    elem_param_idx_attrs[task.task_idx].update({elem.element_idx: {}})
+                    for i in PARAM_IDX_NAMES:
+                        elem_param_idx_path = elem.HDF5_path + f"/'{i}'"
+                        attrs = dict(handle[elem_param_idx_path].attrs)
+                        elem_param_idx_attrs[task.task_idx][elem.element_idx][i] = attrs
+                        del handle[elem_param_idx_path]
+
+            # Dump element parameter indices individually:
+            for task in self.tasks:
+                for elem in task.elements:
+                    elem_dict = elem.as_dict()
+                    for i in PARAM_IDX_NAMES:
+                        elem_param_idx_path = elem.HDF5_path + f"/'{i}'"
+                        hickle.dump(
+                            py_obj=elem_dict['files_data_idx'],
+                            file_obj=handle,
+                            path=elem_param_idx_path,
+                        )
+                        # Reinstate original hickle attributes for enabling full loading:
+                        attrs = elem_param_idx_attrs[task.task_idx][elem.element_idx][i]
+                        for k, v in attrs.items():
+                            handle[elem_param_idx_path].attrs[k] = v
+
+            # Dump history individually:
+            hist_path = self.HDF5_path + "/'history'"
+            hist_attrs = dict(handle[hist_path].attrs)
+            del handle[hist_path]
+            hickle.dump(
+                py_obj=obj_json['history'],
+                file_obj=handle,
+                path=hist_path,
+            )
+            for k, v in hist_attrs.items():
+                handle[hist_path].attrs[k] = v
+
+            # Dump element data individually:
             data_group = handle.create_group('element_data')
-            data_group.attrs['type'] = [b'hickle']
-            hickle.dump(element_data, handle, path=data_group.name)
+            for k, v in element_data.items():
+                hickle.dump(
+                    py_obj=v,
+                    file_obj=handle,
+                    path=data_group.name + '/' + str(k)
+                )
 
         self.loaded_path = path
 

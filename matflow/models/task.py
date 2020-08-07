@@ -720,4 +720,4 @@ class Task(object):
     @property
     def HDF5_path(self):
         'Get the HDF5 path to this task.'
-        return self.workflow.HDF5_path + f'/\'tasks\'/data_0/data_{self.task_idx}'
+        return self.workflow.HDF5_path + f'/\'tasks\'/data/data_{self.task_idx}'

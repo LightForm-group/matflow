@@ -82,7 +82,7 @@ class Element(object):
 
     @property
     def HDF5_path(self):
-        return self.task.HDF5_path + f'/\'elements\'/data_0/data_{self.element_idx}'
+        return self.task.HDF5_path + f'/\'elements\'/data/data_{self.element_idx}'
 
     def add_input(self, input_name, value=None, data_idx=None):
         return self.inputs.add_parameter(input_name, 'inputs', value, data_idx)

@@ -143,26 +143,26 @@ class Parameters(object):
         with h5py.File(loaded_path, 'r+') as handle:
 
             if data_idx is None:
-                path = '/element_data/data_0'
+                # Add data to the `element_data` group if required:
+                path = '/element_data'
                 next_idx = len(handle[path])
                 new_group = handle[path].create_group(str(next_idx))
-                new_group.attrs['type'] = [b'dict_item']
-                key_type = [str(type(next_idx)).encode('ascii', 'ignore')]
-                new_group.attrs['key_type'] = key_type
                 hickle.dump({name: value}, handle, path=new_group.name)
                 data_idx = next_idx
 
-            path = self._element.HDF5_path
-            key = f'\'{param_type}_data_idx\''
-            path += '/' + key
-
-            all_data = hickle.load(handle, path)
+            # Load and save attributes of parameter index dict:
+            path = self._element.HDF5_path + f"/'{param_type}_data_idx'"
+            attributes = dict(handle[path].attrs)
+            param_index = hickle.load(handle, path=path)
             del handle[path]
-            all_data.update({name: data_idx})
 
-            hickle.dump(all_data, handle, path=path)
-            handle[path].attrs['type'] = [b'dict_item']
-            handle[path].attrs['key_type'] = [str(type(key)).encode('ascii', 'ignore')]
+            # Update and re-dump parameter index dict:
+            param_index.update({name: data_idx})
+            hickle.dump(param_index, handle, path=path)
+
+            # Update parameter index dict attributes to maintain /workflow_obj loadability
+            for k, v in attributes.items():
+                handle[path].attrs[k] = v
 
         self._name_map.update({name: name_normed})
         self._parameters.update({name_normed: data_idx})
