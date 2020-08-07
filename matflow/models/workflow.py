@@ -302,10 +302,6 @@ class Workflow(object):
         return str(self.path)
 
     @property
-    def hdf5_path(self):
-        return self.path.joinpath(f'workflow_v{self.version:03}.hdf5')
-
-    @property
     def default_file_path(self):
         return self.path.joinpath('workflow.hdf5')
 
