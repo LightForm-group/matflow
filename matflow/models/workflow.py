@@ -6,6 +6,7 @@ Module containing the Workflow class and some functions used to decorate Workflo
 
 import copy
 import functools
+import re
 import secrets
 import pickle
 import shutil
@@ -37,6 +38,7 @@ from matflow.models.command import DEFAULT_FORMATTERS
 from matflow.models.construction import init_tasks
 from matflow.models.software import SoftwareInstance
 from matflow.models.task import TaskStatus
+from matflow.models.parameters import Parameters
 
 
 def requires_ids(func):
@@ -314,6 +316,7 @@ class Workflow(object):
 
     @functools.lru_cache()
     def get_element_data(self, idx):
+
         with h5py.File(self.loaded_path, 'r') as handle:
 
             path = f'/element_data'
@@ -321,15 +324,19 @@ class Workflow(object):
             is_list = True if isinstance(idx, tuple) else False
             if not is_list:
                 idx = [idx]
+
+            # Element data are zero padded and include name of parameter for convenience,
+            # so map their integer index to the actual group names:
+            idx_map = {int(re.search('(\d+)', i).group()): i for i in handle[path]}
+
             out = []
             for i in idx:
                 if i > (num_dat - 1):
                     raise ValueError(f'Element data has {num_dat} member(s), but idx={i} '
                                      f'requested.')
-                dat_path = path + f'/{i}'
+                dat_path = path + f'/{idx_map[i]}'
                 out.append(hickle.load(handle, path=dat_path))
 
-            out = [list(i.values())[0] for i in out]
             if not is_list:
                 out = out[0]
             return out
@@ -448,7 +455,7 @@ class Workflow(object):
         Parameters
         ----------
         task : Task
-        job_type : str 
+        job_type : str
             One of "prepare-task", "process-task", "process-prepare-task", "run",
             "prepare-sources". If "process-prepare-task", the task passed must be the
             "processing" task.
@@ -902,7 +909,7 @@ class Workflow(object):
         return existing_files
 
     def write_HDF5_file(self, path=None):
-        """Save the initial workflow to an HDF5 file and add task local inputs to the 
+        """Save the initial workflow to an HDF5 file and add task local inputs to the
         element data list.
 
         Parameters
@@ -947,7 +954,7 @@ class Workflow(object):
                     data_idx = len(element_data)
                     if is_file:
                         val = Path(val).name
-                    element_data.update({data_idx: {input_name: val}})
+                    element_data.update({(data_idx, input_name): val})
                     all_data_idx.append(data_idx)
 
                 task.local_inputs['inputs'][input_name].update({
@@ -1011,11 +1018,12 @@ class Workflow(object):
 
             # Dump element data individually:
             data_group = handle.create_group('element_data')
-            for k, v in element_data.items():
+            for (dat_idx, dat_name), dat_val in element_data.items():
+                dat_key = Parameters.get_element_data_key(dat_idx, dat_name)
                 hickle.dump(
-                    py_obj=v,
+                    py_obj=dat_val,
                     file_obj=handle,
-                    path=data_group.name + '/' + str(k)
+                    path=data_group.name + '/' + dat_key
                 )
 
         self.loaded_path = path

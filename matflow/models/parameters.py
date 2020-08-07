@@ -5,6 +5,8 @@ import re
 import h5py
 import hickle
 
+from matflow.utils import zeropad
+
 
 class Parameters(object):
 
@@ -85,6 +87,10 @@ class Parameters(object):
         return normed_data_idx, name_map
 
     @staticmethod
+    def get_element_data_key(element_idx, param_name):
+        return f'{zeropad(element_idx, 1000)}_{param_name}'
+
+    @staticmethod
     def _normalise_param_name(param_name, existing_names):
         'Transform a string so that it is a valid Python variable name.'
         param_name_old = param_name
@@ -146,8 +152,9 @@ class Parameters(object):
                 # Add data to the `element_data` group if required:
                 path = '/element_data'
                 next_idx = len(handle[path])
-                new_group = handle[path].create_group(str(next_idx))
-                hickle.dump({name: value}, handle, path=new_group.name)
+                element_data_key = self.get_element_data_key(next_idx, name)
+                new_group = handle[path].create_group(element_data_key)
+                hickle.dump(value, handle, path=new_group.name)
                 data_idx = next_idx
 
             # Load and save attributes of parameter index dict:
