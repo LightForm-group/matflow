@@ -4,6 +4,7 @@ Module containing the Task and TaskSchema classes.
 
 """
 
+import copy
 import enum
 import re
 import secrets
@@ -266,7 +267,8 @@ class TaskSchema(object):
                 msg = 'Input map `inputs` must be a list.'
                 raise TaskSchemaError(err + msg)
 
-        for out_map in self.output_map:
+        out_map_opt_names = []
+        for out_map_idx, out_map in enumerate(self.output_map):
 
             req_keys = ['files', 'output']
             allowed_keys = set(req_keys + ['options'])
@@ -292,6 +294,53 @@ class TaskSchema(object):
                     msg = (f'Specify keys `name` (str) and `save` (bool) in output map '
                            f'`files` key.')
                     raise TaskSchemaError(err + msg)
+
+            # Normalise and check output map options:
+            out_map_opts = out_map.get('options', [])
+            if out_map_opts:
+                if not isinstance(out_map_opts, list):
+                    msg = (
+                        f'If specified, output map options should be a list, but the '
+                        f'following was specified: {out_map_opts}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+            for out_map_opt_idx, out_map_opt_i in enumerate(out_map_opts):
+
+                opts = get_specifier_dict(out_map_opt_i, name_key='name')
+                req_opts_keys = ['name']
+                allowed_opts_keys = req_opts_keys + ['default']
+                bad_opts_keys = list(set(opts.keys()) - set(allowed_opts_keys))
+                miss_opts_keys = list(set(req_opts_keys) - set(opts.keys()))
+
+                if bad_opts_keys:
+                    bad_opts_keys_fmt = ', '.join([f'"{i}"' for i in bad_opts_keys])
+                    msg = (
+                        f'Unknown output map option keys for output map index '
+                        f'{out_map_idx} and output map option index {out_map_opt_idx}: '
+                        f'{bad_opts_keys_fmt}. Allowed keys are: {allowed_opts_keys}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+
+                if miss_opts_keys:
+                    miss_opts_keys_fmt = ', '.join([f'"{i}"' for i in miss_opts_keys])
+                    msg = (
+                        f'Missing output map option keys for output map index '
+                        f'{out_map_idx} and output map option index {out_map_opt_idx}: '
+                        f'{miss_opts_keys_fmt}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+
+                if opts['name'] in out_map_opt_names:
+                    msg = (
+                        f'Output map options must be uniquely named across all output '
+                        f'maps of a given task schema, but the output map option '
+                        f'"{opts["name"]}" is repeated.'
+                    )
+                    raise TaskSchemaError(err + msg)
+                else:
+                    out_map_opt_names.append(opts['name'])
+
+                self.output_map[out_map_idx]['options'][out_map_opt_idx] = opts
 
         # Check inputs/outputs named in input/output_maps are in inputs/outputs lists:
         input_map_ins = [j for i in self.input_map for j in i['inputs']]
@@ -332,30 +381,50 @@ class TaskSchema(object):
             raise TaskParameterError(msg.format(
                 missing_ins_fmt, self.name, self.input_names))
 
-    def check_output_map_options(self, options):
-        'Check a set of options are consistent with the output map options.'
+    def validate_output_map_options(self, options):
+        """Check a set of options are consistent with the output map options.
 
-        req_opts, opt_opts = [], []
-        for i in self.output_map:
-            out_map_opts = i.get('options', {})
-            req_opts.extend(out_map_opts.get('required', []))
-            opt_opts.extend(out_map_opts.get('optional', []))
+        Paramaters
+        ----------
+        options : dict 
+            Output map options specified for the task in the profile. The dict keys are
+            checked for consistency with the output map options allowed by the schema.
 
-        miss_opts = list(set(req_opts) - set(options))
-        if miss_opts:
-            miss_opts_fmt = ', '.join([f'"{i}"' for i in miss_opts])
-            msg = (f'Output maps for the schema "{self.name}" have the following '
-                   f'required output map options that are not specified in the task: '
-                   f'{miss_opts_fmt}.')
-            raise TaskParameterError(msg)
+        Returns
+        -------
+        opts_validated : dict
+            Output map options, as originally passed, but with potentially additional
+            options that were not specified, but for which defaults are provided by
+            the schema.
 
-        bad_opts = list(set(options) - set(req_opts + opt_opts))
+        """
+
+        # Collect all option names (across all output maps):
+        schema_opts = []
+        for out_map in self.output_map:
+            schema_opts.extend(out_map.get('options', []))
+
+        opts_validated = copy.deepcopy(options)
+
+        for opt in schema_opts:
+            if opt['name'] not in opts_validated:
+                if 'default' in opt:
+                    opts_validated.update({opt['name']: opt['default']})
+                else:
+                    msg = (f'Output map option "{opt["name"]}" for task "{self.name}" '
+                           f'must be specified because no default value is provided by '
+                           f'the schema.')
+                    raise TaskParameterError(msg)
+
+        bad_opts = list(set(opts_validated) - set([i['name'] for i in schema_opts]))
         if bad_opts:
             bad_opts_fmt = ', '.join([f'"{i}"' for i in bad_opts])
             msg = (f'Output maps for the schema "{self.name}" are not compatible with '
                    f'the following output map options that are specified in the task: '
                    f'{bad_opts_fmt}.')
             raise TaskParameterError(msg)
+
+        return opts_validated
 
     @property
     def is_func(self):

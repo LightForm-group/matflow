@@ -1400,7 +1400,14 @@ class Workflow(object):
                         element.add_file(i['name'], value=file_dat)
 
             func = out_map_lookup[out_map['output']]
-            output = func(*file_paths, **task.output_map_options)
+
+            # Filter only output map options for this out_map:
+            out_map_opts = {k: v for k, v in task.output_map_options.items()
+                            if k in [i['name'] for i in out_map['options']]}
+
+            # Run output map:
+            output = func(*file_paths, **out_map_opts)
+
             if is_array:
                 outputs_to_update.update({out_map['output']: output})
             else:

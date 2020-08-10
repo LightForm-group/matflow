@@ -665,7 +665,6 @@ def check_consistent_inputs(task_lst, dep_idx):
                     defined_inputs.append(output)
 
         task['schema'].check_missing_inputs(defined_inputs)
-        task['schema'].check_output_map_options(task['output_map_options'])
 
 
 def order_tasks(task_lst):
@@ -701,6 +700,10 @@ def order_tasks(task_lst):
         } for i in task_lst
     ]
     check_consistent_inputs(task_lst_check, dep_idx)
+
+    for i_idx, i in enumerate(task_lst):
+        out_opts = i['schema'].validate_output_map_options(i['output_map_options'])
+        task_lst[i_idx]['output_map_options'] = out_opts
 
     # Find the index at which each task must be positioned to satisfy input
     # dependencies, and reorder tasks (and `dep_idx`!):

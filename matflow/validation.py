@@ -69,9 +69,10 @@ def validate_output_mapper_func(func, num_file_paths, option_names):
     exp_num_params = num_file_paths + len(option_names)
     if len(func_params) != exp_num_params:
         msg = (
-            f'The output mapper function does not have the expected number of '
-            f'arguments: found {len(func_params)} but expected {exp_num_params} '
-            f'({num_file_paths} file paths + {len(option_names)} options parameters).'
+            f'The output mapper function "{func.__name__}" does not have the expected '
+            f'number of arguments: found {len(func_params)} but expected '
+            f'{exp_num_params} ({num_file_paths} file path(s) + {len(option_names)} '
+            f'options parameters).'
         )
         raise TypeError(msg)
 
@@ -79,8 +80,8 @@ def validate_output_mapper_func(func, num_file_paths, option_names):
     opt_params = list(func_params.items())[num_file_paths:]
     opt_params_func = [i[0] for i in opt_params]
 
-    miss_params = list(set(opt_params) - set(opt_params_func))
-    bad_params = list(set(opt_params_func) - set(opt_params))
+    miss_params = list(set(option_names) - set(opt_params_func))
+    bad_params = list(set(opt_params_func) - set(option_names))
 
     if bad_params:
         bad_params_fmt = ', '.join([f'"{i}"' for i in bad_params])
@@ -150,12 +151,13 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
 
     Returns
     -------
-    schema_is_valid : dict of (tuple : bool)
-        Dict keys are (task_name, task_method, software); values are boolean values
-        indicating if a given schema is valid. If False, this indicates that one of
-        extension functions (input map, output map or function map) is missing. Note
-        that this function does not raise any exception in this case --- but the task
-        schema will be noted as invalid.
+    schema_is_valid : dict of (tuple : tuple of (bool, str))
+        Dict keys are (task_name, task_method, software); values are tuples whose first
+        values are boolean values indicating if a given schema is valid. If False, this
+        indicates that one of extension functions (input map, output map or function map)
+        is missing. Note that this function does not raise any exception in this case ---
+        but the task schema will be noted as invalid. The second value of the dict value
+        tuple is a string description of the reason why the schema is invalid.
 
     Raises
     ------
@@ -169,7 +171,7 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
 
     for key, schema in task_schemas.items():
 
-        schema_is_valid.update({key: True})
+        schema_is_valid.update({key: (True, '')})
 
         key_msg = (f'Unresolved task schema for task "{schema.name}" with method '
                    f'"{schema.method}" and software "{schema.implementation}".')
@@ -183,7 +185,9 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
             )
 
             if not extension_inp_maps:
-                schema_is_valid.update({key: False})
+                reason = (f'No input map function found for input map that generates file'
+                          f' "{inp_map["file"]}". ')
+                schema_is_valid[key] = (False, schema_is_valid[key][1] + reason)
                 continue
             else:
                 inp_map_func = extension_inp_maps.get(inp_map['file'])
@@ -205,7 +209,9 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
             )
 
             if not extension_out_maps:
-                schema_is_valid.update({key: False})
+                reason = (f'No output map function found for output map that generates '
+                          f'output "{out_map["output"]}". ')
+                schema_is_valid[key] = (False, schema_is_valid[key][1] + reason)
                 continue
             else:
                 out_map_func = extension_out_maps.get(out_map['output'])
@@ -226,7 +232,8 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
 
             func = task_func_map.get(key)
             if not func:
-                schema_is_valid.update({key: False})
+                reason = 'No function mapper function found. '
+                schema_is_valid[key] = (False, schema_is_valid[key][1] + reason)
                 continue
 
             # Validate signature of func mapper function:
