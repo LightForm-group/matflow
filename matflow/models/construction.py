@@ -159,7 +159,6 @@ def get_local_inputs(schema_inputs, base=None, num_repeats=1, sequences=None,
         local_ins['repeats_idx'] = repeats_idx
         local_ins['inputs'].update({
             input_i['name']: {
-                # 'nest_idx': input_i['nest_idx'],
                 'vals': input_i['vals'],
                 'vals_idx': vals_idx,
             }
