@@ -382,7 +382,8 @@ class TaskSchema(object):
                 missing_ins_fmt, self.name, self.input_names))
 
     def validate_output_map_options(self, options):
-        """Check a set of options are consistent with the output map options.
+        """Check a set of options are consistent with the output map options and populate
+        any default values.
 
         Paramaters
         ----------
