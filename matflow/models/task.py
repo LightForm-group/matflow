@@ -208,7 +208,7 @@ class TaskSchema(object):
     def _validate_inputs_outputs(self):
         'Basic checks on inputs and outputs.'
 
-        allowed_inp_specifiers = ['group', 'context', 'alias', 'file']
+        allowed_inp_specifiers = ['group', 'context', 'alias', 'file', 'default']
         req_inp_keys = ['name']
         allowed_inp_keys = req_inp_keys + allowed_inp_specifiers
         allowed_inp_keys_fmt = ', '.join(['"{}"'.format(i) for i in allowed_inp_keys])
@@ -362,7 +362,8 @@ class TaskSchema(object):
             raise TaskSchemaError(err + msg)
 
     def check_surplus_inputs(self, inputs):
-        'Check for any inputs that are specified but not required by this schema.'
+        """Check for any (local) inputs that are specified but not required by this
+        schema."""
 
         surplus_ins = set(inputs) - set(self.input_names)
         if surplus_ins:
@@ -380,6 +381,37 @@ class TaskSchema(object):
             msg = 'Input(s) {} missing for the schema "{}" with inputs: {}'
             raise TaskParameterError(msg.format(
                 missing_ins_fmt, self.name, self.input_names))
+
+    def validate_inputs(self, inputs):
+        """Check a set of input values are consistent with the schema inputs and populate
+        any local input defaults.
+
+        Parameters
+        ----------
+        inputs : dict of (str : list)
+
+
+        Returns
+        -------
+        default_values : dict
+
+
+        """
+
+        missing_inputs = set(self.input_names) - set(inputs)
+
+        default_values = {}
+        for miss_in in missing_inputs:
+            miss_in_schema = self.get_input_by_name(miss_in)
+            if 'default' in miss_in_schema:
+                default_values.update({miss_in: miss_in_schema['default']})
+            else:
+                msg = (f'Task input "{miss_in}" for task "{self.name}" '
+                       f'must be specified because no default value is provided by '
+                       f'the schema.')
+                raise TaskParameterError(msg)
+
+        return default_values
 
     def validate_output_map_options(self, options):
         """Check a set of options are consistent with the output map options and populate

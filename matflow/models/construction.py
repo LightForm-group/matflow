@@ -39,7 +39,30 @@ from matflow.models.software import SoftwareInstance
 
 
 def normalise_local_inputs(base=None, sequences=None):
-    'Validate and normalise sequences and task inputs for a given task.'
+    """Validate and normalise sequences and task inputs for a given task.
+
+    Parameters
+    ----------
+    base : dict, optional
+    sequences : list, optional
+
+    Returns
+    -------
+    inputs_lst : list of dict
+        Each list item is a dict corresponding to a particular input parameter. Dict keys
+        are:
+            name : str
+                The name of the input parameter.
+            nest_idx : int
+                The intra-task nesting index. For parameters that are specified in the
+                base dict (non-sequence parameters), this is set to -1. For parameters
+                specified in the sequences list, this is whatever is specified by the user
+                or 0 if not specified.
+            vals : list 
+                List of values for this input parameter. This will be a list of length one
+                for input parameters specified within the base dict.
+
+    """
 
     if base is None:
         base = {}
@@ -114,18 +137,49 @@ def normalise_local_inputs(base=None, sequences=None):
     return inputs_lst
 
 
-def get_local_inputs(schema_inputs, base=None, num_repeats=1, sequences=None,
-                     nest=True, merge_priority=None, groups=None):
+def get_local_inputs(all_tasks, task_idx, dep_idx):
     """Combine task base/sequences/repeats to get the locally defined inputs for a task.
 
     Parameters
     ----------
-    schema_inputs: list of str
+    all_tasks : list of dict
+        Each dict represents a task. This is passed to allow validation of inputs, since
+        inputs of this task may be specified as outputs of another task.
+    task_idx : int
+        Index of the task in `all_tasks` for which local inputs are to be found.
+    dep_idx : list of list of int
 
     """
 
-    inputs_lst = normalise_local_inputs(base, sequences)
+    task = all_tasks[task_idx]
+    task_dep_idx = dep_idx[task_idx]
 
+    base = task['base']
+    num_repeats = task['repeats'] or 1
+    sequences = task['sequences']
+    nest = task['nest']
+    merge_priority = task['merge_priority']
+    groups = task['groups']
+    schema = task['schema']
+
+    inputs_lst = normalise_local_inputs(base, sequences)
+    defined_inputs = [i['name'] for i in inputs_lst]
+    schema.check_surplus_inputs(defined_inputs)
+
+    for dep_idx_i in task_dep_idx:
+        for output in all_tasks[dep_idx_i]['schema'].outputs:
+            if output in schema.input_names:
+                defined_inputs.append(output)
+
+    default_values = schema.validate_inputs(defined_inputs)
+    for in_name, in_val in default_values.items():
+        inputs_lst.append({
+            'name': in_name,
+            'nest_idx': -1,
+            'vals': [in_val],
+        })
+
+    inputs_lst.sort(key=lambda x: x['nest_idx'])
     if inputs_lst:
         lengths = [len(i['vals']) for i in inputs_lst]
         total_len = len(inputs_lst[0]['vals'])
@@ -166,7 +220,7 @@ def get_local_inputs(schema_inputs, base=None, num_repeats=1, sequences=None,
         prev_reps = rep_i
         prev_tile = tile_i
 
-    allowed_grp = schema_inputs + ['repeats']
+    allowed_grp = schema.input_names + ['repeats']
     allowed_grp_fmt = ', '.join([f'"{i}"' for i in allowed_grp])
 
     def_group = {'default': {'nest': nest, 'group_by': allowed_grp}}
@@ -396,7 +450,7 @@ def validate_run_options(run_opts, type_label=''):
 
 
 def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
-                       all_sources_maps, check_integrity=True):
+                       all_sources_maps):
     """Validate a task dict.
 
     Parameters
@@ -415,11 +469,6 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
         All available TaskSchema objects, keyed by a (name, method, software) tuple.
     all_sources_maps : dict of (tuple : dict)
         All available sources maps.
-    check_integrity : bool, optional
-        Applicable if `is_from_file` is True. If True, re-generate `local_inputs`
-        and compare them to those loaded from the file. If the equality test
-        fails, raise. True by default. If False, `local_inputs` are still
-        re-generated, but they are not compared to the loaded `local_inputs`.
 
     Returns
     -------
@@ -588,36 +637,6 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
                    f'implementation: {soft_inst.software}.')
             raise UnsatisfiedSchemaError(msg)
 
-    local_ins = get_local_inputs(
-        schema.input_names,
-        base=task['base'],
-        num_repeats=task['repeats'],
-        sequences=task['sequences'],
-        nest=task['nest'],
-        merge_priority=task['merge_priority'],
-        groups=task['groups'],
-    )
-
-    if is_from_file and check_integrity:
-
-        # Don't compare the vals_data_idx:
-        loaded_local_inputs = copy.deepcopy(task['local_inputs'])
-        for vals_dict in loaded_local_inputs['inputs'].values():
-            del vals_dict['vals_data_idx']
-
-        if local_ins != loaded_local_inputs:
-            msg = (
-                f'Regenerated local inputs (task: "{task["name"]}") '
-                f'are not equivalent to those loaded from the '
-                f'workflow file. Stored local inputs are:'
-                f'\n{task["local_inputs"]}\nRegenerated local '
-                f'inputs are:\n{local_ins}\n.'
-            )
-            raise WorkflowPersistenceError(msg)
-
-        local_ins = task['local_inputs']
-
-    task['local_inputs'] = local_ins
     task['schema'] = schema
 
     if is_from_file:
@@ -632,38 +651,6 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             task_list.append(task_copy)
 
     return task_list
-
-
-def check_consistent_inputs(task_lst, dep_idx):
-    """Check for missing and surplus inputs for each in a list of task dicts.
-
-    Parameters
-    ----------
-    task_lst : list of dict
-        Each dict must have keys:
-            schema : TaskSchema
-                Task schema against which to validate the inputs.
-            local_input_names : list of str
-                List of the locally defined inputs for the task.
-    dep_idx : list of list of int
-        List of length equal to original `task_lst`, whose elements are integer
-        lists that link a given task to the indices of tasks upon which it
-        depends.
-
-    """
-
-    for dep_idx_i, task in zip(dep_idx, task_lst):
-
-        defined_inputs = task['local_input_names']
-        task['schema'].check_surplus_inputs(defined_inputs)
-
-        task_inp_names = [k['name'] for k in task['schema'].inputs]
-        for j in dep_idx_i:
-            for output in task_lst[j]['schema'].outputs:
-                if output in task_inp_names:
-                    defined_inputs.append(output)
-
-        task['schema'].check_missing_inputs(defined_inputs)
 
 
 def order_tasks(task_lst):
@@ -690,15 +677,6 @@ def order_tasks(task_lst):
     """
 
     dep_idx = get_dependency_idx(task_lst)
-
-    task_lst_check = [
-        {
-            'schema': i['schema'],
-            'local_input_names': list(i['local_inputs']['inputs'].keys()),
-            'output_map_options': i['output_map_options'],
-        } for i in task_lst
-    ]
-    check_consistent_inputs(task_lst_check, dep_idx)
 
     for i_idx, i in enumerate(task_lst):
         out_opts = i['schema'].validate_output_map_options(i['output_map_options'])
@@ -1061,6 +1039,54 @@ def get_element_idx(task_lst, dep_idx):
     return element_idx
 
 
+def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
+    """Normalise local inputs for each task.
+
+    Parameters
+    ----------
+    task_lst : list of dict
+
+    dep_idx : list of list of int
+
+    is_from_file : bool
+
+    check_integrity : bool, optional
+        Applicable if `is_from_file` is True. If True, re-generate `local_inputs`
+        and compare them to those loaded from the file. If the equality test
+        fails, raise. True by default. If False, `local_inputs` are still
+        re-generated, but they are not compared to the loaded `local_inputs`.
+
+
+    """
+
+    for task_idx, task in enumerate(task_lst):
+
+        local_ins = get_local_inputs(task_lst, task_idx, dep_idx)
+
+        if is_from_file and check_integrity:
+
+            # Don't compare the vals_data_idx:
+            loaded_local_inputs = copy.deepcopy(task['local_inputs'])
+            for vals_dict in loaded_local_inputs['inputs'].values():
+                del vals_dict['vals_data_idx']
+
+            if local_ins != loaded_local_inputs:
+                msg = (
+                    f'Regenerated local inputs (task: "{task["name"]}") '
+                    f'are not equivalent to those loaded from the '
+                    f'workflow file. Stored local inputs are:'
+                    f'\n{task["local_inputs"]}\nRegenerated local '
+                    f'inputs are:\n{local_ins}\n.'
+                )
+                raise WorkflowPersistenceError(msg)
+
+            local_ins = task['local_inputs']
+
+        task_lst[task_idx]['local_inputs'] = local_ins
+
+    return task_lst
+
+
 def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
     """Construct and validate Task objects and the element indices
     from which to populate task inputs.
@@ -1090,22 +1116,24 @@ def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
 
     """
 
-    # Validate and add `schema` and `local_inputs` to each task:
+    # Perform validation and initialisation that does not depend on other tasks:
     task_lst = [
         j
-        for i in task_lst
+        for task_i in task_lst
         for j in validate_task_dict(
-            i,
+            task_i,
             is_from_file,
             Config.get('software'),
             Config.get('task_schemas'),
             Config.get('sources_maps'),
-            check_integrity
         )
     ]
 
     # Get dependencies, sort and add `task_idx` to each task:
     task_lst, dep_idx = order_tasks(task_lst)
+
+    # Validate and normalise locally defined inputs:
+    task_lst = init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity)
 
     # Find element indices that determine the elements from which task inputs are drawn:
     element_idx = get_element_idx(task_lst, dep_idx)
