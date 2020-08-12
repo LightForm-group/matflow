@@ -200,6 +200,8 @@ class TaskSchema(object):
                 extra += f'context={i["context"]}'
             if i['group'] != 'default':
                 extra += f'group={i["group"]}'
+            if 'default' in i:
+                extra += f'default={i["default"]!r}'
             if extra:
                 i_fmt += f'[{extra}]'
             out.append(i_fmt)
