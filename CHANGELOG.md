@@ -1,5 +1,18 @@
 # Change Log
 
+## [0.2.7] - 2020.xx.xx
+
+### Changed
+
+- Uses `hickle` version 4.
+- Group structure in workflow HDF5 file has changed (backwards-incompatible); element data is more conveniently organised for inspecting the HDF5 file manually.
+- Default values can be specified for output map options within the schema
+- Default values can be specified for task input parameters within the schema
+
+### Fixed
+
+- Fix problem when a task input key includes slashes.
+
 ## [0.2.6] - 2020.07.08
 
 ### Added
