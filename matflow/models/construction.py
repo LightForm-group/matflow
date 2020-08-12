@@ -38,13 +38,16 @@ from matflow.models.element import Element
 from matflow.models.software import SoftwareInstance
 
 
-def normalise_local_inputs(base=None, sequences=None):
+def normalise_local_inputs(base=None, sequences=None, is_from_file=False):
     """Validate and normalise sequences and task inputs for a given task.
 
     Parameters
     ----------
     base : dict, optional
     sequences : list, optional
+    is_from_file : bool
+        Has this task dict been loaded from a workflow file or is it associated
+        with a brand new workflow?    
 
     Returns
     -------
@@ -107,8 +110,10 @@ def normalise_local_inputs(base=None, sequences=None):
                 msg = f'`nest_idx` is required for sequence "{seq["name"]}".'
                 raise SequenceError(msg)
         else:
-            if 'nest_idx' in seq:
-                warn(f'`nest_idx` is not required for sequence "{seq["name"]}.')
+            if 'nest_idx' in seq and not is_from_file:
+                msg = (f'`nest_idx` (specified as {seq["nest_idx"]}) is not required for '
+                       f'sequence "{seq["name"]}"; resetting to zero.')
+                warn(msg)
             seq['nest_idx'] = 0  # set a default
 
         nest = seq['nest_idx']
@@ -137,7 +142,7 @@ def normalise_local_inputs(base=None, sequences=None):
     return inputs_lst
 
 
-def get_local_inputs(all_tasks, task_idx, dep_idx):
+def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
     """Combine task base/sequences/repeats to get the locally defined inputs for a task.
 
     Parameters
@@ -148,6 +153,9 @@ def get_local_inputs(all_tasks, task_idx, dep_idx):
     task_idx : int
         Index of the task in `all_tasks` for which local inputs are to be found.
     dep_idx : list of list of int
+    is_from_file : bool
+        Has this task dict been loaded from a workflow file or is it associated
+        with a brand new workflow?    
 
     """
 
@@ -162,7 +170,7 @@ def get_local_inputs(all_tasks, task_idx, dep_idx):
     groups = task['groups']
     schema = task['schema']
 
-    inputs_lst = normalise_local_inputs(base, sequences)
+    inputs_lst = normalise_local_inputs(base, sequences, is_from_file)
     defined_inputs = [i['name'] for i in inputs_lst]
     schema.check_surplus_inputs(defined_inputs)
 
@@ -1049,7 +1057,8 @@ def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
     dep_idx : list of list of int
 
     is_from_file : bool
-
+        Has this task dict been loaded from a workflow file or is it associated
+        with a brand new workflow?
     check_integrity : bool, optional
         Applicable if `is_from_file` is True. If True, re-generate `local_inputs`
         and compare them to those loaded from the file. If the equality test
@@ -1061,7 +1070,7 @@ def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
 
     for task_idx, task in enumerate(task_lst):
 
-        local_ins = get_local_inputs(task_lst, task_idx, dep_idx)
+        local_ins = get_local_inputs(task_lst, task_idx, dep_idx, is_from_file)
 
         if is_from_file and check_integrity:
 
