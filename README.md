@@ -8,7 +8,7 @@ See [this repository](https://github.com/LightForm-group/UoM-CSF-matflow) for in
 
 ## Extensions
 
-MatFlow uses extension packages to interact with software. Here is a list of current MatFlow extensions.
+MatFlow uses extension packages to interact with arbitrary software. Here is a list of current MatFlow extensions.
 
 ### Released/in-progress extensions
 | Software | Description | Status |
