@@ -78,6 +78,7 @@ class TaskSchema(object):
             'input_map',
             'output_map',
             'commands',
+            'command_files',
             'notes',
             'archive_excludes',
         ]
@@ -146,7 +147,10 @@ class TaskSchema(object):
 
                     input_map = imp.get('input_map', [])
                     output_map = imp.get('output_map', [])
-                    command_group = {'commands': imp.get('commands', [])}
+                    command_group = {
+                        'commands': imp.get('commands', []),
+                        'command_files': imp.get('command_files', {}),
+                    }
                     all_inputs = (
                         schema.get('inputs', []) +
                         method.get('inputs', []) +
@@ -249,10 +253,18 @@ class TaskSchema(object):
                 raise TaskSchemaError(err + msg)
 
         # Check correct keys in supplied input/output maps:
-        for in_map in self.input_map:
+        command_file_names = self.command_group.get_command_file_names()
+        for in_map_idx, in_map in enumerate(self.input_map):
+
+            # Substitute command file names:
+            for cmd_fn_label, cmd_fn in command_file_names['input_map'].items():
+                if f'<<{cmd_fn_label}>>' in in_map['file']:
+                    new_fn = in_map['file'].replace(f'<<{cmd_fn_label}>>', cmd_fn)
+                    self.input_map[in_map_idx]['file_initial'] = in_map['file']
+                    self.input_map[in_map_idx]['file'] = new_fn
 
             req_keys = ['inputs', 'file']
-            allowed_keys = set(req_keys + ['save'])
+            allowed_keys = set(req_keys + ['save', 'file_initial'])
             miss_keys = list(set(req_keys) - set(in_map.keys()))
             bad_keys = list(set(in_map.keys()) - allowed_keys)
 
@@ -260,10 +272,10 @@ class TaskSchema(object):
                    f'optional `save` key).')
             if miss_keys:
                 miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
-                raise TaskSchemaError(err + msg + f'Missing keys are: {miss_keys_fmt}.')
+                raise TaskSchemaError(err + msg + f' Missing keys are: {miss_keys_fmt}.')
             if bad_keys:
                 bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
-                raise TaskSchemaError(err + msg + f'Unknown keys are: {bad_keys_fmt}.')
+                raise TaskSchemaError(err + msg + f' Unknown keys are: {bad_keys_fmt}.')
 
             if not isinstance(in_map['inputs'], list):
                 msg = 'Input map `inputs` must be a list.'
@@ -291,11 +303,21 @@ class TaskSchema(object):
                 msg = 'Output map `output` must be a string.'
                 raise TaskSchemaError(err + msg)
 
-            for i in out_map['files']:
-                if ('name' not in i) or ('save' not in i):
+            for out_map_file_idx, out_map_file in enumerate(out_map['files']):
+                if ('name' not in out_map_file) or ('save' not in out_map_file):
                     msg = (f'Specify keys `name` (str) and `save` (bool) in output map '
                            f'`files` key.')
                     raise TaskSchemaError(err + msg)
+
+                # Substitute command file names:
+                for cmd_fn_label, cmd_fn in command_file_names['output_map'].items():
+                    if f'<<{cmd_fn_label}>>' in out_map_file['name']:
+                        new_fn = out_map_file['name'].replace(
+                            f'<<{cmd_fn_label}>>',
+                            cmd_fn,
+                        )
+                        self.output_map[out_map_idx]['files'][out_map_file_idx]['name_initial'] = out_map_file['name']
+                        self.output_map[out_map_idx]['files'][out_map_file_idx]['name'] = new_fn
 
             # Normalise and check output map options:
             out_map_opts = out_map.get('options', [])
