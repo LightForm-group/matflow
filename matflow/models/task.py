@@ -40,6 +40,7 @@ class TaskSchema(object):
         self.command_group = CommandGroup(**command_group) if command_group else None
 
         self._validate_inputs_outputs()
+        self.command_group.check_pathway_conditions(self.input_names)
 
     def __repr__(self):
         return (
@@ -79,6 +80,7 @@ class TaskSchema(object):
             'output_map',
             'commands',
             'command_files',
+            'command_pathways',
             'notes',
             'archive_excludes',
         ]
@@ -150,6 +152,7 @@ class TaskSchema(object):
                     command_group = {
                         'commands': imp.get('commands', []),
                         'command_files': imp.get('command_files', {}),
+                        'command_pathways': imp.get('command_pathways', [])
                     }
                     all_inputs = (
                         schema.get('inputs', []) +
@@ -253,15 +256,7 @@ class TaskSchema(object):
                 raise TaskSchemaError(err + msg)
 
         # Check correct keys in supplied input/output maps:
-        command_file_names = self.command_group.get_command_file_names()
         for in_map_idx, in_map in enumerate(self.input_map):
-
-            # Substitute command file names:
-            for cmd_fn_label, cmd_fn in command_file_names['input_map'].items():
-                if f'<<{cmd_fn_label}>>' in in_map['file']:
-                    new_fn = in_map['file'].replace(f'<<{cmd_fn_label}>>', cmd_fn)
-                    self.input_map[in_map_idx]['file_initial'] = in_map['file']
-                    self.input_map[in_map_idx]['file'] = new_fn
 
             req_keys = ['inputs', 'file']
             allowed_keys = set(req_keys + ['save', 'file_initial'])
@@ -308,16 +303,6 @@ class TaskSchema(object):
                     msg = (f'Specify keys `name` (str) and `save` (bool) in output map '
                            f'`files` key.')
                     raise TaskSchemaError(err + msg)
-
-                # Substitute command file names:
-                for cmd_fn_label, cmd_fn in command_file_names['output_map'].items():
-                    if f'<<{cmd_fn_label}>>' in out_map_file['name']:
-                        new_fn = out_map_file['name'].replace(
-                            f'<<{cmd_fn_label}>>',
-                            cmd_fn,
-                        )
-                        self.output_map[out_map_idx]['files'][out_map_file_idx]['name_initial'] = out_map_file['name']
-                        self.output_map[out_map_idx]['files'][out_map_file_idx]['name'] = new_fn
 
             # Normalise and check output map options:
             out_map_opts = out_map.get('options', [])
@@ -544,6 +529,7 @@ class Task(object):
         '_merge_priority',
         '_workflow',
         '_elements',
+        '_command_pathway_idx',
     ]
 
     def __init__(self, workflow, name, method, software_instance,
@@ -551,7 +537,8 @@ class Task(object):
                  run_options=None, prepare_run_options=None, process_run_options=None,
                  status=None, stats=True, context='', local_inputs=None, schema=None,
                  resource_usage=None, base=None, sequences=None, repeats=None,
-                 groups=None, nest=None, merge_priority=None, output_map_options=None):
+                 groups=None, nest=None, merge_priority=None, output_map_options=None,
+                 command_pathway_idx=None):
 
         self._id = None         # Generated once by generate_id()
         self._elements = None   # Assigned in init_elements()
@@ -573,6 +560,7 @@ class Task(object):
         self._output_map_options = output_map_options
         self._schema = schema
         self._resource_usage = resource_usage
+        self._command_pathway_idx = command_pathway_idx
 
         # Saved for completeness, and to allow regeneration of `local_inputs`:
         self._base = base
@@ -784,10 +772,15 @@ class Task(object):
     def software(self):
         return self.software_instance.software
 
+    @property
+    def command_pathway_idx(self):
+        return self._command_pathway_idx
+
     def get_formatted_commands(self):
         fmt_commands, input_vars = self.schema.command_group.get_formatted_commands(
             self.local_inputs['inputs'].keys(),
             num_cores=self.run_options['num_cores'],
+            cmd_pathway_idx=self.command_pathway_idx,
         )
 
         # TODO: ?
