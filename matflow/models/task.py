@@ -40,6 +40,7 @@ class TaskSchema(object):
         self.command_group = CommandGroup(**command_group) if command_group else None
 
         self._validate_inputs_outputs()
+        self.command_group.check_pathway_conditions(self.input_names)
 
     def __repr__(self):
         return (
@@ -78,6 +79,8 @@ class TaskSchema(object):
             'input_map',
             'output_map',
             'commands',
+            'command_files',
+            'command_pathways',
             'notes',
             'archive_excludes',
         ]
@@ -146,7 +149,11 @@ class TaskSchema(object):
 
                     input_map = imp.get('input_map', [])
                     output_map = imp.get('output_map', [])
-                    command_group = {'commands': imp.get('commands', [])}
+                    command_group = {
+                        'commands': imp.get('commands', []),
+                        'command_files': imp.get('command_files', {}),
+                        'command_pathways': imp.get('command_pathways', [])
+                    }
                     all_inputs = (
                         schema.get('inputs', []) +
                         method.get('inputs', []) +
@@ -249,10 +256,10 @@ class TaskSchema(object):
                 raise TaskSchemaError(err + msg)
 
         # Check correct keys in supplied input/output maps:
-        for in_map in self.input_map:
+        for in_map_idx, in_map in enumerate(self.input_map):
 
             req_keys = ['inputs', 'file']
-            allowed_keys = set(req_keys + ['save'])
+            allowed_keys = set(req_keys + ['save', 'file_initial'])
             miss_keys = list(set(req_keys) - set(in_map.keys()))
             bad_keys = list(set(in_map.keys()) - allowed_keys)
 
@@ -260,10 +267,10 @@ class TaskSchema(object):
                    f'optional `save` key).')
             if miss_keys:
                 miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
-                raise TaskSchemaError(err + msg + f'Missing keys are: {miss_keys_fmt}.')
+                raise TaskSchemaError(err + msg + f' Missing keys are: {miss_keys_fmt}.')
             if bad_keys:
                 bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
-                raise TaskSchemaError(err + msg + f'Unknown keys are: {bad_keys_fmt}.')
+                raise TaskSchemaError(err + msg + f' Unknown keys are: {bad_keys_fmt}.')
 
             if not isinstance(in_map['inputs'], list):
                 msg = 'Input map `inputs` must be a list.'
@@ -291,8 +298,8 @@ class TaskSchema(object):
                 msg = 'Output map `output` must be a string.'
                 raise TaskSchemaError(err + msg)
 
-            for i in out_map['files']:
-                if ('name' not in i) or ('save' not in i):
+            for out_map_file_idx, out_map_file in enumerate(out_map['files']):
+                if ('name' not in out_map_file) or ('save' not in out_map_file):
                     msg = (f'Specify keys `name` (str) and `save` (bool) in output map '
                            f'`files` key.')
                     raise TaskSchemaError(err + msg)
@@ -522,6 +529,7 @@ class Task(object):
         '_merge_priority',
         '_workflow',
         '_elements',
+        '_command_pathway_idx',
     ]
 
     def __init__(self, workflow, name, method, software_instance,
@@ -529,7 +537,8 @@ class Task(object):
                  run_options=None, prepare_run_options=None, process_run_options=None,
                  status=None, stats=True, context='', local_inputs=None, schema=None,
                  resource_usage=None, base=None, sequences=None, repeats=None,
-                 groups=None, nest=None, merge_priority=None, output_map_options=None):
+                 groups=None, nest=None, merge_priority=None, output_map_options=None,
+                 command_pathway_idx=None):
 
         self._id = None         # Generated once by generate_id()
         self._elements = None   # Assigned in init_elements()
@@ -551,6 +560,7 @@ class Task(object):
         self._output_map_options = output_map_options
         self._schema = schema
         self._resource_usage = resource_usage
+        self._command_pathway_idx = command_pathway_idx
 
         # Saved for completeness, and to allow regeneration of `local_inputs`:
         self._base = base
@@ -762,10 +772,15 @@ class Task(object):
     def software(self):
         return self.software_instance.software
 
+    @property
+    def command_pathway_idx(self):
+        return self._command_pathway_idx
+
     def get_formatted_commands(self):
         fmt_commands, input_vars = self.schema.command_group.get_formatted_commands(
             self.local_inputs['inputs'].keys(),
             num_cores=self.run_options['num_cores'],
+            cmd_pathway_idx=self.command_pathway_idx,
         )
 
         # TODO: ?

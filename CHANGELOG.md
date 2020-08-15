@@ -2,12 +2,15 @@
 
 ## [0.2.7] - 2020.xx.xx
 
+## Added
+- Default values can be specified for output map options within the schema
+- Default values can be specified for task input parameters within the schema
+- Depending on the inputs defined, different commands can be run, via "command pathway" definitions in the schema implementations.
+
 ### Changed
 
 - Uses `hickle` version 4.
 - Group structure in workflow HDF5 file has changed (backwards-incompatible); element data is more conveniently organised for inspecting the HDF5 file manually.
-- Default values can be specified for output map options within the schema
-- Default values can be specified for task input parameters within the schema
 
 ### Fixed
 

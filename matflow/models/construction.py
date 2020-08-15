@@ -518,6 +518,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'nest',
             'merge_priority',
             'output_map_options',
+            'command_pathway_idx',
         ]
         good_keys = req_keys
         def_keys = {}
@@ -1092,6 +1093,37 @@ def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
             local_ins = task['local_inputs']
 
         task_lst[task_idx]['local_inputs'] = local_ins
+
+        # Select and set the correct command pathway index according to local inputs:
+        loc_ins_vals = {}
+        for in_name, in_vals_dict in local_ins['inputs'].items():
+            loc_ins_vals.update({
+                in_name: [in_vals_dict['vals'][i] for i in in_vals_dict['vals_idx']]
+            })
+        schema = task['schema']
+        cmd_group = schema.command_group
+        cmd_pth_idx = cmd_group.select_command_pathway(loc_ins_vals)
+        task_lst[task_idx]['command_pathway_idx'] = cmd_pth_idx
+
+        # Substitute command file names in input and output maps:
+        command_file_names = cmd_group.get_command_file_names(cmd_pth_idx)
+        for in_map_idx, in_map in enumerate(schema.input_map):
+            for cmd_fn_label, cmd_fn in command_file_names['input_map'].items():
+                if f'<<{cmd_fn_label}>>' in in_map['file']:
+                    new_fn = in_map['file'].replace(f'<<{cmd_fn_label}>>', cmd_fn)
+                    schema.input_map[in_map_idx]['file_raw'] = in_map['file']
+                    schema.input_map[in_map_idx]['file'] = new_fn
+
+        for out_map_idx, out_map in enumerate(schema.output_map):
+            for out_map_file_idx, out_map_file in enumerate(out_map['files']):
+                for cmd_fn_label, cmd_fn in command_file_names['output_map'].items():
+                    if f'<<{cmd_fn_label}>>' in out_map_file['name']:
+                        new_fn = out_map_file['name'].replace(
+                            f'<<{cmd_fn_label}>>',
+                            cmd_fn,
+                        )
+                        schema.output_map[out_map_idx]['files'][out_map_file_idx]['name_raw'] = out_map_file['name']
+                        schema.output_map[out_map_idx]['files'][out_map_file_idx]['name'] = new_fn
 
     return task_lst
 

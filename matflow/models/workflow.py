@@ -1077,7 +1077,7 @@ class Workflow(object):
             msg = f'Could not load workflow object with `hickle`: "{path}": {err}.'
             raise WorkflowPersistenceError(msg)
 
-        for i in obj_json['tasks']:
+        for i_idx, i in enumerate(obj_json['tasks']):
             i['status'] = TaskStatus(i['status'][1])
             for j in [
                 'software_instance',
@@ -1089,6 +1089,12 @@ class Workflow(object):
                 soft_inst = SoftwareInstance(**soft_inst_dict)
                 soft_inst.machine = machine
                 i[j] = soft_inst
+            for cmd_idx in range(len(i['schema']['command_group']['commands'])):
+                del obj_json['tasks'][i_idx]['schema']['command_group']['commands'][cmd_idx]['options_raw']
+                del obj_json['tasks'][i_idx]['schema']['command_group']['commands'][cmd_idx]['parameters_raw']
+                del obj_json['tasks'][i_idx]['schema']['command_group']['commands'][cmd_idx]['stdin_raw']
+                del obj_json['tasks'][i_idx]['schema']['command_group']['commands'][cmd_idx]['stdout_raw']
+                del obj_json['tasks'][i_idx]['schema']['command_group']['commands'][cmd_idx]['stderr_raw']
 
         obj = {
             'name': obj_json['name'],
