@@ -24,7 +24,7 @@ class TaskSchema(object):
     """Class to represent the schema of a particular method/implementation of a task."""
 
     def __init__(self, name, outputs, method=None, implementation=None, inputs=None,
-                 input_map=None, output_map=None, command_group=None,
+                 input_map=None, output_map=None, command_group=None, derived_inputs=None,
                  archive_excludes=None):
         'Instantiate a TaskSchema.'
 
@@ -35,6 +35,7 @@ class TaskSchema(object):
         self.inputs = inputs or []
         self.input_map = input_map or []
         self.output_map = output_map or []
+        self.derived_inputs = derived_inputs or {}
         self.archive_excludes = archive_excludes
 
         self.command_group = CommandGroup(**command_group) if command_group else None
@@ -51,6 +52,7 @@ class TaskSchema(object):
             f'inputs={self.inputs_condensed!r}, '
             f'outputs={self.outputs!r}, '
             f'command_group={self.command_group!r}, '
+            f'derived_inputs={self.derived_inputs!r}, '
             f'archive_excludes={self.archive_excludes!r}'
             f')'
         )
@@ -83,6 +85,7 @@ class TaskSchema(object):
             'command_pathways',
             'notes',
             'archive_excludes',
+            'derived_inputs',
         ]
 
         all_schema_dicts = {}
@@ -175,6 +178,7 @@ class TaskSchema(object):
                             'output_map': output_map,
                             'command_group': command_group,
                             'archive_excludes': imp.get('archive_excludes'),
+                            'derived_inputs': imp.get('derived_inputs'),
                         }
                     })
 
@@ -369,6 +373,15 @@ class TaskSchema(object):
             msg = (f'Output map outputs {bad_outs_map_fmt} not known by the schema with '
                    f'outputs: {self.outputs}.')
             raise TaskSchemaError(err + msg)
+
+        # Check derived_inputs keys are valid schema inputs:
+        for derived_in, base_ins in self.derived_inputs.items():
+            bad_base_ins = set(base_ins) - set(self.input_names)
+            if bad_base_ins:
+                bad_base_ins_fmt = ', '.join(['"{}"'.format(i) for i in bad_base_ins])
+                msg = (f'The following base inputs for the derived input "{derived_in}" '
+                       f'are not known by the schema: {bad_base_ins_fmt}.')
+                raise TaskSchemaError(err + msg)
 
     def check_surplus_inputs(self, inputs):
         """Check for any (local) inputs that are specified but not required by this
