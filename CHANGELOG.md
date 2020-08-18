@@ -1,6 +1,6 @@
 # Change Log
 
-## [0.2.7] - 2020.xx.xx
+## [0.2.7] - 2020.08.18
 
 ## Added
 - Default values can be specified for output map options within the schema
