@@ -29,5 +29,3 @@ MatFlow uses extension packages to interact with arbitrary software. Here is a l
 | volume_element          | grid<br />size<br />origin<br />**orientations**<br />grain_orientation_idx<br />grain_phase_label_idx<br />phase_labels<br />voxel_grain_idx<br />voxel_homogenization_idx | generate_volume_element                   | visualise_volume_element<br />simulate_volume_element_loading |
 | load_case               | total_time<br />num_increments<br />def_grad_aim<br />def_grad_rate<br />stress<br />rotation | generate_load_case                        | simulate_volume_element_loading                              |
 | volume_element_response | ...                                                          | simulate_volume_element_loading           |                                                              |
-|                         |                                                              |                                           |                                                              |
-
