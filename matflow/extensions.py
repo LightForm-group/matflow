@@ -88,9 +88,15 @@ def load_extensions():
             print('Failed.', flush=True)
             raise err
 
-        num_valid = sum(Config.get('schema_validity').values())
-        num_total = len(Config.get('schema_validity'))
+        schema_validity = Config.get('schema_validity')
+        schema_invalids = [(k, v[1]) for k, v in schema_validity.items() if not v[0]]
+        num_valid = sum([i[0] for i in schema_validity.values()])
+        num_total = len(schema_validity)
         print(f'OK! {num_valid}/{num_total} schemas are valid.', flush=True)
+        if schema_invalids:
+            sch_invalids_fmt = '\n  '.join([f'{i[0]}: {i[1]}' for i in schema_invalids])
+            msg = f'The following schemas are invalid:\n  {sch_invalids_fmt}\n'
+            print(msg, flush=True)
 
     else:
         print('No extensions found.')

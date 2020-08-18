@@ -77,3 +77,7 @@ class MissingSoftwareSourcesError(Exception):
 
 class UnexpectedSourceMapReturnError(Exception):
     'For when a source map function does not return the expected dict.'
+
+
+class CommandError(Exception):
+    'For problems with command groups and commands.'
