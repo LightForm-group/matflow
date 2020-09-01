@@ -627,9 +627,6 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
         # print(f'process_soft_inst:\n{process_soft_inst}')
 
         schema_key = (task['name'], task['method'], soft_inst.software)
-        # Check any sources required by the main software instance are defined in the
-        # sources map:
-        soft_inst.validate_source_maps(*schema_key, all_sources_maps)
 
         task['software_instance'] = soft_inst
         task['prepare_software_instance'] = prepare_soft_inst
@@ -645,6 +642,10 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             msg = (f'No matching extension function found for the schema with '
                    f'implementation: {soft_inst.software}.')
             raise UnsatisfiedSchemaError(msg)
+
+        # Check any sources required by the main software instance are defined in the
+        # sources map:
+        soft_inst.validate_source_maps(*schema_key, all_sources_maps)
 
     task['schema'] = schema
 
