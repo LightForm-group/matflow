@@ -212,7 +212,8 @@ class SoftwareInstance(object):
             f'software={self.software!r}, '
             f'label={self.label!r}, '
             f'cores_range={self.cores_range!r}, '
-            f'executable={self.executable!r}'
+            f'executable={self.executable!r}, '
+            f'version_info={self.version_info!r}'
             f')'
         )
 
