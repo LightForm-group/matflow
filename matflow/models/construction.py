@@ -901,7 +901,7 @@ def get_element_idx(task_lst, dep_idx):
             ins_dict = {}
             groups = {}  # groups defined on the downstream task
             consumed_groups = []
-            for idx, input_alias in enumerate(merging_order):
+            for merge_order_idx, input_alias in enumerate(merging_order):
 
                 in_group = input_groups[input_alias]
                 if in_group['group_name'] != 'default':
@@ -914,7 +914,7 @@ def get_element_idx(task_lst, dep_idx):
                 elif in_group['task_idx'] not in non_unit_group_sizes:
                     non_unit_group_sizes.update({in_group['task_idx']: False})
 
-                if idx == 0:
+                if merge_order_idx == 0:
                     if loc_in['inputs']:
                         existing_size = loc_in['length']
                         repeats_idx = loc_in['repeats_idx']
