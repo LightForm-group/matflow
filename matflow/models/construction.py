@@ -950,7 +950,6 @@ def get_element_idx(task_lst, dep_idx):
                         else:
                             input_idx = repeat(ins_dict[k]['input_idx'], incoming_size)
                             ins_dict[k]['input_idx'] = input_idx
-                        repeats_idx = repeat(repeats_idx, incoming_size)
 
                     # Tile incoming:
                     ins_dict.update({
