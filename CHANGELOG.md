@@ -1,8 +1,17 @@
 # Change Log
 
+## [0.2.8] - 2020.09.01
+
+### Changed
+- Add `version_info` to `Software.__repr__` method
+- Validate source maps after missing schema check
+
+### Fixed 
+- Remove vestigial and buggy line in `construction.get_element_idx` which would lead to enormous memory usage for large sequences.
+
 ## [0.2.7] - 2020.08.18
 
-## Added
+### Added
 - Default values can be specified for output map options within the schema
 - Default values can be specified for task input parameters within the schema
 - Depending on the inputs defined, different commands can be run, via "command pathway" definitions in the schema implementations.

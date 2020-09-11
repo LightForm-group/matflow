@@ -656,9 +656,6 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
         # print(f'process_soft_inst:\n{process_soft_inst}')
 
         schema_key = (task['name'], task['method'], soft_inst.software)
-        # Check any sources required by the main software instance are defined in the
-        # sources map:
-        soft_inst.validate_source_maps(*schema_key, all_sources_maps)
 
         task['software_instance'] = soft_inst
         task['prepare_software_instance'] = prepare_soft_inst
@@ -674,6 +671,10 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             msg = (f'No matching extension function found for the schema with '
                    f'implementation: {soft_inst.software}.')
             raise UnsatisfiedSchemaError(msg)
+
+        # Check any sources required by the main software instance are defined in the
+        # sources map:
+        soft_inst.validate_source_maps(*schema_key, all_sources_maps)
 
     task['schema'] = schema
 
@@ -929,7 +930,7 @@ def get_element_idx(task_lst, dep_idx):
             ins_dict = {}
             groups = {}  # groups defined on the downstream task
             consumed_groups = []
-            for idx, input_alias in enumerate(merging_order):
+            for merge_order_idx, input_alias in enumerate(merging_order):
 
                 in_group = input_groups[input_alias]
                 if in_group['group_name'] != 'default':
@@ -942,7 +943,7 @@ def get_element_idx(task_lst, dep_idx):
                 elif in_group['task_idx'] not in non_unit_group_sizes:
                     non_unit_group_sizes.update({in_group['task_idx']: False})
 
-                if idx == 0:
+                if merge_order_idx == 0:
                     if loc_in['inputs']:
                         existing_size = loc_in['length']
                         repeats_idx = loc_in['repeats_idx']
@@ -978,7 +979,6 @@ def get_element_idx(task_lst, dep_idx):
                         else:
                             input_idx = repeat(ins_dict[k]['input_idx'], incoming_size)
                             ins_dict[k]['input_idx'] = input_idx
-                        repeats_idx = repeat(repeats_idx, incoming_size)
 
                     # Tile incoming:
                     ins_dict.update({
