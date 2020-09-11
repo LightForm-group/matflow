@@ -16,8 +16,12 @@ class Config(object):
     __ALLOWED_CONFIG = [
         'task_schema_sources',
         'software_sources',
+        'default_run_options',
         'default_preparation_run_options',
         'default_processing_run_options',
+        'default_sticky_run_options',
+        'default_sticky_preparation_run_options',
+        'default_sticky_processing_run_options',
         'parallel_modes',
         'archive_locations',
     ]
@@ -222,7 +226,14 @@ class Config(object):
 
         Config.__conf['config_dir'] = config_dir
 
-        for i in ['default_preparation_run_options', 'default_processing_run_options']:
+        for i in [
+            'default_run_options',
+            'default_preparation_run_options',
+            'default_processing_run_options',
+            'default_sticky_run_options',
+            'default_sticky_preparation_run_options',
+            'default_sticky_processing_run_options',
+        ]:
             Config.__conf[i] = config_dat.get(i, {})
 
         hpcflow_config_dir = config_dir.joinpath('.hpcflow')
