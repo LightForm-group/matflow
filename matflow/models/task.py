@@ -23,8 +23,7 @@ from matflow.models.element import Element
 class TaskSchema(object):
     """Class to represent the schema of a particular method/implementation of a task."""
 
-    def __init__(self, name, outputs, method=None, implementation=None, inputs=None,
-                 input_map=None, output_map=None, command_group=None,
+    def __init__(self, name, method, implementation, inputs, outputs, command_group,
                  archive_excludes=None):
         'Instantiate a TaskSchema.'
 
@@ -33,11 +32,8 @@ class TaskSchema(object):
         self.method = method
         self.implementation = implementation
         self.inputs = inputs or []
-        self.input_map = input_map or []
-        self.output_map = output_map or []
         self.archive_excludes = archive_excludes
-
-        self.command_group = CommandGroup(**command_group) if command_group else None
+        self.command_group = CommandGroup(**command_group)
 
         self._validate_inputs_outputs()
         self.command_group.check_pathway_conditions(self.input_names)
@@ -66,21 +62,36 @@ class TaskSchema(object):
     @classmethod
     def load_from_hierarchy(cls, schema_lst):
 
-        REQ = ['name', 'methods']
-        ALLOWED = REQ + ['inputs', 'outputs', 'notes']
+        REQ = [
+            'name',
+            'methods',
+            'commands',
+        ]
+        ALLOWED = REQ + [
+            'inputs',
+            'outputs',
+            'notes',
+            'command_files',
 
-        REQ_METHOD = ['name', 'implementations']
-        ALLOWED_METHOD = REQ_METHOD + ['inputs', 'outputs', 'notes']
+        ]
 
-        REQ_IMPL = ['name']
+        REQ_METHOD = [
+            'name',
+            'implementations',
+        ]
+        ALLOWED_METHOD = REQ_METHOD + [
+            'inputs',
+            'outputs',
+            'notes',
+        ]
+
+        REQ_IMPL = [
+            'name',
+            'command_pathways',
+        ]
         ALLOWED_IMPL = REQ_IMPL + [
             'inputs',
             'outputs',
-            'input_map',
-            'output_map',
-            'commands',
-            'command_files',
-            'command_pathways',
             'notes',
             'archive_excludes',
         ]
@@ -147,12 +158,10 @@ class TaskSchema(object):
                                f'and implementation "{software}" is multiply defined.')
                         raise ValueError(msg)
 
-                    input_map = imp.get('input_map', [])
-                    output_map = imp.get('output_map', [])
                     command_group = {
-                        'commands': imp.get('commands', []),
-                        'command_files': imp.get('command_files', {}),
-                        'command_pathways': imp.get('command_pathways', [])
+                        'all_commands': schema['commands'],
+                        'command_files': schema.get('command_files', {}),
+                        'command_pathways': imp['command_pathways']
                     }
                     all_inputs = (
                         schema.get('inputs', []) +
@@ -171,8 +180,6 @@ class TaskSchema(object):
                             'implementation': software,
                             'inputs': all_inputs,
                             'outputs': all_outputs,
-                            'input_map': input_map,
-                            'output_map': output_map,
                             'command_group': command_group,
                             'archive_excludes': imp.get('archive_excludes'),
                         }
@@ -255,120 +262,10 @@ class TaskSchema(object):
                 msg = f'Task schema input "{i}" cannot also be an output!'
                 raise TaskSchemaError(err + msg)
 
-        # Check correct keys in supplied input/output maps:
-        for in_map_idx, in_map in enumerate(self.input_map):
-
-            req_keys = ['inputs', 'file']
-            allowed_keys = set(req_keys + ['save', 'file_initial'])
-            miss_keys = list(set(req_keys) - set(in_map.keys()))
-            bad_keys = list(set(in_map.keys()) - allowed_keys)
-
-            msg = (f'Input maps must map a list of `inputs` into a `file` (with an '
-                   f'optional `save` key).')
-            if miss_keys:
-                miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
-                raise TaskSchemaError(err + msg + f' Missing keys are: {miss_keys_fmt}.')
-            if bad_keys:
-                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
-                raise TaskSchemaError(err + msg + f' Unknown keys are: {bad_keys_fmt}.')
-
-            if not isinstance(in_map['inputs'], list):
-                msg = 'Input map `inputs` must be a list.'
-                raise TaskSchemaError(err + msg)
-
-        out_map_opt_names = []
-        for out_map_idx, out_map in enumerate(self.output_map):
-
-            req_keys = ['files', 'output']
-            allowed_keys = set(req_keys + ['options'])
-            miss_keys = list(set(req_keys) - set(out_map.keys()))
-            bad_keys = list(set(out_map.keys()) - allowed_keys)
-
-            msg = (f'Output maps must map a list of `files` into an `output` (with '
-                   f'optional `options`). ')
-            if miss_keys:
-                miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
-                raise TaskSchemaError(err + msg + f'Missing keys are: {miss_keys_fmt}.')
-
-            if bad_keys:
-                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
-                raise TaskSchemaError(err + msg + f'Unknown keys are: {bad_keys_fmt}.')
-
-            if not isinstance(out_map['output'], str):
-                msg = 'Output map `output` must be a string.'
-                raise TaskSchemaError(err + msg)
-
-            for out_map_file_idx, out_map_file in enumerate(out_map['files']):
-                if ('name' not in out_map_file) or ('save' not in out_map_file):
-                    msg = (f'Specify keys `name` (str) and `save` (bool) in output map '
-                           f'`files` key.')
-                    raise TaskSchemaError(err + msg)
-
-            # Normalise and check output map options:
-            out_map_opts = out_map.get('options', [])
-            if out_map_opts:
-                if not isinstance(out_map_opts, list):
-                    msg = (
-                        f'If specified, output map options should be a list, but the '
-                        f'following was specified: {out_map_opts}.'
-                    )
-                    raise TaskSchemaError(err + msg)
-            for out_map_opt_idx, out_map_opt_i in enumerate(out_map_opts):
-
-                opts = get_specifier_dict(out_map_opt_i, name_key='name')
-                req_opts_keys = ['name']
-                allowed_opts_keys = req_opts_keys + ['default']
-                bad_opts_keys = list(set(opts.keys()) - set(allowed_opts_keys))
-                miss_opts_keys = list(set(req_opts_keys) - set(opts.keys()))
-
-                if bad_opts_keys:
-                    bad_opts_keys_fmt = ', '.join([f'"{i}"' for i in bad_opts_keys])
-                    msg = (
-                        f'Unknown output map option keys for output map index '
-                        f'{out_map_idx} and output map option index {out_map_opt_idx}: '
-                        f'{bad_opts_keys_fmt}. Allowed keys are: {allowed_opts_keys}.'
-                    )
-                    raise TaskSchemaError(err + msg)
-
-                if miss_opts_keys:
-                    miss_opts_keys_fmt = ', '.join([f'"{i}"' for i in miss_opts_keys])
-                    msg = (
-                        f'Missing output map option keys for output map index '
-                        f'{out_map_idx} and output map option index {out_map_opt_idx}: '
-                        f'{miss_opts_keys_fmt}.'
-                    )
-                    raise TaskSchemaError(err + msg)
-
-                if opts['name'] in out_map_opt_names:
-                    msg = (
-                        f'Output map options must be uniquely named across all output '
-                        f'maps of a given task schema, but the output map option '
-                        f'"{opts["name"]}" is repeated.'
-                    )
-                    raise TaskSchemaError(err + msg)
-                else:
-                    out_map_opt_names.append(opts['name'])
-
-                self.output_map[out_map_idx]['options'][out_map_opt_idx] = opts
-
         # Check inputs/outputs named in input/output_maps are in inputs/outputs lists:
-        input_map_ins = [j for i in self.input_map for j in i['inputs']]
-        unknown_map_inputs = set(input_map_ins) - set(self.input_aliases)
-
-        output_map_outs = [i['output'] for i in self.output_map]
-        unknown_map_outputs = set(output_map_outs) - set(self.outputs)
-
-        if unknown_map_inputs:
-            bad_ins_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_inputs])
-            msg = (f'Input map inputs {bad_ins_map_fmt} not known by the schema with '
-                   f'input (aliases): {self.input_aliases}.')
-            raise TaskSchemaError(err + msg)
-
-        if unknown_map_outputs:
-            bad_outs_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_outputs])
-            msg = (f'Output map outputs {bad_outs_map_fmt} not known by the schema with '
-                   f'outputs: {self.outputs}.')
-            raise TaskSchemaError(err + msg)
+        for cmd_idx, command in enumerate(self.command_group.all_commands):
+            command.validate_input_map(self.name, cmd_idx, self.input_aliases)
+            command.validate_output_map(self.name, cmd_idx, self.outputs)
 
     def check_surplus_inputs(self, inputs):
         """Check for any (local) inputs that are specified but not required by this

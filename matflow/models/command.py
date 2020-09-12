@@ -11,8 +11,8 @@ from pprint import pprint
 
 import numpy as np
 
-from matflow.errors import CommandError
-from matflow.utils import dump_to_yaml_string
+from matflow.errors import CommandError, TaskSchemaError
+from matflow.utils import dump_to_yaml_string, get_specifier_dict
 from matflow.hicklable import to_hicklable
 
 
@@ -33,7 +33,7 @@ DEFAULT_FORMATTERS = {
 class CommandGroup(object):
     """Class to represent a group of commands."""
 
-    def __init__(self, commands, command_files=None, command_pathways=None):
+    def __init__(self, all_commands, command_files=None, command_pathways=None):
         """
         Parameters
         ----------
@@ -43,16 +43,12 @@ class CommandGroup(object):
 
         """
 
-        self.commands = [Command(**i) for i in commands]
+        self.all_commands = [Command(**i) for i in all_commands]
         self.command_files = command_files or {}
-        self.command_pathways = command_pathways or []
+        self.command_pathways = command_pathways
 
         self._validate_command_pathways()
-        self.resolve_command_pathways()
-
-    @property
-    def all_commands(self):
-        return self.commands
+        self._resolve_command_pathways()
 
     def __repr__(self):
         out = f'{self.__class__.__name__}(commands=['
@@ -87,11 +83,6 @@ class CommandGroup(object):
                     raise CommandError(msg)
 
     def _validate_command_pathways(self):
-
-        if not self.command_pathways:
-            self.command_pathways = [
-                {'commands_idx': list(range(len(self.all_commands)))}
-            ]
 
         req_keys = ['commands_idx']
         allowed_keys = req_keys + ['condition', 'commands']
@@ -132,7 +123,7 @@ class CommandGroup(object):
                    f'(the default command pathway).')
             raise CommandError(msg)
 
-    def resolve_command_pathways(self):
+    def _resolve_command_pathways(self):
         """Add a `commands` list to each `commands_pathway`, according to its 
         `commands_idx`."""
 
@@ -140,16 +131,15 @@ class CommandGroup(object):
             commands = [copy.deepcopy(self.all_commands[i])
                         for i in cmd_pth['commands_idx']]
             cmd_pth.update({'commands': commands})
-            self.resolve_command_files(cmd_pth_idx)
+            self._resolve_command_files(cmd_pth_idx)
 
-    def resolve_command_files(self, cmd_pathway_idx):
+    def _resolve_command_files(self, cmd_pathway_idx):
 
         # Validate command_files dict first:
         for cmd_fn_label, cmd_fn in self.command_files.items():
-            if not isinstance(cmd_fn, str) or '<<inc>>' not in cmd_fn:
+            if not isinstance(cmd_fn, str):
                 msg = ('`command_files` must be a dict that maps a command file label to '
-                       'a file name template that must include the substring "<<inc>>", '
-                       'which is substituted by increasing integers.')
+                       'a file name template')
                 raise CommandError(msg)
 
         file_names = self.get_command_file_names(cmd_pathway_idx)
@@ -158,21 +148,21 @@ class CommandGroup(object):
 
             for opt_idx, opt in enumerate(command.options):
                 for opt_token_idx, opt_token in enumerate(opt):
-                    options_files = file_names['all_commands'][cmd_idx]['options']
+                    options_files = file_names[cmd_idx]['options']
                     for cmd_fn_label, cmd_fn in options_files.items():
                         if f'<<{cmd_fn_label}>>' in opt_token:
                             new_fmt_opt = opt_token.replace(f'<<{cmd_fn_label}>>', cmd_fn)
                             command.options[opt_idx][opt_token_idx] = new_fmt_opt
 
             for param_idx, param in enumerate(command.parameters):
-                params_files = file_names['all_commands'][cmd_idx]['parameters']
+                params_files = file_names[cmd_idx]['parameters']
                 for cmd_fn_label, cmd_fn in params_files.items():
                     if f'<<{cmd_fn_label}>>' in param:
                         new_param = param.replace(f'<<{cmd_fn_label}>>', cmd_fn)
                         command.parameters[param_idx] = new_param
 
             if command.stdin:
-                stdin_files = file_names['all_commands'][cmd_idx]['stdin']
+                stdin_files = file_names[cmd_idx]['stdin']
                 for cmd_fn_label, cmd_fn in stdin_files.items():
                     if f'<<{cmd_fn_label}>>' in command.stdin:
                         new_stdin = command.stdin.replace(f'<<{cmd_fn_label}>>', cmd_fn)
@@ -180,14 +170,14 @@ class CommandGroup(object):
 
             if command.stdout:
                 new_stdout = command.stdout
-                stdout_files = file_names['all_commands'][cmd_idx]['stdout']
+                stdout_files = file_names[cmd_idx]['stdout']
                 for cmd_fn_label, cmd_fn in stdout_files.items():
                     if f'<<{cmd_fn_label}>>' in command.stdout:
                         new_stdout = command.stdout.replace(f'<<{cmd_fn_label}>>', cmd_fn)
                         command.stdout = new_stdout
 
             if command.stderr:
-                stderr_files = file_names['all_commands'][cmd_idx]['stderr']
+                stderr_files = file_names[cmd_idx]['stderr']
                 for cmd_fn_label, cmd_fn in stderr_files.items():
                     if f'<<{cmd_fn_label}>>' in command.stderr:
                         new_stderr = command.stderr.replace(f'<<{cmd_fn_label}>>', cmd_fn)
@@ -234,21 +224,13 @@ class CommandGroup(object):
 
     def get_command_file_names(self, cmd_pathway_idx):
 
-        out = {
-            'input_map': {},
-            'output_map': {},
-            'all_commands': [],
-        }
+        def get_new_file_name(file_name_label):
+            inc_fmt = str(file_name_increments[file_name_label])
+            new_fn = self.command_files[file_name_label].replace('<<inc>>', inc_fmt)
+            return new_fn
 
+        file_names = []
         file_name_increments = {k: 0 for k in self.command_files.keys()}
-
-        # Input map should use the first increment:
-        for cmd_fn_label in self.command_files.keys():
-            new_fn = self.command_files[cmd_fn_label].replace(
-                '<<inc>>',
-                str(file_name_increments[cmd_fn_label]),
-            )
-            out['input_map'].update({cmd_fn_label: new_fn})
 
         for command in self.get_commands(cmd_pathway_idx):
 
@@ -258,71 +240,52 @@ class CommandGroup(object):
                 'parameters': {},
                 'stdout': {},
                 'stderr': {},
+                'input_map': {},
+                'output_map': {},
             }
 
             cmd_fn_is_incremented = {k: False for k in self.command_files.keys()}
             for cmd_fn_label in self.command_files.keys():
 
-                for opt in command.options_raw:
+                new_fn = get_new_file_name(cmd_fn_label)
+
+                # Input map, options, parameters and stdin should use the same increment.
+                file_names_i['input_map'].update({cmd_fn_label: new_fn})
+
+                for opt in command.options:
                     fmt_opt = list(opt)
                     for opt_token in fmt_opt:
                         if f'<<{cmd_fn_label}>>' in opt_token:
-                            new_fn = self.command_files[cmd_fn_label].replace(
-                                '<<inc>>',
-                                str(file_name_increments[cmd_fn_label]),
-                            )
                             file_names_i['stdin'].update({cmd_fn_label: new_fn})
 
-                for param in command.parameters_raw:
+                for param in command.parameters:
                     if f'<<{cmd_fn_label}>>' in param:
-                        new_fn = self.command_files[cmd_fn_label].replace(
-                            '<<inc>>',
-                            str(file_name_increments[cmd_fn_label]),
-                        )
                         file_names_i['parameters'].update({cmd_fn_label: new_fn})
 
-                if command.stdin_raw:
-                    if f'<<{cmd_fn_label}>>' in command.stdin_raw:
-                        new_fn = self.command_files[cmd_fn_label].replace(
-                            '<<inc>>',
-                            str(file_name_increments[cmd_fn_label]),
-                        )
+                if command.stdin:
+                    if f'<<{cmd_fn_label}>>' in command.stdin:
                         file_names_i['stdin'].update({cmd_fn_label: new_fn})
 
-                if command.stdout_raw:
-                    if f'<<{cmd_fn_label}>>' in command.stdout_raw:
+                # stdout, stderr and output map should use the next increment.
+                if command.stdout:
+                    if f'<<{cmd_fn_label}>>' in command.stdout:
                         file_name_increments[cmd_fn_label] += 1
                         cmd_fn_is_incremented[cmd_fn_label] = True
-                        new_fn = self.command_files[cmd_fn_label].replace(
-                            '<<inc>>',
-                            str(file_name_increments[cmd_fn_label]),
-                        )
+                        new_fn = get_new_file_name(cmd_fn_label)
                         file_names_i['stdout'].update({cmd_fn_label: new_fn})
 
-                if command.stderr_raw:
-                    if f'<<{cmd_fn_label}>>' in command.stderr_raw:
+                if command.stderr:
+                    if f'<<{cmd_fn_label}>>' in command.stderr:
                         if not cmd_fn_is_incremented[cmd_fn_label]:
                             file_name_increments[cmd_fn_label] += 1
-                        new_fn = self.command_files[cmd_fn_label].replace(
-                            '<<inc>>',
-                            str(file_name_increments[cmd_fn_label]),
-                        )
+                            new_fn = get_new_file_name(cmd_fn_label)
+                        file_names_i['stderr'].update({cmd_fn_label: new_fn})
 
-                        if not cmd_fn_is_incremented[cmd_fn_label]:
-                            cmd_fn_is_incremented[cmd_fn_label] = True
-                            file_names_i['stderr'].update({cmd_fn_label: new_fn})
+                file_names_i['output_map'].update({cmd_fn_label: new_fn})
 
-            out['all_commands'].append(file_names_i)
+            file_names.append(file_names_i)
 
-        # Output map should use the final increment:
-        for cmd_fn_label in self.command_files.keys():
-            new_fn = self.command_files[cmd_fn_label].replace(
-                '<<inc>>',
-                str(file_name_increments[cmd_fn_label]),
-            )
-            out['output_map'].update({cmd_fn_label: new_fn})
-
-        return out
+        return file_names
 
     def get_formatted_commands(self, inputs_list, num_cores, cmd_pathway_idx):
         """Format commands into strings with hpcflow variable substitutions where
@@ -409,25 +372,19 @@ class Command(object):
     'Class to represent a command to be executed by a shell.'
 
     def __init__(self, command, options=None, parameters=None, stdin=None, stdout=None,
-                 stderr=None, parallel_mode=None):
+                 stderr=None, parallel_mode=None, input_map=None, output_map=None):
 
         self.command = command
         self.parallel_mode = parallel_mode
 
-        # Raw versions may include command file name variables:
-        self.options_raw = options or []
-        self.parameters_raw = parameters or []
-        self.stdin_raw = stdin
-        self.stdout_raw = stdout
-        self.stderr_raw = stderr
+        self.options = options or []
+        self.parameters = parameters or []
+        self.stdin = stdin
+        self.stdout = stdout
+        self.stderr = stderr
 
-        # Non-raw versions modified by the parent CommandGroup to include any resolved
-        # command file name:
-        self.options = copy.deepcopy(self.options_raw)
-        self.parameters = copy.deepcopy(self.parameters_raw)
-        self.stdin = self.stdin_raw
-        self.stdout = self.stdout_raw
-        self.stderr = self.stderr_raw
+        self.input_map = input_map or []
+        self.output_map = output_map or []
 
     def __repr__(self):
         out = f'{self.__class__.__name__}({self.command!r}'
@@ -463,3 +420,126 @@ class Command(object):
                 cmd_fmt += ' 2> {}'.format(self.stderr)
 
         return cmd_fmt
+
+    def validate_input_map(self, schema_name, cmd_idx, input_aliases):
+
+        err = f'Validation failed for command {cmd_idx} in task schema "{schema_name}". '
+
+        # Check correct keys in supplied input/output maps:
+        for in_map_idx, in_map in enumerate(self.input_map):
+
+            req_keys = ['inputs', 'file']
+            allowed_keys = set(req_keys + ['save', 'file_initial'])
+            miss_keys = list(set(req_keys) - set(in_map.keys()))
+            bad_keys = list(set(in_map.keys()) - allowed_keys)
+
+            msg = (f'Input maps must map a list of `inputs` into a `file` (with an '
+                   f'optional `save` key).')
+            if miss_keys:
+                miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+                raise TaskSchemaError(err + msg + f' Missing keys are: {miss_keys_fmt}.')
+            if bad_keys:
+                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+                raise TaskSchemaError(err + msg + f' Unknown keys are: {bad_keys_fmt}.')
+
+            if not isinstance(in_map['inputs'], list):
+                msg = 'Input map `inputs` must be a list.'
+                raise TaskSchemaError(err + msg)
+
+        input_map_ins = [j for i in self.input_map for j in i['inputs']]
+        unknown_map_inputs = set(input_map_ins) - set(input_aliases)
+
+        if unknown_map_inputs:
+            bad_ins_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_inputs])
+            msg = (f'Input map inputs {bad_ins_map_fmt} not known by the schema with '
+                   f'input (aliases): {input_aliases}.')
+            raise TaskSchemaError(err + msg)
+
+    def validate_output_map(self, schema_name, cmd_idx, outputs):
+
+        err = f'Validation failed for command {cmd_idx} in task schema "{schema_name}". '
+
+        out_map_opt_names = []
+        for out_map_idx, out_map in enumerate(self.output_map):
+
+            req_keys = ['files', 'output']
+            allowed_keys = set(req_keys + ['options'])
+            miss_keys = list(set(req_keys) - set(out_map.keys()))
+            bad_keys = list(set(out_map.keys()) - allowed_keys)
+
+            msg = (f'Output maps must map a list of `files` into an `output` (with '
+                   f'optional `options`). ')
+            if miss_keys:
+                miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+                raise TaskSchemaError(err + msg + f'Missing keys are: {miss_keys_fmt}.')
+
+            if bad_keys:
+                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+                raise TaskSchemaError(err + msg + f'Unknown keys are: {bad_keys_fmt}.')
+
+            if not isinstance(out_map['output'], str):
+                msg = 'Output map `output` must be a string.'
+                raise TaskSchemaError(err + msg)
+
+            for out_map_file_idx, out_map_file in enumerate(out_map['files']):
+                if ('name' not in out_map_file) or ('save' not in out_map_file):
+                    msg = (f'Specify keys `name` (str) and `save` (bool) in output map '
+                           f'`files` key.')
+                    raise TaskSchemaError(err + msg)
+
+            # Normalise and check output map options:
+            out_map_opts = out_map.get('options', [])
+            if out_map_opts:
+                if not isinstance(out_map_opts, list):
+                    msg = (
+                        f'If specified, output map options should be a list, but the '
+                        f'following was specified: {out_map_opts}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+
+            for out_map_opt_idx, out_map_opt_i in enumerate(out_map_opts):
+
+                opts = get_specifier_dict(out_map_opt_i, name_key='name')
+                req_opts_keys = ['name']
+                allowed_opts_keys = req_opts_keys + ['default']
+                bad_opts_keys = list(set(opts.keys()) - set(allowed_opts_keys))
+                miss_opts_keys = list(set(req_opts_keys) - set(opts.keys()))
+
+                if bad_opts_keys:
+                    bad_opts_keys_fmt = ', '.join([f'"{i}"' for i in bad_opts_keys])
+                    msg = (
+                        f'Unknown output map option keys for output map index '
+                        f'{out_map_idx} and output map option index {out_map_opt_idx}: '
+                        f'{bad_opts_keys_fmt}. Allowed keys are: {allowed_opts_keys}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+
+                if miss_opts_keys:
+                    miss_opts_keys_fmt = ', '.join([f'"{i}"' for i in miss_opts_keys])
+                    msg = (
+                        f'Missing output map option keys for output map index '
+                        f'{out_map_idx} and output map option index {out_map_opt_idx}: '
+                        f'{miss_opts_keys_fmt}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+
+                if opts['name'] in out_map_opt_names:
+                    msg = (
+                        f'Output map options must be uniquely named across all output '
+                        f'maps of a given task schema, but the output map option '
+                        f'"{opts["name"]}" is repeated.'
+                    )
+                    raise TaskSchemaError(err + msg)
+                else:
+                    out_map_opt_names.append(opts['name'])
+
+                self.output_map[out_map_idx]['options'][out_map_opt_idx] = opts
+
+        output_map_outs = [i['output'] for i in self.output_map]
+        unknown_map_outputs = set(output_map_outs) - set(outputs)
+
+        if unknown_map_outputs:
+            bad_outs_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_outputs])
+            msg = (f'Output map outputs {bad_outs_map_fmt} not known by the schema with '
+                   f'outputs: {outputs}.')
+            raise TaskSchemaError(err + msg)

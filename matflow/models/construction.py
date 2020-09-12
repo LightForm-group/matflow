@@ -1136,23 +1136,28 @@ def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
 
         # Substitute command file names in input and output maps:
         command_file_names = cmd_group.get_command_file_names(cmd_pth_idx)
-        for in_map_idx, in_map in enumerate(schema.input_map):
-            for cmd_fn_label, cmd_fn in command_file_names['input_map'].items():
-                if f'<<{cmd_fn_label}>>' in in_map['file']:
-                    new_fn = in_map['file'].replace(f'<<{cmd_fn_label}>>', cmd_fn)
-                    schema.input_map[in_map_idx]['file_raw'] = in_map['file']
-                    schema.input_map[in_map_idx]['file'] = new_fn
 
-        for out_map_idx, out_map in enumerate(schema.output_map):
-            for out_map_file_idx, out_map_file in enumerate(out_map['files']):
-                for cmd_fn_label, cmd_fn in command_file_names['output_map'].items():
-                    if f'<<{cmd_fn_label}>>' in out_map_file['name']:
-                        new_fn = out_map_file['name'].replace(
-                            f'<<{cmd_fn_label}>>',
-                            cmd_fn,
-                        )
-                        schema.output_map[out_map_idx]['files'][out_map_file_idx]['name_raw'] = out_map_file['name']
-                        schema.output_map[out_map_idx]['files'][out_map_file_idx]['name'] = new_fn
+        for cmd_idx, command in enumerate(cmd_group.get_commands(cmd_pth_idx)):
+
+            for cmd_fn_label, cmd_fn in command_file_names[cmd_idx]['input_map'].items():
+                for in_map_idx, in_map in enumerate(command.input_map):
+                    if f'<<{cmd_fn_label}>>' in in_map['file']:
+                        new_fn = in_map['file'].replace(f'<<{cmd_fn_label}>>', cmd_fn)
+                        command.input_map[in_map_idx]['file_raw'] = in_map['file']
+                        command.input_map[in_map_idx]['file'] = new_fn
+
+            for cmd_fn_label, cmd_fn in command_file_names[cmd_idx]['output_map'].items():
+                for out_map_idx, out_map in enumerate(command.output_map):
+                    for out_map_file_idx, out_map_file in enumerate(out_map['files']):
+                        if f'<<{cmd_fn_label}>>' in out_map_file['name']:
+                            new_fn = out_map_file['name'].replace(
+                                f'<<{cmd_fn_label}>>',
+                                cmd_fn,
+                            )
+                            command.output_map[out_map_idx]['files'][
+                                out_map_file_idx]['name_raw'] = out_map_file['name']
+                            command.output_map[out_map_idx]['files'][
+                                out_map_file_idx]['name'] = new_fn
 
     return task_lst
 
