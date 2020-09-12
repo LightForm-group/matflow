@@ -57,6 +57,8 @@ setup(
         'ruamel.yaml',
         'numpy',
         'pyperclip',
+        'black',
+        'autopep8',
     ],
     project_urls={
         'Github': 'https://github.com/Lightform-group/matflow',
