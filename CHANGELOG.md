@@ -1,9 +1,10 @@
 # Change Log
 
-## [0.2.9] - 2020.09.xx
+## [0.2.9] - 2020.09.17
 
 ### Added
 
+- Add scripting module for generating Python source scripts.
 - Default run options can be specified in the MatFlow configuration file for task, preparation and processing jobs using both "sticky" and "non-sticky" keys: `default_run_options`, `default_sticky_run_options`, `default_preparation_run_options`, `default_sticky_preparation_run_options`, `default_processing_run_options` and `default_sticky_processing_run_options`. The "sticky" defaults are always applied (but workflow-specified run options take precedence), whereas the "non-sticky" defaults are only applied if a task has no workflow-specified run options.
 
 ## [0.2.8] - 2020.09.01
