@@ -1318,7 +1318,7 @@ class Workflow(object):
         inputs = element.inputs.get_all()
 
         try:
-            outputs = func(**inputs)
+            outputs = func(**inputs) or {}
         except Exception as err:
             msg = (f'Task function "{func.__name__}" from module "{func.__module__}" '
                    f'in extension "{func.__module__.split(".")[0]}" has failed with '
