@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.10] - 2020.09.29
+
+### Fixed 
+
+- Fix if a function mapper function does not return anything.
+
 ## [0.2.9] - 2020.09.17
 
 ### Added
