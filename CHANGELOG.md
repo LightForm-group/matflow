@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.11] - 2020.09.29
+
+### Fixed
+
+- Resolve `~` in task schema and software file paths specified in the configuration file.
+
 ## [0.2.10] - 2020.09.29
 
 ### Fixed 
