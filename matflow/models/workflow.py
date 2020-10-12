@@ -1191,7 +1191,7 @@ class Workflow(object):
             func = in_map_lookup[in_map['file']]
             func(path=file_path, **in_map_inputs)
 
-            if in_map.get('save', False):
+            if in_map.get('save', False) and file_path.is_file():
                 # Save generated file as string in workflow:
                 with file_path.open('r') as handle:
                     file_dat = handle.read()
@@ -1397,7 +1397,7 @@ class Workflow(object):
                 file_paths.append(out_file_path)
 
                 # Save generated file as string in workflow:
-                if i['save']:
+                if i['save'] and out_file_path.is_file():
                     with out_file_path.open('r') as handle:
                         file_dat = handle.read()
                     if is_array:

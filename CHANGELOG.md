@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.x.xx] - xxxx.xx.xx
+
+### Fixed
+
+- Only save input/output map files if they exist!
+
 ## [0.2.11] - 2020.09.29
 
 ### Fixed
