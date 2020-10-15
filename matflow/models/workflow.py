@@ -33,7 +33,7 @@ from matflow.errors import (
     UnexpectedSourceMapReturnError,
 )
 from matflow.hicklable import to_hicklable
-from matflow.utils import parse_times, zeropad, datetime_to_dict
+from matflow.utils import parse_times, zeropad, datetime_to_dict, get_nested_item
 from matflow.models.command import DEFAULT_FORMATTERS
 from matflow.models.construction import init_tasks
 from matflow.models.software import SoftwareInstance
@@ -85,10 +85,11 @@ class Workflow(object):
         '_history',
         '_archive',
         '_archive_excludes',
+        '_figures',
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extends=None, archive=None,
-                 archive_excludes=None, check_integrity=True, profile=None,
+                 archive_excludes=None, figures=None, check_integrity=True, profile=None,
                  __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
@@ -102,6 +103,9 @@ class Workflow(object):
         self._profile = profile
         self._archive = archive
         self._archive_excludes = archive_excludes
+        self._figures = [{'idx': idx, **i}
+                         for idx, i in enumerate(figures)
+                         ] if figures else []
 
         tasks, elements_idx = init_tasks(self, tasks, self.is_from_file, check_integrity)
         self._tasks = tasks
@@ -247,6 +251,10 @@ class Workflow(object):
     @property
     def tasks(self):
         return self._tasks
+
+    @property
+    def figures(self):
+        return self._figures
 
     @property
     def elements_idx(self):
@@ -1099,6 +1107,7 @@ class Workflow(object):
         obj = {
             'name': obj_json['name'],
             'tasks': obj_json['tasks'],
+            'figures': obj_json['figures'],
             'stage_directory': obj_json['stage_directory'],
             'profile': obj_json['profile'],
             'extends': obj_json['extends'],
@@ -1482,3 +1491,59 @@ class Workflow(object):
 
         task.status = TaskStatus.complete
         self._append_history(WorkflowAction.process_task)
+
+    def get_workflow_data(self, address):
+        """Get workflow data according to its address"""
+        output_name, address = address[0], address[1:]
+        for task in self.tasks:
+            for elem in task.elements:
+                for output_param in list(elem.outputs.get_name_map().keys()):
+                    if output_param == output_name:
+                        output = elem.outputs.get(output_param)
+                        out = get_nested_item(output, address)
+                        return out
+
+    def get_figure_data(self, fig_idx):
+        """Get x-y data for a simple workflow figure from a figure spec"""
+        fig_spec = self.figures[fig_idx]
+        x_data = self.get_workflow_data(fig_spec['x'])
+        y_data = self.get_workflow_data(fig_spec['y'])
+        fig_data = {
+            'x': x_data,
+            'y': y_data,
+        }
+        return fig_data
+
+    def get_figure_object(self, fig_idx, backend='plotly'):
+
+        allowed_backs = ['plotly', 'matplotlib']
+        if backend not in allowed_backs:
+            raise ValueError(f'`backend` should be one of: {allowed_backs}')
+
+        fig_spec = self.figures[fig_idx]
+        fig_dat = self.get_figure_data(fig_idx)
+
+        if backend == 'plotly':
+            from plotly import graph_objects
+            layout = {
+                'xaxis_title': fig_spec.get('x_label'),
+                'yaxis_title': fig_spec.get('y_label'),
+                'margin_t': 35,
+            }
+            fig = graph_objects.Figure(fig_dat, layout)
+
+        elif backend == 'matplotlib':
+            from matplotlib import pyplot as plt
+            plt.plot(fig_dat['x'], fig_dat['y'])
+            fig = plt.gcf()
+            plt.close()
+
+        return fig
+
+    def show_figure(self, fig_idx, backend='plotly'):
+        fig = self.get_figure_object(fig_idx, backend)
+        if backend == 'plotly':
+            from plotly import graph_objects
+            return graph_objects.FigureWidget(fig.data, fig.layout)
+        elif backend == 'matplotlib':
+            return fig
