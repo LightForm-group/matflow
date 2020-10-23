@@ -424,3 +424,12 @@ def get_workflow_paths(base_dir, quiet=True):
 
 def order_workflow_paths_by_date(workflow_paths):
     return sorted(workflow_paths, key=lambda x: x['timestamp'])
+
+
+def nested_dict_arrays_to_list(obj):
+    if isinstance(obj, np.ndarray):
+        obj = obj.tolist()
+    elif isinstance(obj, dict):
+        for key, val in obj.items():
+            obj[key] = nested_dict_arrays_to_list(val)
+    return obj

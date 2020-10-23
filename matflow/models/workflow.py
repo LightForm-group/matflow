@@ -16,6 +16,7 @@ from pathlib import Path
 from pprint import pprint
 from subprocess import run, PIPE
 from warnings import warn
+import time
 
 import h5py
 import hickle
@@ -33,12 +34,18 @@ from matflow.errors import (
     UnexpectedSourceMapReturnError,
 )
 from matflow.hicklable import to_hicklable
-from matflow.utils import parse_times, zeropad, datetime_to_dict, get_nested_item
 from matflow.models.command import DEFAULT_FORMATTERS
 from matflow.models.construction import init_tasks
 from matflow.models.software import SoftwareInstance
 from matflow.models.task import TaskStatus
 from matflow.models.parameters import Parameters
+from matflow.utils import (
+    parse_times,
+    zeropad,
+    datetime_to_dict,
+    get_nested_item,
+    nested_dict_arrays_to_list,
+)
 
 
 def requires_ids(func):
@@ -1547,3 +1554,208 @@ class Workflow(object):
             return graph_objects.FigureWidget(fig.data, fig.layout)
         elif backend == 'matplotlib':
             return fig
+
+    @staticmethod
+    def get_element_data_map(file_path):
+        """Get the element_data group name for all inputs/outputs/files.
+
+        Parameters
+        ----------
+        file_path : str or Path
+            Path to the HDF5 workflow file.
+
+        Returns
+        -------
+        data_map : list of list of dict
+            For each task and for each element, a dict for inputs, outputs and files is
+            returned that maps the parameter to its /element_data group name.
+        """
+
+        with h5py.File(str(file_path), 'r') as handle:
+
+            idx_map = {int(re.search('(\d+)', i).group()): i
+                       for i in handle['/element_data']}
+
+            tasks_path = "/workflow_obj/data/'tasks'/data"
+            task_lists = []
+            for task_group in handle[tasks_path].values():
+                element_path = task_group.name + "/'elements'/data"
+
+                # print(f'task_group: {task_group}')
+                element_dicts = []
+                for elem_group in handle[element_path].values():
+                    # print(f'elem_group: {elem_group}')
+                    params_paths = {
+                        'inputs': elem_group.name + "/'inputs_data_idx'/data",
+                        'outputs': elem_group.name + "/'outputs_data_idx'/data",
+                        'files': elem_group.name + "/'files_data_idx'/data",
+                    }
+                    params_dict = {k: {} for k in params_paths.keys()}
+                    for param_type, param_path in params_paths.items():
+                        for param_name_quoted, param_group in handle[param_path].items():
+                            param_name = param_name_quoted[1:-1]
+                            elem_idx = param_group['data'][()]
+                            if isinstance(elem_idx, np.ndarray):
+                                elem_idx = elem_idx.tolist()
+                            else:
+                                elem_idx = [elem_idx]
+                            # print(f'param_name: {param_name}')
+                            # print(f'param_type: {param_type}')
+                            # print(f'elem_idx: type: {type(elem_idx)} {elem_idx}')
+                            params_dict[param_type].update(
+                                {param_name: [idx_map[i] for i in elem_idx]}
+                            )
+                    element_dicts.append(params_dict)
+
+                task_lists.append(element_dicts)
+
+        return task_lists
+
+    @staticmethod
+    def get_all_element_parameters(file_path, task_idx, element_idx, convert_numpy=False):
+        data_map = Workflow.get_element_data_map(file_path)
+        all_params = {
+            'inputs': {},
+            'outputs': {},
+            'files': {},
+        }
+        with h5py.File(file_path, 'r') as handle:
+            for param_type, params in data_map[task_idx][element_idx].items():
+                for name, data_idx in params.items():
+                    all_params[param_type].update({name: []})
+                    for data_idx_i in data_idx:
+                        dat_path = f'/element_data/{data_idx_i}'
+                        dat = hickle.load(handle, path=dat_path)
+                        if convert_numpy:
+                            dat = nested_dict_arrays_to_list(dat)
+                        all_params[param_type][name].append(dat)
+
+        return all_params
+
+    @staticmethod
+    def get_task_parameter_data(file_path, task_idx, convert_numpy=False):
+        data_map = Workflow.get_element_data_map(file_path)
+        all_elems = []
+        with h5py.File(file_path, 'r') as handle:
+            for elem in data_map[task_idx]:
+                all_params = {
+                    'inputs': {},
+                    'outputs': {},
+                    'files': {},
+                }
+                for param_type, params in elem.items():
+                    for name, data_idx in params.items():
+                        all_params[param_type].update({name: []})
+                        for data_idx_i in data_idx:
+                            dat_path = f'/element_data/{data_idx_i}'
+                            dat = hickle.load(handle, path=dat_path)
+                            if convert_numpy:
+                                dat = nested_dict_arrays_to_list(dat)
+                            all_params[param_type][name].append(dat)
+                all_elems.append(all_params)
+
+        return all_elems
+
+    @staticmethod
+    def swap_task_parameter_data_indexing(task_parameter_data):
+        """Restructure the task parameter data such that the multiple
+        element values of a given parameter are located together in a list
+        for each parameter."""
+        out = {
+            'inputs': {},
+            'outputs': {},
+            'files': {},
+        }
+        for elem_dat in task_parameter_data:
+            for param_type in out.keys():
+                for param_name, param_val in elem_dat[param_type].items():
+                    if param_name not in out[param_type]:
+                        out[param_type].update({param_name: [param_val]})
+                    else:
+                        out[param_type][param_name].append(param_val)
+        return out
+
+    @staticmethod
+    def get_schema_info(file_path, task_idx):
+        """Get schema input aliases, output names, input and output maps directly
+        from the HDF5 file."""
+
+        task_group_path = f"/workflow_obj/data/'tasks'/data/data_{task_idx}"
+        schema_path = task_group_path + f"/'schema'/data"
+
+        with h5py.File(file_path, 'r') as handle:
+
+            input_aliases = []
+            ins_path = schema_path + f"/'inputs'/data"
+            for ins_group in handle[ins_path].values():
+                ins_alias_path = ins_group.name + f"/'alias'/data"
+                ins_alias = handle[ins_alias_path][()]
+                input_aliases.append(ins_alias)
+
+            outputs = [i.decode() for i in handle[schema_path + f"/'outputs'/data"][()]]
+
+            input_maps = []
+            ins_maps_path = schema_path + f"/'input_map'/data"
+            for in_map_group in handle[ins_maps_path].values():
+                in_map_file_path = in_map_group.name + f"/'file'/data"
+                in_map_file = handle[in_map_file_path][()]
+                in_map_ins = [i.decode()
+                              for i in handle[in_map_group.name + f"/'inputs'/data"][()]]
+                in_map_i = {
+                    'file': in_map_file,
+                    'inputs': in_map_ins,
+                }
+                input_maps.append(in_map_i)
+
+            output_maps = []
+            outs_maps_path = schema_path + f"/'output_map'/data"
+            for out_map_group in handle[outs_maps_path].values():
+                out_map_output_path = out_map_group.name + f"/'output'/data"
+                out_map_output = handle[out_map_output_path][()]
+                out_map_files = []
+                for i in handle[out_map_group.name + f"/'files'/data"].values():
+                    omf_name_path = i.name + f"/'name'/data"
+                    out_map_files.append(handle[omf_name_path][()])
+                out_map_i = {
+                    'files': out_map_files,
+                    'output': out_map_output,
+                }
+                output_maps.append(out_map_i)
+
+        schema_info = {
+            'input_aliases': input_aliases,
+            'outputs': outputs,
+            'input_map': input_maps,
+            'output_map': output_maps,
+        }
+        return schema_info
+
+    @staticmethod
+    def get_task_name_friendly(file_path, task_idx):
+        task_name_path = f"/workflow_obj/data/'tasks'/data/data_{task_idx}/'name'/data"
+        with h5py.File(file_path, 'r') as handle:
+            task_name = handle[task_name_path][()]
+            name = '{}{}'.format(task_name[0].upper(), task_name[1:]).replace('_', ' ')
+            return name
+
+    @staticmethod
+    def get_workflow_tasks_info(file_path):
+        tasks_info = []
+        tasks_path = "/workflow_obj/data/'tasks'/data"
+        with h5py.File(file_path, 'r') as handle:
+            for task_idx, task_group in enumerate(handle[tasks_path].values()):
+                name = handle[task_group.name + "/'name'/data"][()]
+                name_friendly = '{}{}'.format(name[0].upper(), name[1:]).replace('_', ' ')
+                schema_method = handle[task_group.name +
+                                       "/'schema'/data/'method'/data"][()]
+                schema_impl = handle[task_group.name +
+                                     "/'schema'/data/'implementation'/data"][()]
+                task_dict = {
+                    'name': name,
+                    'name_friendly': name_friendly,
+                    'task_idx': task_idx,
+                    'schema_method': schema_method,
+                    'schema_implementation': schema_impl,
+                }
+                tasks_info.append(task_dict)
+        return tasks_info
