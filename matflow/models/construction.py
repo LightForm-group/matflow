@@ -1039,7 +1039,7 @@ def get_element_idx(task_lst, dep_idx):
                         k not in consumed_groups
                     ):
                         if not non_unit_group_sizes[up_task['task_idx']]:
-                            prop_groups.update({k: v})
+                            prop_groups.update({k: copy.deepcopy(v)})
                         else:
                             msg = (
                                 f'Cannot propagate group "{k}" from task '

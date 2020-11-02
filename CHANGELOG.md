@@ -5,6 +5,7 @@
 ### Fixed
 
 - Only save input/output map files if they exist!
+- Fix bug in propagating groups correctly
 
 ## [0.2.11] - 2020.09.29
 
