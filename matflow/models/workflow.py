@@ -121,7 +121,7 @@ class Workflow(object):
         self._elements_idx = elements_idx
 
         if not self.is_from_file:
-            self._check_cloud_archive()
+            self._check_archive_connection()
             self._history = []
             self._append_history(WorkflowAction.generate)
 
@@ -162,10 +162,19 @@ class Workflow(object):
     def __len__(self):
         return len(self.tasks)
 
-    def _check_cloud_archive(self):
-        if self.archive and 'cloud_provider' in self.archive_definition:
+    def _check_archive_connection(self):
+        if not self.archive:
+            return
+
+        # TODO: should this whole function be outsourced to hpcflow?
+
+        # TODO: check local archive path exists
+
+        if 'cloud_provider' in self.archive_definition:
             provider = self.archive_definition['cloud_provider']
             hpcflow.cloud_connect(provider, config_dir=Config.get('hpcflow_config_dir'))
+
+        # TODO when supported in DataLight, add datalight.check_access(...)
 
     def _append_history(self, action, **kwargs):
         'Append a new history event.'
