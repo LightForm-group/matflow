@@ -5,11 +5,14 @@ import io
 import collections
 import copy
 import itertools
+import h5py
 import numpy as np
 import random
 import re
 import time
 from contextlib import redirect_stdout
+from datetime import datetime
+from pathlib import Path
 
 from ruamel.yaml import YAML
 
@@ -377,3 +380,56 @@ def extract_variable_names(source_str, delimiters):
     var_names = re.findall(pattern, source_str)
 
     return var_names
+
+
+def get_nested_item(obj, address):
+    out = obj
+    for i in address:
+        out = out[i]
+    return out
+
+
+def get_workflow_paths(base_dir, quiet=True):
+    base_dir = Path(base_dir)
+    wkflows = []
+    for i in base_dir.glob('**/*'):
+        if i.name == 'workflow.hdf5':
+            wk_full_path = i
+            wk_rel_path = wk_full_path.relative_to(base_dir)
+            wk_disp_path = wk_rel_path.parent
+            with h5py.File(wk_full_path, 'r') as handle:
+                try:
+                    try:
+                        handle["/workflow_obj/data/'figures'"]
+                    except KeyError:
+                        if not quiet:
+                            print(f'No "figures" key for workflow: {wk_disp_path}.')
+                        continue
+                    timestamp_path = "/workflow_obj/data/'history'/data/data_0/'timestamp'/data"
+                    timestamp_dict = {k[1:-1]: v['data'][()]
+                                      for k, v in handle[timestamp_path].items()}
+                    timestamp = datetime(**timestamp_dict)
+                    wkflows.append({
+                        'ID': handle.attrs['workflow_id'],
+                        'full_path': str(wk_full_path),
+                        'display_path': str(wk_disp_path),
+                        'timestamp': timestamp,
+                        'display_timestamp': timestamp.strftime(r'%Y-%m-%d %H:%M:%S'),
+                    })
+                except:
+                    if not quiet:
+                        print(f'No timestamp for workflow: {wk_disp_path}')
+    return wkflows
+
+
+def order_workflow_paths_by_date(workflow_paths):
+    return sorted(workflow_paths, key=lambda x: x['timestamp'])
+
+
+def nested_dict_arrays_to_list(obj):
+    if isinstance(obj, np.ndarray):
+        obj = obj.tolist()
+    elif isinstance(obj, dict):
+        for key, val in obj.items():
+            obj[key] = nested_dict_arrays_to_list(val)
+    return obj

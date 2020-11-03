@@ -1,9 +1,29 @@
 # Change Log
 
-## [0.2.9] - 2020.09.xx
+## [0.x.xx] - xxxx.xx.xx
+
+### Fixed
+
+- Only save input/output map files if they exist!
+- Fix bug in propagating groups correctly
+
+## [0.2.11] - 2020.09.29
+
+### Fixed
+
+- Resolve `~` in task schema and software file paths specified in the configuration file.
+
+## [0.2.10] - 2020.09.29
+
+### Fixed 
+
+- Fix if a function mapper function does not return anything.
+
+## [0.2.9] - 2020.09.17
 
 ### Added
 
+- Add scripting module for generating Python source scripts.
 - Default run options can be specified in the MatFlow configuration file for task, preparation and processing jobs using both "sticky" and "non-sticky" keys: `default_run_options`, `default_sticky_run_options`, `default_preparation_run_options`, `default_sticky_preparation_run_options`, `default_processing_run_options` and `default_sticky_processing_run_options`. The "sticky" defaults are always applied (but workflow-specified run options take precedence), whereas the "non-sticky" defaults are only applied if a task has no workflow-specified run options.
 
 ## [0.2.8] - 2020.09.01

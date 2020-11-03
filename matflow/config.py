@@ -124,8 +124,8 @@ class Config(object):
             return
 
         config_dat, _ = Config.get_config_file(config_dir)
-        schema_sources = [Path(i) for i in config_dat['task_schema_sources']]
-        software_sources = [Path(i) for i in config_dat['software_sources']]
+        schema_sources = [Path(i).expanduser() for i in config_dat['task_schema_sources']]
+        software_sources = [Path(i).expanduser() for i in config_dat['software_sources']]
 
         # Validate parallel_modes:
         ALLOWED_PARA_MODES = ['MPI', 'OpenMP']
