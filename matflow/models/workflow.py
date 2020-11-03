@@ -93,11 +93,12 @@ class Workflow(object):
         '_archive',
         '_archive_excludes',
         '_figures',
+        '_metadata',
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extends=None, archive=None,
-                 archive_excludes=None, figures=None, check_integrity=True, profile=None,
-                 __is_from_file=False):
+                 archive_excludes=None, figures=None, metadata=None,
+                 check_integrity=True, profile=None, __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
@@ -113,6 +114,7 @@ class Workflow(object):
         self._figures = [{'idx': idx, **i}
                          for idx, i in enumerate(figures)
                          ] if figures else []
+        self._metadata = metadata or {}
 
         tasks, elements_idx = init_tasks(self, tasks, self.is_from_file, check_integrity)
         self._tasks = tasks
@@ -262,6 +264,10 @@ class Workflow(object):
     @property
     def figures(self):
         return self._figures
+
+    @property
+    def metadata(self):
+        return self._metadata
 
     @property
     def elements_idx(self):
@@ -1119,13 +1125,16 @@ class Workflow(object):
             'extends': obj_json['extends'],
         }
 
+        # For loading older workflow files without these attributes:
         WARN_ON_MISSING = [
             'figures',
+            'metadata',
         ]
-        for i in WARN_ON_MISSING:
-            if i not in obj_json:
-                warn(f'"{i}" key missing from this workflow.')
-            obj.update({i: obj_json.get('figures', [])})
+        for key in WARN_ON_MISSING:
+            if key not in obj_json:
+                warn(f'"{key}" key missing from this workflow.')
+            else:
+                obj.update({key: obj_json[key]})
 
         workflow = cls(
             **obj,
