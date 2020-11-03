@@ -1114,11 +1114,18 @@ class Workflow(object):
         obj = {
             'name': obj_json['name'],
             'tasks': obj_json['tasks'],
-            'figures': obj_json['figures'],
             'stage_directory': obj_json['stage_directory'],
             'profile': obj_json['profile'],
             'extends': obj_json['extends'],
         }
+
+        WARN_ON_MISSING = [
+            'figures',
+        ]
+        for i in WARN_ON_MISSING:
+            if i not in obj_json:
+                warn(f'"{i}" key missing from this workflow.')
+            obj.update({i: obj_json.get('figures', [])})
 
         workflow = cls(
             **obj,
