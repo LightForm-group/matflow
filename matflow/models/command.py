@@ -110,12 +110,14 @@ class CommandGroup(object):
                 no_condition_count += 1
 
             cmds_idx = cmd_pth['commands_idx']
+            num_cmds = len(self.all_commands)
             if (
                 not isinstance(cmds_idx, list) or
-                not all([i in range(len(self.all_commands)) for i in cmds_idx])
+                not all([i in range(num_cmds) for i in cmds_idx])
             ):
                 msg = (f'`commands_idx` must be a list of integer indices into '
-                       f'`all_commands`.')
+                       f'`all_commands` of length {num_cmds}, but received: '
+                       f'"{cmds_idx}".')
                 raise CommandError(msg)
 
         if no_condition_count > 1:
