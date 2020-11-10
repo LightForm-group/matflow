@@ -371,10 +371,12 @@ class CommandGroup(object):
 class Command(object):
     'Class to represent a command to be executed by a shell.'
 
-    def __init__(self, command, options=None, parameters=None, stdin=None, stdout=None,
-                 stderr=None, parallel_mode=None, input_map=None, output_map=None):
+    def __init__(self, command, software, options=None, parameters=None, stdin=None,
+                 stdout=None, stderr=None, parallel_mode=None, input_map=None,
+                 output_map=None):
 
         self.command = command
+        self.software = software
         self.parallel_mode = parallel_mode
 
         self.options = options or []
@@ -387,7 +389,7 @@ class Command(object):
         self.output_map = output_map or []
 
     def __repr__(self):
-        out = f'{self.__class__.__name__}({self.command!r}'
+        out = f'{self.__class__.__name__}({self.command!r}, software={self.software!r}'
         if self.options:
             out += f', options={self.options!r}'
         if self.parameters:
