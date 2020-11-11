@@ -94,10 +94,11 @@ class Workflow(object):
         '_archive_excludes',
         '_figures',
         '_metadata',
+        '_num_iterations',
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extends=None, archive=None,
-                 archive_excludes=None, figures=None, metadata=None,
+                 archive_excludes=None, figures=None, metadata=None, num_iterations=None,
                  check_integrity=True, profile=None, __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
@@ -115,8 +116,10 @@ class Workflow(object):
                          for idx, i in enumerate(figures)
                          ] if figures else []
         self._metadata = metadata or {}
+        self._num_iterations = num_iterations or 1
 
-        tasks, elements_idx = init_tasks(self, tasks, self.is_from_file, check_integrity)
+        tasks, elements_idx = init_tasks(self, tasks, self.is_from_file, num_iterations,
+                                         check_integrity=check_integrity)
         self._tasks = tasks
         self._elements_idx = elements_idx
 
@@ -277,6 +280,10 @@ class Workflow(object):
     @property
     def metadata(self):
         return self._metadata
+
+    @property
+    def num_iterations(self):
+        return self._num_iterations
 
     @property
     def elements_idx(self):
@@ -447,7 +454,7 @@ class Workflow(object):
             if task.software_instance.requires_sources:
                 self.get_task_sources_path(task_idx).mkdir()
 
-            num_elems = elems_idx['num_elements']
+            num_elems = elems_idx['num_elements_per_iteration']
             # Generate element directories:
             for i in range(num_elems):
                 self.get_element_path(task_idx, i).mkdir(exist_ok=True)
@@ -1138,6 +1145,7 @@ class Workflow(object):
         WARN_ON_MISSING = [
             'figures',
             'metadata',
+            'num_iterations',
         ]
         for key in WARN_ON_MISSING:
             if key not in obj_json:

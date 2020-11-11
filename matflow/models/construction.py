@@ -791,11 +791,12 @@ def resolve_group(group, local_inputs, repeats_idx):
 
     group_resolved = copy.deepcopy(group)
     group_resolved.update({
-        'group_idx': group_idx,
-        'group_element_idx': group_elem_idx,
-        'num_groups': len(group_elem_idx),
-        'group_size': len(group_elem_idx[0]),
+        'group_idx_per_iteration': group_idx,
+        'group_element_idx_per_iteration': group_elem_idx,
+        'num_groups_per_iteration': len(group_elem_idx),
+        'group_size_per_iteration': len(group_elem_idx[0]),
         'group_by': new_group_by,
+        'num_groups': len(group_elem_idx),
     })
 
     if 'merge_priority' not in group_resolved:
@@ -804,7 +805,7 @@ def resolve_group(group, local_inputs, repeats_idx):
     return group_resolved
 
 
-def get_element_idx(task_lst, dep_idx):
+def get_element_idx(task_lst, dep_idx, num_iterations):
     """For each task, find the element indices that determine the elements to be used
     (i.e from upstream tasks) to populate task inputs.
 
@@ -857,8 +858,11 @@ def get_element_idx(task_lst, dep_idx):
             input_idx = arange(loc_in['length'])
             elem_idx_i = {
                 'num_elements': loc_in['length'],
+                'num_elements_per_iteration': loc_in['length'],
+                'num_iterations': num_iterations,
                 'groups': groups,
                 'inputs': {i: {'input_idx': input_idx} for i in loc_in['inputs']},
+                'iteration_idx': [0] * loc_in['length'],
             }
 
         else:
@@ -936,8 +940,8 @@ def get_element_idx(task_lst, dep_idx):
                 if in_group['group_name'] != 'default':
                     consumed_groups.append('user_group_' + in_group['group_name'])
 
-                incoming_size = in_group['num_groups']
-                group_size = in_group['group_size']
+                incoming_size = in_group['num_groups_per_iteration']
+                group_size = in_group['group_size_per_iteration']
                 if group_size > 1:
                     non_unit_group_sizes.update({in_group['task_idx']: True})
                 elif in_group['task_idx'] not in non_unit_group_sizes:
@@ -964,7 +968,7 @@ def get_element_idx(task_lst, dep_idx):
                             input_alias: {
                                 'task_idx': in_group['task_idx'],
                                 'group': in_group['group_name'],
-                                'element_idx': in_group['group_element_idx'],
+                                'element_idx': in_group['group_element_idx_per_iteration'],
                             }
                         })
                         continue
@@ -986,7 +990,7 @@ def get_element_idx(task_lst, dep_idx):
                             'task_idx': in_group['task_idx'],
                             'group': in_group['group_name'],
                             'element_idx': tile(
-                                in_group['group_element_idx'],
+                                in_group['group_element_idx_per_iteration'],
                                 existing_size
                             ),
                         }
@@ -995,16 +999,20 @@ def get_element_idx(task_lst, dep_idx):
                     # Generate new groups for each group name:
                     for g_name, g in groups.items():
 
-                        new_g_idx = extend_index_list(g['group_idx'], incoming_size)
+                        new_g_idx = extend_index_list(
+                            g['group_idx_per_iteration'], incoming_size)
                         new_ge_idx = to_sub_list(
                             extend_index_list(
-                                flatten_list(g['group_element_idx']),
+                                flatten_list(g['group_element_idx_per_iteration']),
                                 incoming_size),
-                            g['group_size']
+                            g['group_size_per_iteration']
                         )
-                        groups[g_name]['group_idx'] = new_g_idx
-                        groups[g_name]['group_element_idx'] = new_ge_idx
-                        groups[g_name]['num_groups'] = g['num_groups'] * incoming_size
+                        new_num_groups = g['num_groups_per_iteration'] * incoming_size
+
+                        groups[g_name]['group_idx_per_iteration'] = new_g_idx
+                        groups[g_name]['group_element_idx_per_iteration'] = new_ge_idx
+                        groups[g_name]['num_groups_per_iteration'] = new_num_groups
+                        groups[g_name]['num_groups'] = new_num_groups
 
                     existing_size *= incoming_size
 
@@ -1025,7 +1033,7 @@ def get_element_idx(task_lst, dep_idx):
                         input_alias: {
                             'task_idx': in_group['task_idx'],
                             'group': in_group['group_name'],
-                            'element_idx': in_group['group_element_idx'],
+                            'element_idx': in_group['group_element_idx_per_iteration'],
                         }
                     })
 
@@ -1052,27 +1060,70 @@ def get_element_idx(task_lst, dep_idx):
 
             for group_name, g in prop_groups.items():
 
-                group_reps = existing_size // (g['num_groups'] * g['group_size'])
-                new_g_idx = extend_index_list(g['group_idx'], group_reps)
+                group_reps = existing_size // (g['num_groups_per_iteration']
+                                               * g['group_size_per_iteration'])
+                new_g_idx = extend_index_list(g['group_idx_per_iteration'], group_reps)
                 new_ge_idx = to_sub_list(
                     extend_index_list(
-                        flatten_list(g['group_element_idx']),
+                        flatten_list(g['group_element_idx_per_iteration']),
                         group_reps),
-                    g['group_size']
+                    g['group_size_per_iteration']
                 )
-                prop_groups[group_name]['group_idx'] = new_g_idx
-                prop_groups[group_name]['group_element_idx'] = new_ge_idx
-                prop_groups[group_name]['num_groups'] = g['num_groups'] * group_reps
+                new_num_groups = g['num_groups_per_iteration'] * group_reps
+
+                prop_groups[group_name]['group_idx_per_iteration'] = new_g_idx
+                prop_groups[group_name]['group_element_idx_per_iteration'] = new_ge_idx
+                prop_groups[group_name]['num_groups_per_iteration'] = new_num_groups
+                prop_groups[group_name]['num_groups'] = new_num_groups
 
             all_groups = {**groups, **prop_groups}
 
             elem_idx_i = {
                 'num_elements': existing_size,
+                'num_elements_per_iteration': existing_size,
+                'num_iterations': 1,
                 'inputs': ins_dict,
                 'groups': all_groups,
+                'iteration_idx': [0] * existing_size,
             }
 
         element_idx.append(elem_idx_i)
+
+    # Add iterations:
+    for idx, elem_idx_i in enumerate(element_idx):
+
+        new_iter_idx = [
+            iter_idx
+            for iter_idx in range(elem_idx_i['num_iterations'])
+            for _ in range(elem_idx_i['num_elements_per_iteration'])
+        ]
+        element_idx[idx]['iteration_idx'] = new_iter_idx
+
+        for input_alias, inputs_idx in elem_idx_i['inputs'].items():
+
+            ins_task_idx = inputs_idx.get('task_idx')
+
+            if ins_task_idx is not None:
+                # For now, assume non-local inputs are parametrised from the same
+                # iteration of the upstream task:
+
+                num_elems_per_iter = element_idx[ins_task_idx][
+                    'num_elements_per_iteration'
+                ]
+
+                new_elems_idx = []
+                for iter_idx in range(elem_idx_i['num_iterations']):
+                    for i in inputs_idx['element_idx']:
+                        new_elems_idx.append(
+                            [j + (iter_idx * num_elems_per_iter) for j in i]
+                        )
+                element_idx[idx]['inputs'][input_alias]['element_idx'] = new_elems_idx
+
+            else:
+                # Copy local inputs' `inputs_idx` (local inputs must be the same for
+                # all iterations):
+                new_ins_idx = tile(inputs_idx['input_idx'], elem_idx_i['num_iterations'])
+                element_idx[idx]['inputs'][input_alias]['input_idx'] = new_ins_idx
 
     return element_idx
 
@@ -1157,7 +1208,7 @@ def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
     return task_lst
 
 
-def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
+def init_tasks(workflow, task_lst, is_from_file, num_iterations, check_integrity=True):
     """Construct and validate Task objects and the element indices
     from which to populate task inputs.
 
@@ -1206,7 +1257,7 @@ def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
     task_lst = init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity)
 
     # Find element indices that determine the elements from which task inputs are drawn:
-    element_idx = get_element_idx(task_lst, dep_idx)
+    element_idx = get_element_idx(task_lst, dep_idx, num_iterations)
 
     task_objs = []
     for task_idx, task_dict in enumerate(task_lst):
