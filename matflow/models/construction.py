@@ -1081,7 +1081,7 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
             elem_idx_i = {
                 'num_elements': existing_size,
                 'num_elements_per_iteration': existing_size,
-                'num_iterations': 1,
+                'num_iterations': num_iterations,
                 'inputs': ins_dict,
                 'groups': all_groups,
                 'iteration_idx': [0] * existing_size,
@@ -1098,6 +1098,7 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
             for _ in range(elem_idx_i['num_elements_per_iteration'])
         ]
         element_idx[idx]['iteration_idx'] = new_iter_idx
+        element_idx[idx]['num_elements'] = len(new_iter_idx)
 
         for input_alias, inputs_idx in elem_idx_i['inputs'].items():
 
