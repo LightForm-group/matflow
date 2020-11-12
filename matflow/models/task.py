@@ -793,7 +793,7 @@ class Task(object):
         return fmt_commands, input_vars
 
     def get_prepare_task_commands(self, is_array=False):
-        cmd = f'matflow prepare-task --task-idx={self.task_idx}'
+        cmd = f'matflow prepare-task --task-idx={self.task_idx} --iteration-idx=$ITER_IDX'
         cmd += f' --array' if is_array else ''
         cmds = [cmd]
         if self.software_instance.task_preparation:
@@ -815,7 +815,7 @@ class Task(object):
         return out
 
     def get_process_task_commands(self, is_array=False):
-        cmd = f'matflow process-task --task-idx={self.task_idx}'
+        cmd = f'matflow process-task --task-idx={self.task_idx} --iteration-idx=$ITER_IDX'
         cmd += f' --array' if is_array else ''
         cmds = [cmd]
         if self.software_instance.task_processing:

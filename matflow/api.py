@@ -103,11 +103,11 @@ def load_workflow(directory, full_path=False):
     return workflow
 
 
-def prepare_task(task_idx, directory, is_array=False):
+def prepare_task(task_idx, iteration_idx, directory, is_array=False):
     'Prepare a task for execution by setting inputs and running input maps.'
     load_extensions()
     workflow = load_workflow(directory)
-    workflow.prepare_task(task_idx, is_array=is_array)
+    workflow.prepare_task(task_idx, iteration_idx, is_array=is_array)
 
 
 def prepare_task_element(task_idx, element_idx, directory, is_array=False):
@@ -117,11 +117,11 @@ def prepare_task_element(task_idx, element_idx, directory, is_array=False):
     workflow.prepare_task_element(task_idx, element_idx, is_array=is_array)
 
 
-def process_task(task_idx, directory, is_array=False):
+def process_task(task_idx, iteration_idx, directory, is_array=False):
     'Process a completed task by running the output map.'
     load_extensions()
     workflow = load_workflow(directory)
-    workflow.process_task(task_idx, is_array=is_array)
+    workflow.process_task(task_idx, iteration_idx, is_array=is_array)
 
 
 def process_task_element(task_idx, element_idx, directory, is_array=False):
@@ -167,3 +167,12 @@ def kill(directory):
 def cloud_connect(provider):
     Config.set_config()
     hpcflow_cloud_connect(provider, config_dir=Config.get('hpcflow_config_dir'))
+
+
+def write_element_directories(iteration_idx, directory):
+    'Generate element directories for a given iteration.'
+    load_extensions()
+    workflow = load_workflow(directory)
+    if iteration_idx < workflow.num_iterations:
+        workflow.write_element_directories(iteration_idx)
+        workflow.prepare_iteration(iteration_idx)

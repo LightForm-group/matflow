@@ -45,6 +45,7 @@ from matflow.utils import (
     datetime_to_dict,
     get_nested_item,
     nested_dict_arrays_to_list,
+    index,
 )
 
 
@@ -437,27 +438,18 @@ class Workflow(object):
         out = element_path.joinpath(f'task_process_{task.id}_element_{element_idx}.hdf5')
         return out
 
-    def write_directories(self):
-        'Generate task and element directories.'
-
-        if self.path.exists():
-            raise ValueError('Directories for this workflow already exist.')
-
-        self.path.mkdir(exist_ok=False)
+    def write_element_directories(self, iteration_idx):
+        'Generate element directories for a given iteration.'
 
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
-            # Generate task directory:
             task_idx = task.task_idx
-            self.get_task_path(task_idx).mkdir()
-
-            if task.software_instance.requires_sources:
-                self.get_task_sources_path(task_idx).mkdir()
-
             num_elems = elems_idx['num_elements_per_iteration']
+            iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
+
             # Generate element directories:
-            for i in range(num_elems):
-                self.get_element_path(task_idx, i).mkdir(exist_ok=True)
+            for elem_idx_i in iter_elem_idx:
+                self.get_element_path(task_idx, elem_idx_i).mkdir(exist_ok=True)
 
             # Copy any local input files to the element directories:
             for input_alias, inputs_idx in self.elements_idx[task_idx]['inputs'].items():
@@ -472,11 +464,11 @@ class Workflow(object):
                 input_dict = task.local_inputs['inputs'][input_name]
                 local_ins = [input_dict['vals'][i] for i in input_dict['vals_idx']]
 
-                for element_idx in range(num_elems):
+                for elem_idx_i in iter_elem_idx:
 
-                    file_path = local_ins[inputs_idx['input_idx'][element_idx]]
+                    file_path = local_ins[inputs_idx['input_idx'][elem_idx_i]]
                     file_path_full = self.stage_directory.joinpath(file_path)
-                    elem_path = self.get_element_path(task_idx, i)
+                    elem_path = self.get_element_path(task_idx, elem_idx_i)
                     dst_path = elem_path.joinpath(file_path_full.name)
 
                     if not file_path_full.is_file():
@@ -485,6 +477,46 @@ class Workflow(object):
                         raise ValueError(msg)
 
                     shutil.copyfile(file_path_full, dst_path)
+
+    def prepare_iteration(self, iteration_idx):
+
+        for elems_idx, task in zip(self.elements_idx, self.tasks):
+
+            num_elems = elems_idx['num_elements_per_iteration']
+            iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
+            cmd_line_inputs, input_vars = self._get_command_line_inputs(task.task_idx)
+
+            for local_in_name, var_name in input_vars.items():
+
+                var_file_name = '{}.txt'.format(var_name)
+
+                # Create text file in each element directory for each in `input_vars`:
+                for elem_idx_i in iter_elem_idx:
+
+                    task_elem_path = self.get_element_path(task.task_idx, elem_idx_i)
+                    in_val = cmd_line_inputs[local_in_name][elem_idx_i]
+
+                    var_file_path = task_elem_path.joinpath(var_file_name)
+                    with var_file_path.open('w') as handle:
+                        handle.write(in_val + '\n')
+
+    def write_directories(self):
+        'Generate task and element directories for the first iteration.'
+
+        if self.path.exists():
+            raise ValueError('Directories for this workflow already exist.')
+
+        self.path.mkdir(exist_ok=False)
+
+        for elems_idx, task in zip(self.elements_idx, self.tasks):
+
+            # Generate task directory:
+            self.get_task_path(task.task_idx).mkdir()
+
+            if task.software_instance.requires_sources:
+                self.get_task_sources_path(task.task_idx).mkdir()
+
+        self.write_element_directories(iteration_idx=0)
 
     def get_hpcflow_job_name(self, task, job_type, is_stats=False):
         """Get the scheduler job name for a given task index and job type.
@@ -531,6 +563,48 @@ class Workflow(object):
             out = f'{base}{task_idx_fmt}_src'
 
         return out
+
+    def _get_command_line_inputs(self, task_idx):
+
+        task = self.tasks[task_idx]
+        elems_idx = self.elements_idx[task_idx]
+        _, input_vars = task.get_formatted_commands()
+
+        cmd_line_inputs = {}
+        for local_in_name, local_in in task.local_inputs['inputs'].items():
+
+            if local_in_name in input_vars:
+                # TODO: We currently only consider input_vars for local inputs.
+
+                # Expand values for intra-task nesting:
+                values = [self.get_element_data(i)
+                          for i in local_in['vals_data_idx']]
+
+                # Format values:
+                fmt_func_scope = Config.get('CLI_arg_maps').get((
+                    task.schema.name,
+                    task.schema.method,
+                    task.schema.implementation
+                ))
+                fmt_func = None
+                if fmt_func_scope:
+                    fmt_func = fmt_func_scope.get(local_in_name)
+                if not fmt_func:
+                    fmt_func = DEFAULT_FORMATTERS.get(
+                        type(values[0]),
+                        lambda x: str(x)
+                    )
+
+                values_fmt = [fmt_func(i) for i in values]
+
+                # Expand values for inter-task nesting:
+                values_fmt_all = [
+                    values_fmt[i]
+                    for i in elems_idx['inputs'][local_in_name]['input_idx']
+                ]
+                cmd_line_inputs.update({local_in_name: values_fmt_all})
+
+        return cmd_line_inputs, input_vars
 
     @requires_path_exists
     def get_hpcflow_workflow(self):
@@ -595,41 +669,7 @@ class Workflow(object):
                     fmt_commands_new.append(i)
                 fmt_commands = fmt_commands_new
 
-                cmd_line_inputs = {}
-                for local_in_name, local_in in task.local_inputs['inputs'].items():
-                    if local_in_name in input_vars:
-                        # TODO: We currently only consider input_vars for local inputs.
-
-                        # Expand values for intra-task nesting:
-                        values = [self.get_element_data(i)
-                                  for i in local_in['vals_data_idx']]
-
-                        # Format values:
-                        fmt_func_scope = Config.get('CLI_arg_maps').get((
-                            task.schema.name,
-                            task.schema.method,
-                            task.schema.implementation
-                        ))
-                        fmt_func = None
-                        if fmt_func_scope:
-                            fmt_func = fmt_func_scope.get(local_in_name)
-                        if not fmt_func:
-                            fmt_func = DEFAULT_FORMATTERS.get(
-                                type(values[0]),
-                                lambda x: str(x)
-                            )
-
-                        values_fmt = [fmt_func(i) for i in values]
-
-                        # Expand values for inter-task nesting:
-                        values_fmt_all = [
-                            values_fmt[i]
-                            for i in elems_idx['inputs'][local_in_name]['input_idx']
-                        ]
-                        cmd_line_inputs.update({local_in_name: values_fmt_all})
-
                 for local_in_name, var_name in input_vars.items():
-
                     var_file_name = '{}.txt'.format(var_name)
                     variables.update({
                         var_name: {
@@ -640,16 +680,6 @@ class Workflow(object):
                             'value': '{}',
                         }
                     })
-
-                    # Create text file in each element directory for each in `input_vars`:
-                    for i in range(elems_idx['num_elements']):
-
-                        task_elem_path = self.get_element_path(task.task_idx, i)
-                        in_val = cmd_line_inputs[local_in_name][i]
-
-                        var_file_path = task_elem_path.joinpath(var_file_name)
-                        with var_file_path.open('w') as handle:
-                            handle.write(in_val + '\n')
 
             task_path_rel = str(self.get_task_path(task.task_idx).name)
 
@@ -795,6 +825,16 @@ class Workflow(object):
                 'archive_excludes': self.archive_excludes,
             })
 
+        command_groups.append({
+            'directory': '.',
+            'nesting': 'hold',
+            'commands': ('matflow write-element-directories '
+                         '--iteration-idx=$(($ITER_IDX+1))'),
+            'stats': False,
+            'scheduler_options': {},
+            'name': 'iterate',
+        })
+
         hf_data = {
             'parallel_modes': Config.get('parallel_modes'),
             'scheduler': 'sge',
@@ -803,6 +843,14 @@ class Workflow(object):
             'command_groups': command_groups,
             'variables': variables,
         }
+
+        if self.num_iterations > 1:
+            hf_data.update({
+                'loop': {
+                    'max_iterations': self.num_iterations,
+                    'groups': list(range(len(command_groups))),
+                }
+            })
 
         if self.archive:
             hf_data.update({'archive_locations': {self.archive: self.archive_definition}})
@@ -1065,6 +1113,9 @@ class Workflow(object):
 
         self.loaded_path = path
 
+        # Write command line argument files into element dirs:
+        self.prepare_iteration(iteration_idx=0)
+
     @classmethod
     def load_HDF5_file(cls, path=None, full_path=False, check_integrity=True):
         """Load workflow from an HDF5 file.
@@ -1297,7 +1348,7 @@ class Workflow(object):
                 handle.write(file_str)
 
     @requires_path_exists
-    def prepare_task(self, task_idx, is_array=False):
+    def prepare_task(self, task_idx, iteration_idx, is_array=False):
         """Prepare inputs and run input maps.
 
         Parameters
@@ -1310,7 +1361,10 @@ class Workflow(object):
         """
 
         task = self.tasks[task_idx]
-        for element in task.elements:
+        num_elems = self.elements_idx[task.task_idx]['num_elements_per_iteration']
+        iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
+
+        for element in index(task.elements, iter_elem_idx):
 
             if is_array:
 
@@ -1491,7 +1545,7 @@ class Workflow(object):
             hickle.dump(dat, temp_path)
 
     @requires_path_exists
-    def process_task(self, task_idx, is_array=False):
+    def process_task(self, task_idx, iteration_idx, is_array=False):
         """Process outputs from an executed task: run output map and save outputs.
 
         Parameters
@@ -1504,7 +1558,10 @@ class Workflow(object):
         """
 
         task = self.tasks[task_idx]
-        for element in task.elements:
+        num_elems = self.elements_idx[task.task_idx]['num_elements_per_iteration']
+        iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
+
+        for element in index(task.elements, iter_elem_idx):
 
             if is_array:
 
