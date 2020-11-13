@@ -104,7 +104,7 @@ def load_workflow(directory, full_path=False):
 
 
 def prepare_task(task_idx, iteration_idx, directory, is_array=False):
-    'Prepare a task for execution by setting inputs and running input maps.'
+    'Prepare a task (iteration) for execution by setting inputs and running input maps.'
     load_extensions()
     workflow = load_workflow(directory)
     workflow.prepare_task(task_idx, iteration_idx, is_array=is_array)
@@ -118,7 +118,7 @@ def prepare_task_element(task_idx, element_idx, directory, is_array=False):
 
 
 def process_task(task_idx, iteration_idx, directory, is_array=False):
-    'Process a completed task by running the output map.'
+    'Process a completed task (iteration) by running the output map.'
     load_extensions()
     workflow = load_workflow(directory)
     workflow.process_task(task_idx, iteration_idx, is_array=is_array)
