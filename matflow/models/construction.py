@@ -1281,4 +1281,4 @@ def init_tasks(workflow, task_lst, is_from_file, num_iterations, check_integrity
 
         task_objs.append(task)
 
-    return task_objs, element_idx
+    return task_objs, element_idx, dep_idx

@@ -90,6 +90,7 @@ class Workflow(object):
         '_stage_directory',
         '_tasks',
         '_elements_idx',
+        '_dependency_idx',
         '_history',
         '_archive',
         '_archive_excludes',
@@ -119,10 +120,17 @@ class Workflow(object):
         self._metadata = metadata or {}
         self._num_iterations = num_iterations or 1
 
-        tasks, elements_idx = init_tasks(self, tasks, self.is_from_file, num_iterations,
-                                         check_integrity=check_integrity)
+        tasks, elements_idx, dep_idx = init_tasks(
+            self,
+            tasks,
+            self.is_from_file,
+            self._num_iterations,
+            check_integrity=check_integrity
+        )
+
         self._tasks = tasks
         self._elements_idx = elements_idx
+        self._dependency_idx = dep_idx
 
         if not self.is_from_file:
             self._check_archive_connection()
@@ -289,6 +297,10 @@ class Workflow(object):
     @property
     def elements_idx(self):
         return self._elements_idx
+
+    @property
+    def dependency_idx(self):
+        return self._dependency_idx
 
     @property
     def extends(self):
