@@ -1,4 +1,4 @@
-'matflow.models.element.py'
+"""matflow.models.element.py"""
 
 from matflow.models.parameters import Parameters
 
@@ -42,7 +42,7 @@ class Element(object):
         return self._element_idx
 
     def as_dict(self):
-        'Return attributes dict with preceding underscores removed.'
+        """Return attributes dict with preceding underscores removed."""
         self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
         self_dict.pop('task')
         self_dict['inputs_data_idx'] = self_dict.pop('inputs').as_dict()
