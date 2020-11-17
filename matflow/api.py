@@ -8,10 +8,8 @@ and includes functions that are called by the command line interface (CLI; in
 
 import copy
 from pathlib import Path
-from pprint import pprint
 
 import pyperclip
-from ruamel.yaml import YAML
 from hpcflow import kill as hpcflow_kill
 from hpcflow import cloud_connect as hpcflow_cloud_connect
 

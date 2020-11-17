@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 from warnings import warn
 
-from hpcflow.config import Config as hpcflow_config
 from ruamel.yaml import YAML, safe_load
 
 

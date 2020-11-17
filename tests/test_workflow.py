@@ -2,11 +2,7 @@
 
 import unittest
 
-from matflow.errors import (
-    IncompatibleWorkflow,
-    IncompatibleTaskNesting,
-    MissingMergePriority
-)
+from matflow.errors import IncompatibleWorkflow
 from matflow.models import TaskSchema
 from matflow.models.construction import get_dependency_idx
 

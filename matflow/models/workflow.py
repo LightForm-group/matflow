@@ -13,10 +13,7 @@ import shutil
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from pprint import pprint
-from subprocess import run, PIPE
 from warnings import warn
-import time
 
 import h5py
 import hickle
@@ -27,8 +24,6 @@ from ruamel.yaml import YAML, scalarstring
 from matflow import __version__
 from matflow.config import Config
 from matflow.errors import (
-    IncompatibleTaskNesting,
-    MissingMergePriority,
     WorkflowPersistenceError,
     TaskElementExecutionError,
     UnexpectedSourceMapReturnError,

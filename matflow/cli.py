@@ -3,9 +3,6 @@
 Module that exposes a command line interface for `matflow`.
 
 """
-
-from pathlib import Path
-
 import click
 
 from matflow import __version__

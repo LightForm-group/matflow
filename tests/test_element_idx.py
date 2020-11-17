@@ -2,8 +2,6 @@
 
 import unittest
 
-from pprint import pprint
-
 from matflow.models import TaskSchema
 from matflow.models.construction import (
     validate_task_dict,

@@ -5,9 +5,6 @@ Module containing functionality for executing commands.
 """
 
 import copy
-from pathlib import Path, PureWindowsPath, PurePosixPath
-from subprocess import run, PIPE
-from pprint import pprint
 
 import numpy as np
 

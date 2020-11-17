@@ -6,11 +6,7 @@ Module containing the Task and TaskSchema classes.
 
 import copy
 import enum
-import re
 import secrets
-from pprint import pprint
-
-import numpy as np
 
 from matflow.models import CommandGroup
 from matflow.errors import TaskSchemaError, TaskParameterError

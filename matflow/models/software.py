@@ -1,6 +1,5 @@
 import copy
 import socket
-from collections import namedtuple
 
 from matflow.errors import SoftwareInstanceError, MissingSoftwareSourcesError
 from matflow.utils import extract_variable_names
