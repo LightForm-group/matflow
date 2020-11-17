@@ -72,7 +72,7 @@ class Parameters(object):
 
     def __repr__(self):
         names_fmt = ', '.join([f'{i!r}' for i in self._parameters.keys()])
-        out = (f'{self.__class__.__name__}({names_fmt})')
+        out = f'{self.__class__.__name__}({names_fmt})'
         return out
 
     def _normalise_params_dict(self, parameters):

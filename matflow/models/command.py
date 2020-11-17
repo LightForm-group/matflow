@@ -399,7 +399,7 @@ class CommandGroup(object):
 
             fmt_commands.append(cmd_dict)
 
-        return (fmt_commands, var_names)
+        return fmt_commands, var_names
 
 
 class Command(object):
