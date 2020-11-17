@@ -1106,7 +1106,7 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
 
             if ins_task_idx is not None:
                 # For now, assume non-local inputs are parametrised from the same
-                # iteration of the upstream task:
+                # iteration as the upstream task:
 
                 num_elems_per_iter = element_idx[ins_task_idx][
                     'num_elements_per_iteration'
