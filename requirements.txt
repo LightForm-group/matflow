@@ -3,10 +3,3 @@ ipykernel
 rope
 autopep8
 twine
-click
-pyperclip
-hpcflow
-numpy
-h5py
-black
-hickle
