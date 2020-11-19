@@ -101,24 +101,13 @@ def load_workflow(directory, full_path=False):
     return workflow
 
 
-<< << << < HEAD
-
-
 def prepare_task(task_idx, iteration_idx, directory, is_array=False):
-    'Prepare a task (iteration) for execution by setting inputs and running input maps.'
+    """Prepare a task (iteration) for execution by setting inputs and running input
+    maps."""
 
-
-== == == =
-
-
-def prepare_task(task_idx, directory, is_array=False):
-    """Prepare a task for execution by setting inputs and running input maps."""
-
-
->>>>>> > dev
-load_extensions()
-workflow = load_workflow(directory)
-workflow.prepare_task(task_idx, iteration_idx, is_array=is_array)
+    load_extensions()
+    workflow = load_workflow(directory)
+    workflow.prepare_task(task_idx, iteration_idx, is_array=is_array)
 
 
 def prepare_task_element(task_idx, element_idx, directory, is_array=False):
