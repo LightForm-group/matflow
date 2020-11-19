@@ -10,10 +10,10 @@ from matflow.hicklable import to_hicklable
 
 
 class ConversionTestCase(unittest.TestCase):
-    'Tests on `to_hicklable`.'
+    """Tests on `to_hicklable`."""
 
     def test_built_ins(self):
-        'Test expected output for some built-in types.'
+        """Test expected output for some built-in types."""
 
         obj = {
             'a': 1,
@@ -37,7 +37,7 @@ class ConversionTestCase(unittest.TestCase):
         self.assertTrue(obj_valid == obj_expected)
 
     def test_arrays(self):
-        'Test expected output for some arrays.'
+        """Test expected output for some arrays."""
 
         obj = {
             'int_array': np.array([1, 2, 3]),
@@ -48,7 +48,7 @@ class ConversionTestCase(unittest.TestCase):
         self.assertTrue(obj_valid == obj)
 
     def test_object_dict(self):
-        'Test expected output for an object with a __dict__ attribute.'
+        """Test expected output for an object with a __dict__ attribute."""
 
         class myClassObject(object):
             def __init__(self, a=1): self.a = a
@@ -61,7 +61,7 @@ class ConversionTestCase(unittest.TestCase):
         self.assertTrue(obj_valid == expected_obj)
 
     def test_object_slots(self):
-        'Test expected output for an object with a __slots__ attribute.'
+        """Test expected output for an object with a __slots__ attribute."""
 
         class myClassObject(object):
             __slots__ = ['a']
@@ -75,7 +75,7 @@ class ConversionTestCase(unittest.TestCase):
         self.assertTrue(obj_valid == expected_obj)
 
     def test_object_dict_slots(self):
-        'Test expected output for an object with __dict__ and __slots__ attributes.'
+        """Test expected output for an object with __dict__ and __slots__ attributes."""
 
         class myClassObject(object):
             __slots__ = ['a', '__dict__']

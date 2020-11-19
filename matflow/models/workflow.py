@@ -13,10 +13,7 @@ import shutil
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from pprint import pprint
-from subprocess import run, PIPE
 from warnings import warn
-import time
 
 import h5py
 import hickle
@@ -27,8 +24,6 @@ from ruamel.yaml import YAML, scalarstring
 from matflow import __version__
 from matflow.config import Config
 from matflow.errors import (
-    IncompatibleTaskNesting,
-    MissingMergePriority,
     WorkflowPersistenceError,
     TaskElementExecutionError,
     UnexpectedSourceMapReturnError,
@@ -50,7 +45,7 @@ from matflow.utils import (
 
 
 def requires_ids(func):
-    'Workflow method decorator to raise if IDs are not assigned.'
+    """Workflow method decorator to raise if IDs are not assigned."""
     @functools.wraps(func)
     def func_wrap(self, *args, **kwargs):
         if not self.id:
@@ -60,7 +55,7 @@ def requires_ids(func):
 
 
 def requires_path_exists(func):
-    'Workflow method decorator to raise if workflow path does not exist as a directory.'
+    """Workflow method decorator to raise if workflow path does not exist as a directory."""
     @functools.wraps(func)
     def func_wrap(self, *args, **kwargs):
         if not self.path_exists:
@@ -189,7 +184,7 @@ class Workflow(object):
         # TODO when supported in DataLight, add datalight.check_access(...)
 
     def _append_history(self, action, **kwargs):
-        'Append a new history event.'
+        """Append a new history event."""
 
         if action not in WorkflowAction:
             raise TypeError('`action` must be a `WorkflowAction`.')
@@ -261,12 +256,12 @@ class Workflow(object):
 
     @property
     def name_safe(self):
-        'Get name without spaces'
+        """Get name without spaces"""
         return self.name.replace(' ', '_')
 
     @property
     def name_friendly(self):
-        'Capitalise and remove underscores'
+        """Capitalise and remove underscores"""
         name = '{}{}'.format(self.name[0].upper(), self.name[1:]).replace('_', ' ')
         return name
 
@@ -335,7 +330,7 @@ class Workflow(object):
 
     @property
     def path_exists(self):
-        'Does the Workflow project directory exist on this machine?'
+        """Does the Workflow project directory exist on this machine?"""
         try:
             path = self.path
         except ValueError:
@@ -348,12 +343,12 @@ class Workflow(object):
     @property
     @requires_ids
     def path(self):
-        'Get the full path of the Workflow project as a Path.'
+        """Get the full path of the Workflow project as a Path."""
         return Path(self.stage_directory, self.human_id)
 
     @property
     def path_str(self):
-        'Get the full path of the Workflow project as a string.'
+        """Get the full path of the Workflow project as a string."""
         return str(self.path)
 
     @property
@@ -392,7 +387,7 @@ class Workflow(object):
             return out
 
     def get_task_idx_padded(self, task_idx, ret_zero_based=True):
-        'Get a task index, zero-padded according to the number of tasks.'
+        """Get a task index, zero-padded according to the number of tasks."""
         if ret_zero_based:
             return zeropad(task_idx, len(self) - 1)
         else:
@@ -400,7 +395,7 @@ class Workflow(object):
 
     @requires_path_exists
     def get_task_path(self, task_idx):
-        'Get the path to a task directory.'
+        """Get the path to a task directory."""
         if task_idx > (len(self) - 1):
             msg = f'Workflow has only {len(self)} tasks.'
             raise ValueError(msg)
@@ -416,7 +411,7 @@ class Workflow(object):
 
     @requires_path_exists
     def get_element_path(self, task_idx, element_idx):
-        'Get the path to an element directory.'
+        """Get the path to an element directory."""
         num_elements = self.elements_idx[task_idx]['num_elements']
         if element_idx > (num_elements - 1):
             msg = f'Task at index {task_idx} has only {num_elements} elements.'
@@ -451,7 +446,7 @@ class Workflow(object):
         return out
 
     def write_element_directories(self, iteration_idx):
-        'Generate element directories for a given iteration.'
+        """Generate element directories for a given iteration."""
 
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
@@ -513,7 +508,7 @@ class Workflow(object):
                         handle.write(in_val + '\n')
 
     def write_directories(self):
-        'Generate task and element directories for the first iteration.'
+        """Generate task and element directories for the first iteration."""
 
         if self.path.exists():
             raise ValueError('Directories for this workflow already exist.')
@@ -620,7 +615,7 @@ class Workflow(object):
 
     @requires_path_exists
     def get_hpcflow_workflow(self):
-        'Generate an hpcflow workflow to execute this workflow.'
+        """Generate an hpcflow workflow to execute this workflow."""
 
         command_groups = []
         variables = {}
@@ -928,7 +923,7 @@ class Workflow(object):
             return None
 
     def as_dict(self):
-        'Return attributes dict with preceding underscores removed.'
+        """Return attributes dict with preceding underscores removed."""
         out = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
 
         # Deal with the WorkflowAction enums and datetimes in history action values:
@@ -1319,7 +1314,7 @@ class Workflow(object):
 
     @requires_path_exists
     def prepare_sources(self, task_idx):
-        'Prepare source files for the task preparation commands.'
+        """Prepare source files for the task preparation commands."""
 
         # Note: in future, we might want to parametrise the source function, which is
         # why we delay its invocation until task run time.
@@ -1424,7 +1419,7 @@ class Workflow(object):
 
     @requires_path_exists
     def run_python_task(self, task_idx, element_idx):
-        'Execute a task that is to be run directly in Python (via the function mapper).'
+        """Execute a task that is to be run directly in Python (via the function mapper)."""
 
         task = self.tasks[task_idx]
         element = task.elements[element_idx]

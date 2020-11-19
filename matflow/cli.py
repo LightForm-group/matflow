@@ -3,9 +3,6 @@
 Module that exposes a command line interface for `matflow`.
 
 """
-
-from pathlib import Path
-
 import click
 
 from matflow import __version__
@@ -107,7 +104,7 @@ def prepend_schema_source(schema_source_path):
 
 @cli.command()
 def validate():
-    'Load and validate task schemas against available extensions.'
+    """Load and validate task schemas against available extensions."""
     api.validate()
 
 
@@ -120,7 +117,7 @@ def cloud_connect(provider):
 @cli.command()
 @click.argument('directory', type=click.Path(exists=True))
 def kill(directory):
-    'Kill all pending and executing tasks.'
+    """Kill all pending and executing tasks."""
     api.kill(directory)
 
 

@@ -1,6 +1,5 @@
 import copy
 import socket
-from collections import namedtuple
 
 from matflow.errors import SoftwareInstanceError, MissingSoftwareSourcesError
 from matflow.utils import extract_variable_names
@@ -218,7 +217,7 @@ class SoftwareInstance(object):
         )
 
     def as_dict(self):
-        'Return attributes dict with preceding underscores removed.'
+        """Return attributes dict with preceding underscores removed."""
         self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
         self_dict['software'] = self_dict.pop('software_friendly')
         self_dict['env'] = self_dict['env'].value

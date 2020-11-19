@@ -3,7 +3,6 @@ import pkg_resources
 import warnings
 
 from matflow.config import Config
-from matflow.errors import MatflowExtensionError, ConfigurationError
 from matflow.validation import validate_task_schemas
 
 
