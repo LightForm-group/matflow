@@ -2,11 +2,7 @@
 
 import unittest
 
-from matflow.errors import (
-    IncompatibleWorkflow,
-    IncompatibleTaskNesting,
-    MissingMergePriority
-)
+from matflow.errors import IncompatibleWorkflow
 from matflow.models import TaskSchema
 from matflow.models.construction import get_dependency_idx
 
@@ -24,17 +20,17 @@ tests for resolve_task_num_elements:
 
 
 def init_schemas(task_lst):
-    'Construct TaskSchema objects for TaskDependencyTestCase tests.'
+    """Construct TaskSchema objects for TaskDependencyTestCase tests."""
     for idx, i in enumerate(task_lst):
         task_lst[idx]['schema'] = TaskSchema(**i['schema'])
     return task_lst
 
 
 class TaskDependencyTestCase(unittest.TestCase):
-    'Tests on `get_dependency_idx`'
+    """Tests on `get_dependency_idx`"""
 
     def test_single_dependency(self):
-        'Test correct dependency index for a single task dependency.'
+        """Test correct dependency index for a single task dependency."""
         task_lst = [
             {
                 'context': '',
@@ -64,7 +60,7 @@ class TaskDependencyTestCase(unittest.TestCase):
         self.assertTrue(dep_idx == dep_idx_exp)
 
     def test_single_dependency_two_contexts(self):
-        'Test single dependencies for two parallel contexts.'
+        """Test single dependencies for two parallel contexts."""
         task_lst = [
             {
                 'context': 'context_A',
@@ -116,7 +112,7 @@ class TaskDependencyTestCase(unittest.TestCase):
         self.assertTrue(dep_idx == dep_idx_exp)
 
     def test_two_dependencies(self):
-        'Test where a task depends on two tasks.'
+        """Test where a task depends on two tasks."""
         task_lst = [
             {
                 'context': 'contextA',
@@ -157,7 +153,7 @@ class TaskDependencyTestCase(unittest.TestCase):
         self.assertTrue(dep_idx == dep_idx_exp)
 
     def test_raise_on_output_non_exclusivity(self):
-        'Test raises on multiple tasks that include the same output (and context).'
+        """Test raises on multiple tasks that include the same output (and context)."""
         task_lst = [
             {
                 'context': '',
@@ -185,7 +181,7 @@ class TaskDependencyTestCase(unittest.TestCase):
             get_dependency_idx(init_schemas(task_lst))
 
     def test_raise_on_circular_reference(self):
-        'Test raises on circularly referential Tasks.'
+        """Test raises on circularly referential Tasks."""
         task_lst = [
             {
                 'context': '',

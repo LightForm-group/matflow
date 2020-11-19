@@ -6,11 +6,7 @@ Module containing the Task and TaskSchema classes.
 
 import copy
 import enum
-import re
 import secrets
-from pprint import pprint
-
-import numpy as np
 
 from matflow.models import CommandGroup
 from matflow.errors import TaskSchemaError, TaskParameterError
@@ -25,7 +21,7 @@ class TaskSchema(object):
 
     def __init__(self, name, method, implementation, inputs, outputs, command_group,
                  archive_excludes=None):
-        'Instantiate a TaskSchema.'
+        """Instantiate a TaskSchema."""
 
         self.name = name
         self.outputs = outputs
@@ -203,7 +199,7 @@ class TaskSchema(object):
 
     @property
     def inputs_condensed(self):
-        'Get inputs list in their string format.'
+        """Get inputs list in their string format."""
         out = []
         for i in self.inputs:
             extra = ''
@@ -222,7 +218,7 @@ class TaskSchema(object):
         return out
 
     def _validate_inputs_outputs(self):
-        'Basic checks on inputs and outputs.'
+        """Basic checks on inputs and outputs."""
 
         allowed_inp_specifiers = ['group', 'context', 'alias', 'file', 'default']
         req_inp_keys = ['name']
@@ -279,7 +275,7 @@ class TaskSchema(object):
                 surplus_ins_fmt, self.name, self.input_names))
 
     def check_missing_inputs(self, inputs):
-        'Check for any inputs that are required by this schema but not specified.'
+        """Check for any inputs that are required by this schema but not specified."""
 
         missing_ins = set(self.input_names) - set(inputs)
         if missing_ins:
@@ -496,7 +492,7 @@ class Task(object):
         self._elements = [Element(self, **i) for i in elements]
 
     def as_dict(self):
-        'Return attributes dict with preceding underscores removed.'
+        """Return attributes dict with preceding underscores removed."""
         self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
         self_dict.pop('workflow')
         self_dict['status'] = (self.status.name, self.status.value)
@@ -534,7 +530,7 @@ class Task(object):
 
     @property
     def name_friendly(self):
-        'Capitalise and remove underscores'
+        """Capitalise and remove underscores"""
         name = '{}{}'.format(self.name[0].upper(), self.name[1:]).replace('_', ' ')
         return name
 
@@ -735,5 +731,5 @@ class Task(object):
 
     @property
     def HDF5_path(self):
-        'Get the HDF5 path to this task.'
+        """Get the HDF5 path to this task."""
         return self.workflow.HDF5_path + f'/\'tasks\'/data/data_{self.task_idx}'

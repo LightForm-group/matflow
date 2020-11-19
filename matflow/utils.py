@@ -137,22 +137,22 @@ def nest_lists(my_list):
 
 
 def repeat(lst, reps):
-    'Repeat 1D list elements.'
+    """Repeat 1D list elements."""
     return list(itertools.chain.from_iterable(itertools.repeat(x, reps) for x in lst))
 
 
 def tile(lst, tiles):
-    'Tile a 1D list.'
+    """Tile a 1D list."""
     return lst * tiles
 
 
 def index(lst, idx):
-    'Get elements of a list.'
+    """Get elements of a list."""
     return [lst[i] for i in idx]
 
 
 def arange(size):
-    'Get 1D list of increasing integers.'
+    """Get 1D list of increasing integers."""
     return list(range(size))
 
 

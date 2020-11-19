@@ -2,6 +2,11 @@
 
 ## [0.x.xx] - xxxx.xx.xx
 
+### Added
+
+- Figures definitions
+- Workflow metadata attribute for storing arbitrary metadata
+
 ### Fixed
 
 - Only save input/output map files if they exist!

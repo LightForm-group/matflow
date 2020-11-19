@@ -738,7 +738,7 @@ def order_tasks(task_lst):
 
 
 def set_default_nesting(task_lst, dep_idx):
-    'Set default `nest` and `merge_priority` for each task.'
+    """Set default `nest` and `merge_priority` for each task."""
 
     for idx, downstream_tsk in enumerate(task_lst):
 
