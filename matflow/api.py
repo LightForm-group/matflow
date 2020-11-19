@@ -8,10 +8,8 @@ and includes functions that are called by the command line interface (CLI; in
 
 import copy
 from pathlib import Path
-from pprint import pprint
 
 import pyperclip
-from ruamel.yaml import YAML
 from hpcflow import kill as hpcflow_kill
 from hpcflow import cloud_connect as hpcflow_cloud_connect
 
@@ -104,54 +102,54 @@ def load_workflow(directory, full_path=False):
 
 
 def prepare_task(task_idx, directory, is_array=False):
-    'Prepare a task for execution by setting inputs and running input maps.'
+    """Prepare a task for execution by setting inputs and running input maps."""
     load_extensions()
     workflow = load_workflow(directory)
     workflow.prepare_task(task_idx, is_array=is_array)
 
 
 def prepare_task_element(task_idx, element_idx, directory, is_array=False):
-    'Prepare a task element for execution by setting inputs and running input maps.'
+    """Prepare a task element for execution by setting inputs and running input maps."""
     load_extensions()
     workflow = load_workflow(directory)
     workflow.prepare_task_element(task_idx, element_idx, is_array=is_array)
 
 
 def process_task(task_idx, directory, is_array=False):
-    'Process a completed task by running the output map.'
+    """Process a completed task by running the output map."""
     load_extensions()
     workflow = load_workflow(directory)
     workflow.process_task(task_idx, is_array=is_array)
 
 
 def process_task_element(task_idx, element_idx, directory, is_array=False):
-    'Process a task element for execution by running output maps and saving outputs.'
+    """Process a task element for execution by running output maps and saving outputs."""
     load_extensions()
     workflow = load_workflow(directory)
     workflow.process_task_element(task_idx, element_idx, is_array=is_array)
 
 
 def run_python_task(task_idx, element_idx, directory):
-    'Run a (commandless) Python task.'
+    """Run a (commandless) Python task."""
     load_extensions()
     workflow = load_workflow(directory)
     workflow.run_python_task(task_idx, element_idx)
 
 
 def prepare_sources(task_idx, directory):
-    'Prepare source files.'
+    """Prepare source files."""
     load_extensions()
     workflow = load_workflow(directory)
     workflow.prepare_sources(task_idx)
 
 
 def append_schema_source(schema_source_path):
-    'Add a task schema source file to the end of the schema source list.'
+    """Add a task schema source file to the end of the schema source list."""
     Config.append_schema_source(schema_source_path)
 
 
 def prepend_schema_source(schema_source_path):
-    'Add a task schema source file to the front of the schema source list.'
+    """Add a task schema source file to the front of the schema source list."""
     Config.prepend_schema_source(schema_source_path)
 
 

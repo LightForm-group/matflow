@@ -2,8 +2,6 @@
 
 import unittest
 
-from pprint import pprint
-
 from matflow.models import TaskSchema
 from matflow.models.construction import (
     validate_task_dict,
@@ -738,10 +736,10 @@ TEST_DATA = {
 
 
 class InitTasksFullTestCase(unittest.TestCase):
-    'Test each step of `init_tasks`.'
+    """Test each step of `init_tasks`."""
 
     def test_validate_task_dict(self):
-        'Test validated task dicts are as expected.'
+        """Test validated task dicts are as expected."""
 
         for test_data in TEST_DATA.values():
 
@@ -777,7 +775,7 @@ class InitTasksFullTestCase(unittest.TestCase):
                     self.assertTrue(validated == validated_exp[idx])
 
     def test_order_tasks(self):
-        'Test expected dependency indices are generated from `order_tasks`'
+        """Test expected dependency indices are generated from `order_tasks`"""
 
         for test_data in TEST_DATA.values():
 
@@ -797,7 +795,7 @@ class InitTasksFullTestCase(unittest.TestCase):
                     self.assertTrue(i == tasks_ordered[idx]['task_idx'])
 
     def test_element_idx(self):
-        'Test expected element idx from `get_element_idx`.'
+        """Test expected element idx from `get_element_idx`."""
 
         for test_name, test_data in TEST_DATA.items():
 

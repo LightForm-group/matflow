@@ -1,4 +1,4 @@
-'matflow.models.parameters.py'
+"""matflow.models.parameters.py"""
 
 import re
 
@@ -72,7 +72,7 @@ class Parameters(object):
 
     def __repr__(self):
         names_fmt = ', '.join([f'{i!r}' for i in self._parameters.keys()])
-        out = (f'{self.__class__.__name__}({names_fmt})')
+        out = f'{self.__class__.__name__}({names_fmt})'
         return out
 
     def _normalise_params_dict(self, parameters):
@@ -92,7 +92,7 @@ class Parameters(object):
 
     @staticmethod
     def _normalise_param_name(param_name, existing_names):
-        'Transform a string so that it is a valid Python variable name.'
+        """Transform a string so that it is a valid Python variable name."""
         param_name_old = param_name
         param_name = param_name.replace('.', '_dot_').replace(' ', '_space_')
         if (
@@ -124,15 +124,15 @@ class Parameters(object):
         return {k: self.get(k) for k in self._name_map.keys()}
 
     def get_element(self):
-        'Not a property to reduce chance of attribute collisions.'
+        """Not a property to reduce chance of attribute collisions."""
         return self._element
 
     def get_name_map(self):
-        'Not a property to reduce chance of attribute collisions.'
+        """Not a property to reduce chance of attribute collisions."""
         return self._name_map
 
     def get_data_idx(self, name):
-        'Name is original name'
+        """Name is original name"""
         out = self._parameters[self._name_map[name]]
         if isinstance(out, list):
             out = tuple(out)

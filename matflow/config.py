@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 from warnings import warn
 
-from hpcflow.config import Config as hpcflow_config
 from ruamel.yaml import YAML, safe_load
 
 
@@ -107,14 +106,14 @@ class Config(object):
             raise ConfigurationError(msg)
 
         if 'software_sources' not in config_dat:
-            msg = (f'Missing `software_sources` from configuration file: {config_file}')
+            msg = f'Missing `software_sources` from configuration file: {config_file}'
             raise ConfigurationError(msg)
 
         return config_dat, config_file
 
     @staticmethod
     def set_config(config_dir=None, raise_on_set=False):
-        'Load configuration from a YAML file.'
+        """Load configuration from a YAML file."""
 
         config_dir = Config.resolve_config_dir(config_dir)
 
@@ -275,7 +274,7 @@ class Config(object):
 
     @staticmethod
     def _get_key_safe(key):
-        return (key[0], key[1], Config._get_software_safe(key[2]))
+        return key[0], key[1], Config._get_software_safe(key[2])
 
     @staticmethod
     def _validate_extension_setter():
@@ -295,7 +294,7 @@ class Config(object):
             if key not in Config.__conf['input_maps']:
                 Config.__conf['input_maps'].update({key: {}})
             if input_file in Config.__conf['input_maps'][key]:
-                msg = (f'Input file name "{input_file}" already exists in the input map.')
+                msg = f'Input file name "{input_file}" already exists in the input map.'
                 raise MatflowExtensionError(msg)
             Config.__conf['input_maps'][key][input_file] = func
 
@@ -306,7 +305,7 @@ class Config(object):
             if key not in Config.__conf['output_maps']:
                 Config.__conf['output_maps'].update({key: {}})
             if output_name in Config.__conf['output_maps'][key]:
-                msg = (f'Output name "{output_name}" already exists in the output map.')
+                msg = f'Output name "{output_name}" already exists in the output map.'
                 raise MatflowExtensionError(msg)
             Config.__conf['output_maps'][key][output_name] = func
 
@@ -315,7 +314,7 @@ class Config(object):
         if Config._validate_extension_setter():
             key = Config._get_key_safe(key)
             if key in Config.__conf['func_maps']:
-                msg = (f'Function map "{key}" already exists in the function map.')
+                msg = f'Function map "{key}" already exists in the function map.'
                 raise MatflowExtensionError(msg)
             Config.__conf['func_maps'][key] = func
 
@@ -360,7 +359,7 @@ class Config(object):
                 Config.__conf['output_file_maps'].update({key: {}})
             file_ref_full = '__file__' + file_reference
             if file_ref_full in Config.__conf['output_file_maps'][key]:
-                msg = (f'File name "{file_name}" already exists in the output files map.')
+                msg = f'File name "{file_name}" already exists in the output files map.'
                 raise MatflowExtensionError(msg)
             Config.__conf['output_file_maps'][key].update({file_ref_full: file_name})
 

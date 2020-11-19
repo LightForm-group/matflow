@@ -16,14 +16,14 @@ from matflow.errors import (
 
 
 class TaskSchemaTestCase(unittest.TestCase):
-    'Tests on TaskSchema'
+    """Tests on TaskSchema"""
 
     def test_raise_on_input_is_output(self):
         with self.assertRaises(TaskSchemaError):
             TaskSchema('schema_1', inputs=['parameter_1'], outputs=['parameter_1'])
 
     def test_raise_on_input_map_bad_inputs(self):
-        'Check inputs defined in the schema input map are in the schema inputs list.'
+        """Check inputs defined in the schema input map are in the schema inputs list."""
 
         with self.assertRaises(TaskSchemaError):
             TaskSchema(
@@ -42,7 +42,7 @@ class TaskSchemaTestCase(unittest.TestCase):
             )
 
     def test_raise_on_output_map_bad_outputs(self):
-        'Check outputs defined in the schema output map are in the schema outputs list.'
+        """Check outputs defined in the schema output map are in the schema outputs list."""
 
         with self.assertRaises(TaskSchemaError):
             TaskSchema(
@@ -62,7 +62,7 @@ class TaskSchemaTestCase(unittest.TestCase):
 
 
 class TaskParameterTestCase(unittest.TestCase):
-    'Tests of correct behaviour when defining tasks.'
+    """Tests of correct behaviour when defining tasks."""
 
     def test_raise_on_unknown_input(self):
         with self.assertRaises(TaskParameterError):
@@ -84,29 +84,29 @@ class TaskParameterTestCase(unittest.TestCase):
 
 
 class NormaliseLocalTestCase(unittest.TestCase):
-    'Testing `normalise_local_inputs`.'
+    """Testing `normalise_local_inputs`."""
 
     def test_raise_on_bad_nest_idx_float(self):
-        'Check raises on non-integer (float) nest index for any sequence.'
+        """Check raises on non-integer (float) nest index for any sequence."""
         sequences = [{'name': 'p1', 'nest_idx': 1.0, 'vals': [101, 102]}]
         with self.assertRaises(SequenceError):
             normalise_local_inputs(sequences=sequences)
 
     def test_raise_on_bad_nest_idx_string(self):
-        'Check raises on non-integer (str) nest index for any sequence.'
+        """Check raises on non-integer (str) nest index for any sequence."""
         sequences = [{'name': 'p1', 'nest_idx': '0', 'vals': [101, 102]}]
         with self.assertRaises(SequenceError):
             normalise_local_inputs(sequences=sequences)
 
     def test_raise_on_bad_nest_idx_list(self):
-        'Check raises on non-integer (list) nest index for any sequence.'
+        """Check raises on non-integer (list) nest index for any sequence."""
         sequences = [{'name': 'p1', 'nest_idx': [1, 0], 'vals': [101, 102]}]
         with self.assertRaises(SequenceError):
             normalise_local_inputs(sequences=sequences)
 
 
 class GetLocalInputsExceptionTestCase(unittest.TestCase):
-    'Testing exceptions and warnings from `get_local_inputs`.'
+    """Testing exceptions and warnings from `get_local_inputs`."""
 
     def test_raise_on_missing_nest_idx(self):
         """Check raises when more than one sequence, but nest_idx is missing from any
@@ -119,43 +119,43 @@ class GetLocalInputsExceptionTestCase(unittest.TestCase):
             get_local_inputs([], sequences=sequences)
 
     def test_raise_on_bad_sequence_vals_type_str(self):
-        'Test raises when sequence vals is a string.'
+        """Test raises when sequence vals is a string."""
         sequences = [{'name': 'p1', 'vals': '120'}]
         with self.assertRaises(SequenceError):
             get_local_inputs([], sequences=sequences)
 
     def test_raise_on_bad_sequence_vals_type_number(self):
-        'Test raises when sequence vals is a number.'
+        """Test raises when sequence vals is a number."""
         sequences = [{'name': 'p1', 'vals': 120}]
         with self.assertRaises(SequenceError):
             get_local_inputs([], sequences=sequences)
 
     def test_raise_on_bad_sequences_type(self):
-        'Test raises when sequences is not a list.'
+        """Test raises when sequences is not a list."""
         sequences = {'name': 'p1', 'vals': [1, 2]}
         with self.assertRaises(SequenceError):
             get_local_inputs([], sequences=sequences)
 
     def test_warn_on_unrequired_nest_idx(self):
-        'Test warning on unrequired nest idx.'
+        """Test warning on unrequired nest idx."""
         sequences = [{'name': 'p1', 'vals': [101, 102], 'nest_idx': 0}]
         with self.assertWarns(Warning):
             get_local_inputs([], sequences=sequences)
 
     def test_raise_on_bad_sequence_keys(self):
-        'Test raises when a sequence has unknown keys.'
+        """Test raises when a sequence has unknown keys."""
         sequences = [{'name': 'p1', 'vals': [101, 102], 'bad_key': 4}]
         with self.assertRaises(SequenceError):
             get_local_inputs([], sequences=sequences)
 
     def test_raise_on_missing_sequence_keys(self):
-        'Test raises when a sequence has missing keys.'
+        """Test raises when a sequence has missing keys."""
         sequences = [{'vals': [101, 102]}]
         with self.assertRaises(SequenceError):
             get_local_inputs([], sequences=sequences)
 
     def test_raise_on_incompatible_nesting(self):
-        'Test error raised on logically inconsistent Task sequence.'
+        """Test error raised on logically inconsistent Task sequence."""
         sequences = [
             {'name': 'p1', 'nest_idx': 0, 'vals': [101, 102]},
             {'name': 'p2', 'nest_idx': 0, 'vals': [201]},
@@ -165,17 +165,17 @@ class GetLocalInputsExceptionTestCase(unittest.TestCase):
 
 
 class GetLocalInputsInputsTestCase(unittest.TestCase):
-    'Tests on the `inputs` dict generated by `get_local_inputs`.'
+    """Tests on the `inputs` dict generated by `get_local_inputs`."""
 
     def test_base_only(self):
-        'Check expected output for no sequences.'
+        """Check expected output for no sequences."""
         base = {'p1': 101}
         local_ins = get_local_inputs([], base=base)['inputs']
         local_ins_exp = {'p1': {'vals': [101], 'vals_idx': [0]}}
         self.assertTrue(local_ins == local_ins_exp)
 
     def test_base_and_sequence(self):
-        'Check expected output for base and one sequence.'
+        """Check expected output for base and one sequence."""
         base = {'p1': 101}
         sequences = [{'name': 'p2', 'vals': [201, 202]}]
         local_ins = get_local_inputs([], base=base, sequences=sequences)['inputs']
@@ -186,7 +186,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         self.assertTrue(local_ins == local_ins_exp)
 
     def test_base_and_multi_nested_sequences(self):
-        'Check expected output for base and two nested sequences.'
+        """Check expected output for base and two nested sequences."""
         base = {'p1': 101}
         sequences = [
             {'name': 'p2', 'vals': [201, 202], 'nest_idx': 0},
@@ -201,7 +201,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         self.assertTrue(local_ins == local_ins_exp)
 
     def test_base_and_multi_merged_sequences(self):
-        'Check expected output for base and two merged sequences.'
+        """Check expected output for base and two merged sequences."""
         base = {'p1': 101}
         sequences = [
             {'name': 'p2', 'vals': [201, 202], 'nest_idx': 0},
@@ -216,7 +216,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         self.assertTrue(local_ins == local_ins_exp)
 
     def test_base_and_merged_and_nested_sequences(self):
-        'Check expected output for base and two merged sequences.'
+        """Check expected output for base and two merged sequences."""
         base = {'p1': 101}
         sequences = [
             {'name': 'p2', 'vals': [201, 202], 'nest_idx': 0},
@@ -233,7 +233,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         self.assertTrue(local_ins == local_ins_exp)
 
     def test_equivalent_relative_nesting_idx(self):
-        'Check the actual value of `nest_idx` is inconsequential.'
+        """Check the actual value of `nest_idx` is inconsequential."""
         sequences_1 = [
             {'name': 'p1', 'nest_idx': 0, 'vals': [101, 102, 103]},
             {'name': 'p2', 'nest_idx': 1, 'vals': [201, 202]},
@@ -248,7 +248,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         self.assertTrue(local_ins_1 == local_ins_2)
 
     def test_correct_number_of_local_inputs_all_nesting(self):
-        'Check the correct number of elements for a given input.'
+        """Check the correct number of elements for a given input."""
         sequences = [
             {'name': 'p1', 'nest_idx': 0, 'vals': [101, 102, 103]},
             {'name': 'p2', 'nest_idx': 1, 'vals': [201, 202]},
@@ -257,7 +257,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         self.assertTrue(len(local_ins['p1']['vals_idx']) == 6)
 
     def test_all_inputs_local_inputs_size(self):
-        'Check all inputs have the same number of elements.'
+        """Check all inputs have the same number of elements."""
         sequences = [
             {'name': 'p1', 'nest_idx': 0, 'vals': [101, 102, 103]},
             {'name': 'p2', 'nest_idx': 1, 'vals': [201, 202]},
@@ -268,7 +268,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         )
 
     def test_correct_number_of_local_inputs_all_merge(self):
-        'Check the correct number of local inputs for merging three sequences.'
+        """Check the correct number of local inputs for merging three sequences."""
         sequences = [
             {'name': 'p1', 'nest_idx': 3, 'vals': [101, 102]},
             {'name': 'p2', 'nest_idx': 3, 'vals': [201, 202]},
@@ -282,7 +282,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         )
 
     def test_correct_number_of_local_inputs_one_merge(self):
-        'Check the correct number of local inputs for merging/nesting three sequences.'
+        """Check the correct number of local inputs for merging/nesting three sequences."""
         sequences = [
             {'name': 'p1', 'nest_idx': 3, 'vals': [101, 102]},
             {'name': 'p2', 'nest_idx': 4, 'vals': [201, 202]},
@@ -296,7 +296,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
         )
 
     def test_base_is_merged_into_sequence(self):
-        'Check the base dict is merged into a sequence.'
+        """Check the base dict is merged into a sequence."""
         base = {'p1': 101}
         sequences = [{'name': 'p2', 'nest_idx': 0, 'vals': [201, 202]}]
         local_ins = get_local_inputs([], base=base, sequences=sequences)['inputs']
@@ -316,7 +316,7 @@ class GetLocalInputsInputsTestCase(unittest.TestCase):
 
 
 class GetLocalInputsFullTestCase(unittest.TestCase):
-    'Explicit checks on the full outputs of `get_local_inputs`.'
+    """Explicit checks on the full outputs of `get_local_inputs`."""
 
     def full_test_1(self):
         pass
