@@ -112,7 +112,7 @@ class Config(object):
         return config_dat, config_file
 
     @staticmethod
-    def set_config(config_dir=None, raise_on_set=False):
+    def set_config(config_dir=None, raise_on_set=False, refresh=False):
         """Load configuration from a YAML file."""
 
         config_dir = Config.resolve_config_dir(config_dir)
@@ -120,7 +120,8 @@ class Config(object):
         if Config._is_set:
             if raise_on_set:
                 raise ConfigurationError('Configuration is already set.')
-            return
+            elif not refresh:
+                return
 
         config_dat, _ = Config.get_config_file(config_dir)
         schema_sources = [Path(i).expanduser() for i in config_dat['task_schema_sources']]
