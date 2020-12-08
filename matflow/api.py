@@ -176,3 +176,8 @@ def write_element_directories(iteration_idx, directory):
     if iteration_idx < workflow.num_iterations:
         workflow.write_element_directories(iteration_idx)
         workflow.prepare_iteration(iteration_idx)
+
+
+def get_task_schemas():
+    Config.set_config()
+    return Config.get('task_schemas')
