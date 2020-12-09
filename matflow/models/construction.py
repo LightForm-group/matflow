@@ -667,9 +667,10 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             msg = (f'No matching task schema found for task name "{task["name"]}" with '
                    f'method "{task["method"]}" and software "{soft_inst.software}".')
             raise MissingSchemaError(msg)
-        if not Config.get('schema_validity')[schema_key]:
-            msg = (f'No matching extension function found for the schema with '
-                   f'implementation: {soft_inst.software}.')
+        if not Config.get('schema_validity')[schema_key][0]:
+            msg = (f'Task schema invalid for task schema name "{task["name"]}" with '
+                   f'method "{task["method"]}" and software "{soft_inst.software}": '
+                   f'{Config.get("schema_validity")[schema_key][1]}')
             raise UnsatisfiedSchemaError(msg)
 
         # Check any sources required by the main software instance are defined in the
