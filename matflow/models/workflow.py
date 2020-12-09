@@ -1262,7 +1262,8 @@ class Workflow(object):
                 data_idx = []
                 for i in inputs_idx['element_idx'][element_idx]:
                     src_element = self.tasks[ins_task_idx].elements[i]
-                    data_idx.append(src_element.get_output_data_idx(input_name))
+                    param_data_idx = src_element.get_parameter_data_idx(input_name)
+                    data_idx.append(param_data_idx)
 
                 if inputs_idx['group'] == 'default':
                     data_idx = data_idx[0]
@@ -1684,10 +1685,8 @@ class Workflow(object):
             for task_group in handle[tasks_path].values():
                 element_path = task_group.name + "/'elements'/data"
 
-                # print(f'task_group: {task_group}')
                 element_dicts = []
                 for elem_group in handle[element_path].values():
-                    # print(f'elem_group: {elem_group}')
                     params_paths = {
                         'inputs': elem_group.name + "/'inputs_data_idx'/data",
                         'outputs': elem_group.name + "/'outputs_data_idx'/data",
@@ -1702,9 +1701,6 @@ class Workflow(object):
                                 elem_idx = elem_idx.tolist()
                             else:
                                 elem_idx = [elem_idx]
-                            # print(f'param_name: {param_name}')
-                            # print(f'param_type: {param_type}')
-                            # print(f'elem_idx: type: {type(elem_idx)} {elem_idx}')
                             params_dict[param_type].update(
                                 {param_name: [idx_map[i] for i in elem_idx]}
                             )

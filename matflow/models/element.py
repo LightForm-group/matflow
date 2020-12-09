@@ -50,6 +50,14 @@ class Element(object):
         self_dict['files_data_idx'] = self_dict.pop('files').as_dict()
         return self_dict
 
+    def get_parameter_data_idx(self, parameter_name):
+        try:
+            out = self.outputs.get_data_idx(parameter_name)
+        except KeyError:
+            out = self.inputs.get_data_idx(parameter_name)
+
+        return out
+
     def get_input_data_idx(self, input_name):
         return self.inputs.get_data_idx(input_name)
 

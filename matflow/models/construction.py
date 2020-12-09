@@ -30,11 +30,11 @@ from matflow.errors import (
     MissingSchemaError,
     UnsatisfiedSchemaError,
     MissingSoftwareSourcesError,
+    TaskParameterError,
 )
 from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list,
                            to_sub_list, get_specifier_dict)
 from matflow.models.task import Task, TaskSchema
-from matflow.models.element import Element
 from matflow.models.software import SoftwareInstance
 
 
@@ -47,7 +47,7 @@ def normalise_local_inputs(base=None, sequences=None, is_from_file=False):
     sequences : list, optional
     is_from_file : bool
         Has this task dict been loaded from a workflow file or is it associated
-        with a brand new workflow?    
+        with a brand new workflow?
 
     Returns
     -------
@@ -61,7 +61,7 @@ def normalise_local_inputs(base=None, sequences=None, is_from_file=False):
                 base dict (non-sequence parameters), this is set to -1. For parameters
                 specified in the sequences list, this is whatever is specified by the user
                 or 0 if not specified.
-            vals : list 
+            vals : list
                 List of values for this input parameter. This will be a list of length one
                 for input parameters specified within the base dict.
 
@@ -142,25 +142,18 @@ def normalise_local_inputs(base=None, sequences=None, is_from_file=False):
     return inputs_lst
 
 
-def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
+def get_local_inputs(task, is_from_file):
     """Combine task base/sequences/repeats to get the locally defined inputs for a task.
 
     Parameters
     ----------
-    all_tasks : list of dict
-        Each dict represents a task. This is passed to allow validation of inputs, since
-        inputs of this task may be specified as outputs of another task.
-    task_idx : int
-        Index of the task in `all_tasks` for which local inputs are to be found.
-    dep_idx : list of list of int
+    task : dict
+        Dict representing a task.
     is_from_file : bool
         Has this task dict been loaded from a workflow file or is it associated
-        with a brand new workflow?    
+        with a brand new workflow?
 
     """
-
-    task = all_tasks[task_idx]
-    task_dep_idx = dep_idx[task_idx]
 
     base = task['base']
     num_repeats = task['repeats'] or 1
@@ -171,22 +164,21 @@ def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
     schema = task['schema']
 
     inputs_lst = normalise_local_inputs(base, sequences, is_from_file)
+    default_inputs_lst = []
+
+    for input_dict in schema.inputs:
+        if 'default' in input_dict:
+            default_inputs_lst.append({
+                'name': input_dict['name'],
+                'nest_idx': -1,
+                'vals': [input_dict['default']],
+            })
+
     defined_inputs = [i['name'] for i in inputs_lst]
     schema.check_surplus_inputs(defined_inputs)
 
-    for dep_idx_i in task_dep_idx:
-        for output in all_tasks[dep_idx_i]['schema'].outputs:
-            if output in schema.input_names:
-                defined_inputs.append(output)
-
-    default_values = schema.validate_inputs(defined_inputs)
-    for in_name, in_val in default_values.items():
-        inputs_lst.append({
-            'name': in_name,
-            'nest_idx': -1,
-            'vals': [in_val],
-        })
-
+    # Find the number of elements associated with this task due to its local input
+    # sequences:
     inputs_lst.sort(key=lambda x: x['nest_idx'])
     if inputs_lst:
         lengths = [len(i['vals']) for i in inputs_lst]
@@ -202,7 +194,8 @@ def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
     else:
         total_len = 1
 
-    local_ins = {'inputs': {}}
+    local_ins = {'inputs': {}, 'default_inputs': {}}
+    repeats_idx = [0]
 
     for idx, input_i in enumerate(inputs_lst):
 
@@ -218,7 +211,6 @@ def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
         vals_idx = repeat(vals_idx, num_repeats)
         repeats_idx = tile(arange(num_repeats), total_len)
 
-        local_ins['repeats_idx'] = repeats_idx
         local_ins['inputs'].update({
             input_i['name']: {
                 'vals': input_i['vals'],
@@ -227,6 +219,16 @@ def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
         })
         prev_reps = rep_i
         prev_tile = tile_i
+
+    local_ins['repeats_idx'] = repeats_idx
+
+    for def_input_i in default_inputs_lst:
+        local_ins['default_inputs'].update({
+            def_input_i['name']: {
+                'vals': def_input_i['vals'],
+                'vals_idx': repeat([0] * total_len, num_repeats),
+            }
+        })
 
     allowed_grp = schema.input_names + ['repeats']
     allowed_grp_fmt = ', '.join([f'"{i}"' for i in allowed_grp])
@@ -340,6 +342,93 @@ def get_software_instance(software, run_options, all_software, type_label=''):
     return match
 
 
+def get_input_dependency(task_info_lst, input_dict, input_task_idx):
+
+    param_name = input_dict['name']
+    param_context = input_dict['context']
+    param_task = task_info_lst[input_task_idx]
+
+    downstream_task_context = param_task['context']
+    downstream_task_name = param_task['name']
+
+    # Initially collate as a list of dependencies. Then apply some rules to find the
+    # preferred single dependency.
+    input_dependency = []
+
+    for task_idx, task_info in enumerate(task_info_lst):
+
+        if task_idx == input_task_idx:
+            continue
+
+        upstream_context = task_info['context']
+
+        # Determine if a dependency is allowed to exist between the given parameter and
+        # this task, by considering the parameter context, downstream task context and
+        # upstream task context:
+        if (
+            param_context == upstream_context or (
+                (upstream_context == downstream_task_context) and (param_context is None)
+            ) or (
+                upstream_context == ''
+            )
+        ):
+            # A dependency may exist! The parameter as an output in an upstream task takes
+            #  precedence over the parameter as an input in that same task:
+            if param_name in task_info['schema'].outputs:
+                input_dependency.append({
+                    'from_task': task_idx,
+                    'dependency_type': 'output',
+                    'is_parameter_modifying_task': False,
+                })
+            elif (
+                param_name in task_info['schema'].input_names and
+                param_name in task_info['local_inputs']['inputs']
+            ):
+                input_dependency.append({
+                    'from_task': task_idx,
+                    'dependency_type': 'input',
+                    'is_parameter_modifying_task': False,
+                })
+
+            # Make a note if this task is a parameter-modifying task for this parameter,
+            # i.e. the parameter is both an input and an output:
+            if (
+                param_name in task_info['schema'].outputs and
+                param_name in task_info['schema'].input_names
+            ):
+                input_dependency[-1].update({'is_parameter_modifying_task': True})
+
+    # Make sure only a single dependency exists.
+
+    # An "input" dependency_type (meaning this parameter derives from an input in an
+    # upstream task) must be locally defined in only one task, otherwise the dependency
+    # is ill-defined:
+    dep_type_input_count = sum([i['dependency_type'] == 'input'
+                                for i in input_dependency])
+    if dep_type_input_count > 1:
+        msg = (
+            f'Task input parameter "{param_name}" from task "{downstream_task_name}" with '
+            f'task context "{downstream_task_context}" is found as an input parameter '
+            f'for multiple tasks, which makes the task dependency ill-defined.'
+        )
+        raise IncompatibleWorkflow(msg)
+
+    # An "output" dependency_type (meaning this parameter derives from an output in an
+    # upstream task) must be also be singular, since otherwise the dependency is again
+    # ill-defined:
+    dep_type_output_count = sum([i['dependency_type'] == 'output'
+                                 for i in input_dependency])
+    if dep_type_output_count > 1:
+        msg = (
+            f'Task input parameter "{param_name}" from task "{downstream_task_name}" with '
+            f'task context "{downstream_task_context}" is found as an output parameter '
+            f'for multiple tasks, which makes the task dependency ill-defined.'
+        )
+        raise IncompatibleWorkflow(msg)
+
+    return input_dependency[0] if input_dependency else None
+
+
 def get_dependency_idx(task_info_lst):
     """Find the dependencies between tasks.
 
@@ -349,6 +438,7 @@ def get_dependency_idx(task_info_lst):
         Each dict must have keys:
             context : str
             schema : TaskSchema
+            local_inputs : dict
 
     Returns
     -------
@@ -373,51 +463,74 @@ def get_dependency_idx(task_info_lst):
     """
 
     dependency_idx = []
-    all_outputs = []
-    for task_info in task_info_lst:
+    for task_idx, task_info in enumerate(task_info_lst):
 
-        downstream_context = task_info['context']
-        schema_inputs = task_info['schema'].inputs
-        schema_outputs = task_info['schema'].outputs
+        task_name, task_context = task_info['name'], task_info['context']
 
-        # List outputs with their corresponding task contexts:
-        all_outputs.extend([(i, downstream_context) for i in schema_outputs])
+        dep_idx_i = {
+            'task_dependencies': [],
+            'parameter_dependencies': {},
+        }
 
         # Find which tasks this task depends on:
-        output_idx = []
-        for input_j in schema_inputs:
+        task_dep_idx = []
+        for input_dict in task_info['schema'].inputs:
 
-            param_name = input_j['name']
-            param_context = input_j['context']
+            input_name = input_dict['name']
+            is_locally_defined = input_name in task_info['local_inputs']['inputs']
+            default_defined = input_name in task_info['local_inputs']['default_inputs']
+            input_dependency = get_input_dependency(task_info_lst, input_dict, task_idx)
 
-            for task_idx_k, task_info_k in enumerate(task_info_lst):
+            add_input_dep = False
+            if is_locally_defined:
 
-                if param_name not in task_info_k['schema'].outputs:
-                    continue
+                if input_dependency:
+                    in_dep_task = task_info_lst[input_dependency['from_task']]
+                    in_dep_task_name = in_dep_task['name']
+                    in_dep_task_context = in_dep_task['context']
+                    msg = (
+                        f'Input parameter "{input_name}" for task "{task_name}" with '
+                        f'task context "{task_context}" has both a local value and a '
+                        f'non-local value. The non-local value is derived from an '
+                        f'{input_dependency["dependency_type"]} of task '
+                        f'"{in_dep_task_name}" with task context '
+                        f'"{in_dep_task_context}". The local value will be used.'
+                    )
+                    warn(msg)
 
-                upstream_context = task_info_k['context']
-                if (
-                    param_context == upstream_context or (
-                        (upstream_context == downstream_context) and
-                        (param_context is None)
-                    ) or (upstream_context == '')
-                ):
-                    output_idx.append(task_idx_k)
+            elif input_dependency:
+                add_input_dep = True
 
-        dependency_idx.append(list(set(output_idx)))
+            elif default_defined:
+                # Move the default value into the local inputs:
+                task_info_lst[task_idx]['local_inputs']['inputs'][input_name] = (
+                    copy.deepcopy(task_info['local_inputs']['default_inputs'][input_name])
+                )
 
-    if len(all_outputs) != len(set(all_outputs)):
-        msg = 'Multiple tasks in the workflow have the same output and context!'
-        raise IncompatibleWorkflow(msg)
+            else:
+                msg = (f'Task input "{input_name}" for task "{task_name}" with task '
+                       f'context "{task_context}" is missing. A value must be specified '
+                       f'locally, or a default value must be provided in the schema, or '
+                       f'an additional task should be added to the workflow that '
+                       f'generates the parameter')
+                raise TaskParameterError(msg)
+
+            if add_input_dep:
+                dep_idx_i['parameter_dependencies'].update({input_name: input_dependency})
+                task_dep_idx.append(input_dependency['from_task'])
+
+        dep_idx_i['task_dependencies'] = list(set(task_dep_idx))
+        dependency_idx.append(dep_idx_i)
 
     # Check for circular dependencies in task inputs/outputs:
     all_deps = []
     for idx, deps in enumerate(dependency_idx):
-        for i in deps:
+        for i in deps['task_dependencies']:
             all_deps.append(tuple(sorted([idx, i])))
 
     if len(all_deps) != len(set(all_deps)):
-        msg = 'Workflow tasks are circularly dependent!'
+        msg = (f'Workflow tasks are circularly dependent! `dependency_idx` is: '
+               f'{dependency_idx}')
         raise IncompatibleWorkflow(msg)
 
     return dependency_idx
@@ -652,9 +765,6 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             type_label='.process',
         )
 
-        # print(f'prepare_soft_inst:\n{prepare_soft_inst}')
-        # print(f'process_soft_inst:\n{process_soft_inst}')
-
         schema_key = (task['name'], task['method'], soft_inst.software)
 
         task['software_instance'] = soft_inst
@@ -703,6 +813,7 @@ def order_tasks(task_lst):
         must contain the keys:
             context : str
             schema : TaskSchema
+            output_map_options
 
     Returns
     -------
@@ -716,20 +827,35 @@ def order_tasks(task_lst):
 
     """
 
-    dep_idx = get_dependency_idx(task_lst)
-
     for i_idx, i in enumerate(task_lst):
         out_opts = i['schema'].validate_output_map_options(i['output_map_options'])
         task_lst[i_idx]['output_map_options'] = out_opts
 
+    dep_idx = get_dependency_idx(task_lst)
+
     # Find the index at which each task must be positioned to satisfy input
     # dependencies, and reorder tasks (and `dep_idx`!):
-    min_idx = [max(i or [0]) + 1 for i in dep_idx]
+    min_idx = [max(i['task_dependencies'] or [0]) + 1 for i in dep_idx]
     task_srt_idx = np.argsort(min_idx)
 
+    # Reorder tasks:
     task_lst_srt = [task_lst[i] for i in task_srt_idx]
-    dep_idx_srt = [[np.argsort(task_srt_idx)[j] for j in dep_idx[i]]
-                   for i in task_srt_idx]
+
+    # Reorder dep_idx list:
+    dep_idx_srt = [dep_idx[i] for i in task_srt_idx]
+
+    # Dict whose keys are old task index and values are new task index:
+    task_srt_idx_map = {old_idx: new_idx for old_idx, new_idx in enumerate(task_srt_idx)}
+
+    # Remap `task_dependencies` and `from_task` in each item of dep_idx:
+    for idx, dep_idx_i in enumerate(dep_idx_srt):
+        dep_idx_i['task_dependencies'] = [
+            task_srt_idx_map[i] for i in dep_idx_i['task_dependencies']
+        ]
+        for param_name, param_dep_val in dep_idx_i['parameter_dependencies'].items():
+            dep_idx_i['parameter_dependencies'][param_name]['from_task'] = (
+                task_srt_idx_map[param_dep_val['from_task']]
+            )
 
     # Add sorted task idx:
     for idx, i in enumerate(task_lst_srt):
@@ -824,8 +950,8 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
             schema : TaskSchema
             task_idx : int
 
-    dep_idx : list of list of int
-        List of length equal to `task_lst`, whose elements are integer lists that link a
+    dep_idx : list of dict
+        List of length equal to `task_lst`, whose elements are ... TODO. ..integer lists that link a
         given task to the indices of tasks upon which it depends.
 
     Returns
@@ -843,7 +969,7 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
     element_idx = []
     for idx, downstream_task in enumerate(task_lst):
 
-        upstream_tasks = [task_lst[i] for i in dep_idx[idx]]
+        upstream_tasks = [task_lst[i] for i in dep_idx[idx]['task_dependencies']]
 
         # local inputs dict:
         loc_in = downstream_task['local_inputs']
@@ -883,7 +1009,13 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
                     if input_context is not None:
                         if up_task['context'] != input_context:
                             continue
-                    if input_name in up_task['schema'].outputs:
+                    if (
+                        input_name in up_task['schema'].outputs or
+                        (
+                            input_name in up_task['schema'].input_names and
+                            input_name in up_task['local_inputs']['inputs']
+                        )
+                    ):
                         group_name_ = group_name
                         if group_name != 'default':
                             group_name_ = 'user_group_' + group_name
@@ -1130,15 +1262,12 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
     return element_idx
 
 
-def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
+def init_local_inputs(task_lst, is_from_file, check_integrity):
     """Normalise local inputs for each task.
 
     Parameters
     ----------
     task_lst : list of dict
-
-    dep_idx : list of list of int
-
     is_from_file : bool
         Has this task dict been loaded from a workflow file or is it associated
         with a brand new workflow?
@@ -1153,28 +1282,11 @@ def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
 
     for task_idx, task in enumerate(task_lst):
 
-        local_ins = get_local_inputs(task_lst, task_idx, dep_idx, is_from_file)
-
-        if is_from_file and check_integrity:
-
-            # Don't compare the vals_data_idx:
-            loaded_local_inputs = copy.deepcopy(task['local_inputs'])
-            for vals_dict in loaded_local_inputs['inputs'].values():
-                del vals_dict['vals_data_idx']
-
-            if local_ins != loaded_local_inputs:
-                msg = (
-                    f'Regenerated local inputs (task: "{task["name"]}") '
-                    f'are not equivalent to those loaded from the '
-                    f'workflow file. Stored local inputs are:'
-                    f'\n{task["local_inputs"]}\nRegenerated local '
-                    f'inputs are:\n{local_ins}\n.'
-                )
-                raise WorkflowPersistenceError(msg)
-
+        if is_from_file:
             local_ins = task['local_inputs']
-
-        task_lst[task_idx]['local_inputs'] = local_ins
+        else:
+            local_ins = get_local_inputs(task, is_from_file)
+            task_lst[task_idx]['local_inputs'] = local_ins
 
         # Select and set the correct command pathway index according to local inputs:
         loc_ins_vals = {}
@@ -1208,6 +1320,16 @@ def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
                         schema.output_map[out_map_idx]['files'][out_map_file_idx]['name'] = new_fn
 
     return task_lst
+
+
+def validate_inputs(task_lst):
+    """Validate supplied task inputs."""
+
+    for task in task_lst:
+
+        schema = task['schema']
+        defined_inputs = task['local_inputs']['inputs'].keys()
+        schema.check_surplus_inputs(defined_inputs)
 
 
 def init_tasks(workflow, task_lst, is_from_file, num_iterations, check_integrity=True):
@@ -1252,11 +1374,13 @@ def init_tasks(workflow, task_lst, is_from_file, num_iterations, check_integrity
         )
     ]
 
+    # Validate and normalise locally defined inputs:
+    task_lst = init_local_inputs(task_lst, is_from_file, check_integrity=False)
+
     # Get dependencies, sort and add `task_idx` to each task:
     task_lst, dep_idx = order_tasks(task_lst)
 
-    # Validate and normalise locally defined inputs:
-    task_lst = init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity)
+    validate_inputs(task_lst)
 
     # Find element indices that determine the elements from which task inputs are drawn:
     element_idx = get_element_idx(task_lst, dep_idx, num_iterations)
