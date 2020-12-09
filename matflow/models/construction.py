@@ -398,31 +398,18 @@ def get_input_dependency(task_info_lst, input_dict, input_task_idx):
             ):
                 input_dependency[-1].update({'is_parameter_modifying_task': True})
 
+    if len(input_dependency) > 1:
+        # Only keep "parameter modifying tasks", because such task will be dependent on
+        # the "parameter generating" tasks:
+        input_dependency = [i for i in input_dependency
+                            if i['is_parameter_modifying_task']]
+
     # Make sure only a single dependency exists.
-
-    # An "input" dependency_type (meaning this parameter derives from an input in an
-    # upstream task) must be locally defined in only one task, otherwise the dependency
-    # is ill-defined:
-    dep_type_input_count = sum([i['dependency_type'] == 'input'
-                                for i in input_dependency])
-    if dep_type_input_count > 1:
+    if len(input_dependency) > 1:
         msg = (
             f'Task input parameter "{param_name}" from task "{downstream_task_name}" with '
-            f'task context "{downstream_task_context}" is found as an input parameter '
-            f'for multiple tasks, which makes the task dependency ill-defined.'
-        )
-        raise IncompatibleWorkflow(msg)
-
-    # An "output" dependency_type (meaning this parameter derives from an output in an
-    # upstream task) must be also be singular, since otherwise the dependency is again
-    # ill-defined:
-    dep_type_output_count = sum([i['dependency_type'] == 'output'
-                                 for i in input_dependency])
-    if dep_type_output_count > 1:
-        msg = (
-            f'Task input parameter "{param_name}" from task "{downstream_task_name}" with '
-            f'task context "{downstream_task_context}" is found as an output parameter '
-            f'for multiple tasks, which makes the task dependency ill-defined.'
+            f'task context "{downstream_task_context}" is found as an input/output '
+            f'parameter for multiple tasks, which makes the task dependency ill-defined.'
         )
         raise IncompatibleWorkflow(msg)
 
