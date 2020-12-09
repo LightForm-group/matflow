@@ -1498,6 +1498,7 @@ class Workflow(object):
         out_map_lookup = Config.get('output_maps').get(schema_id)
 
         # Run output maps:
+        file_is_saved = []
         for out_map in task.schema.output_map:
 
             # Filter only those file paths required for this output:
@@ -1507,7 +1508,12 @@ class Workflow(object):
                 file_paths.append(out_file_path)
 
                 # Save generated file as string in workflow:
-                if i['save'] and out_file_path.is_file():
+                if (
+                    i['save'] and
+                    out_file_path.is_file() and
+                    i['name'] not in file_is_saved
+                ):
+                    file_is_saved.append(i['name'])
                     with out_file_path.open('r') as handle:
                         file_dat = handle.read()
                     if is_array:
