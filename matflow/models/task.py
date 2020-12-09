@@ -245,12 +245,6 @@ class TaskSchema(object):
 
             self.inputs[inp_idx] = inp
 
-        # Check the task does not output an input(!):
-        for i in self.outputs:
-            if i in self.input_names:
-                msg = f'Task schema input "{i}" cannot also be an output!'
-                raise TaskSchemaError(err + msg)
-
         # Check correct keys in supplied input/output maps:
         for in_map_idx, in_map in enumerate(self.input_map):
 
