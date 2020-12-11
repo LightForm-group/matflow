@@ -500,10 +500,12 @@ def get_dependency_idx(task_info_lst):
 
             else:
                 msg = (f'Task input "{input_name}" for task "{task_name}" with task '
-                       f'context "{task_context}" is missing. A value must be specified '
-                       f'locally, or a default value must be provided in the schema, or '
-                       f'an additional task should be added to the workflow that '
-                       f'generates the parameter')
+                       f'context "{task_context}" appears to be missing. A value must be '
+                       f'specified locally, or a default value must be provided in the '
+                       f'schema, or an additional task should be added to the workflow '
+                       f'that generates the parameter. If such a task already exists, '
+                       f'try reordering the tasks in the order in which would you expect '
+                       f'them to run.')
                 raise TaskParameterError(msg)
 
             if add_input_dep:
