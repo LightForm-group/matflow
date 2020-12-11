@@ -33,7 +33,7 @@ from matflow.errors import (
     TaskParameterError,
 )
 from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list,
-                           to_sub_list, get_specifier_dict)
+                           to_sub_list, get_specifier_dict, move_element_forward)
 from matflow.models.task import Task, TaskSchema
 from matflow.models.software import SoftwareInstance
 
@@ -413,7 +413,7 @@ def get_input_dependency(task_info_lst, input_dict, input_task_idx):
         )
         raise IncompatibleWorkflow(msg)
 
-    return input_dependency[0] if input_dependency else None
+    return input_dependency[0] if input_dependency else {}
 
 
 def get_dependency_idx(task_info_lst):
@@ -455,6 +455,10 @@ def get_dependency_idx(task_info_lst):
         task_name, task_context = task_info['name'], task_info['context']
 
         dep_idx_i = {
+            'task_name': task_name,
+            'task_context': task_context,
+            'original_idx': task_idx,
+            'current_idx': task_idx,
             'task_dependencies': [],
             'parameter_dependencies': {},
         }
@@ -521,6 +525,71 @@ def get_dependency_idx(task_info_lst):
         raise IncompatibleWorkflow(msg)
 
     return dependency_idx
+
+
+def find_good_task_dependency_position(dep_idx, task_dependencies):
+    seen_ids = []
+    for position, dep_idx_i in enumerate(dep_idx):
+        seen_ids.append(dep_idx_i['current_idx'])
+        if all([i in seen_ids for i in task_dependencies]):
+            return position
+    raise RuntimeError('No good position exists!')
+
+
+def sort_dependency_idx(dependency_idx):
+
+    dep_idx = copy.deepcopy(dependency_idx)
+
+    # Maximum number of iterations should be that required to completely reverse the
+    # order, where each item in the list is dependent on only the next task in the list
+    # (except the final task):
+    N = len(dep_idx)
+    MAX_ITER = int((N**2 - N + 2) / 2)
+
+    count = 0
+    while True:
+
+        count += 1
+        if count > MAX_ITER:
+            raise RuntimeError(f'Could not sort dependency index in {MAX_ITER} '
+                               f'iterations!')
+
+        repositioned = False
+        seen_ids = []
+        for idx_i, dep_idx_i in enumerate(dep_idx):
+
+            needs_reposition = any([i not in seen_ids
+                                    for i in dep_idx_i['task_dependencies']])
+            if needs_reposition:
+
+                good_position = find_good_task_dependency_position(
+                    dep_idx,
+                    dep_idx_i['task_dependencies'],
+                )
+                dep_idx, remap_idx = move_element_forward(dep_idx, idx_i, good_position)
+                repositioned = True
+
+                # Update dependencies:
+                for idx_j, dep_idx_j in enumerate(dep_idx):
+                    new_task_deps = [remap_idx[i] for i in dep_idx_j['task_dependencies']]
+                    dep_idx[idx_j]['task_dependencies'] = new_task_deps
+                    dep_idx[idx_j]['current_idx'] = idx_j
+                    for p_name, p_dep in dep_idx_j['parameter_dependencies'].items():
+                        new_task_dep = remap_idx[p_dep['from_task']]
+                        dep_idx[idx_j]['parameter_dependencies'][p_name]['from_task'] = (
+                            new_task_dep
+                        )
+
+                # After repositioning, restart ordering from the beginning:
+                break
+
+            seen_ids.append(dep_idx_i['current_idx'])
+
+        if not repositioned:
+            # No repositions were required for any task, our job is done:
+            break
+
+    return dep_idx
 
 
 def validate_run_options(run_opts, type_label=''):
@@ -819,30 +888,9 @@ def order_tasks(task_lst):
         task_lst[i_idx]['output_map_options'] = out_opts
 
     dep_idx = get_dependency_idx(task_lst)
-
-    # Find the index at which each task must be positioned to satisfy input
-    # dependencies, and reorder tasks (and `dep_idx`!):
-    min_idx = [max(i['task_dependencies'] or [0]) + 1 for i in dep_idx]
-    task_srt_idx = np.argsort(min_idx)
-
-    # Reorder tasks:
-    task_lst_srt = [task_lst[i] for i in task_srt_idx]
-
-    # Reorder dep_idx list:
-    dep_idx_srt = [dep_idx[i] for i in task_srt_idx]
-
-    # Dict whose keys are old task index and values are new task index:
-    task_srt_idx_map = {old_idx: new_idx for old_idx, new_idx in enumerate(task_srt_idx)}
-
-    # Remap `task_dependencies` and `from_task` in each item of dep_idx:
-    for idx, dep_idx_i in enumerate(dep_idx_srt):
-        dep_idx_i['task_dependencies'] = [
-            task_srt_idx_map[i] for i in dep_idx_i['task_dependencies']
-        ]
-        for param_name, param_dep_val in dep_idx_i['parameter_dependencies'].items():
-            dep_idx_i['parameter_dependencies'][param_name]['from_task'] = (
-                task_srt_idx_map[param_dep_val['from_task']]
-            )
+    dep_idx_srt = sort_dependency_idx(dep_idx)
+    sort_idx = [i['original_idx'] for i in dep_idx_srt]
+    task_lst_srt = [task_lst[i] for i in sort_idx]
 
     # Add sorted task idx:
     for idx, i in enumerate(task_lst_srt):
