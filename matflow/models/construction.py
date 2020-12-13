@@ -468,6 +468,7 @@ def get_dependency_idx(task_info_lst):
         for input_dict in task_info['schema'].inputs:
 
             input_name = input_dict['name']
+            input_alias = input_dict['alias']
             is_locally_defined = input_name in task_info['local_inputs']['inputs']
             default_defined = input_name in task_info['local_inputs']['default_inputs']
             input_dependency = get_input_dependency(task_info_lst, input_dict, task_idx)
@@ -509,7 +510,9 @@ def get_dependency_idx(task_info_lst):
                 raise TaskParameterError(msg)
 
             if add_input_dep:
-                dep_idx_i['parameter_dependencies'].update({input_name: input_dependency})
+                dep_idx_i['parameter_dependencies'].update({
+                    input_alias: input_dependency
+                })
                 task_dep_idx.append(input_dependency['from_task'])
 
         dep_idx_i['task_dependencies'] = list(set(task_dep_idx))
@@ -969,6 +972,58 @@ def resolve_group(group, local_inputs, repeats_idx):
     return group_resolved
 
 
+def get_input_groups(task_idx, task_lst, dependency_idx, element_idx):
+    """Get the (local inputs) group dict for each non-local input of a task.
+
+    Parameters
+    ----------
+    non_local_inputs : list of dict
+
+    """
+
+    task = task_lst[task_idx]
+    local_input_names = list(task['local_inputs']['inputs'].keys())
+    non_local_inputs = [i for i in task['schema'].inputs
+                        if i['name'] not in local_input_names]
+
+    input_groups = {}
+    for non_local_input_i in non_local_inputs:
+
+        input_alias = non_local_input_i['alias']
+        input_name = non_local_input_i['name']
+        group_name = task['schema'].get_input_by_alias(input_alias)['group']
+
+        task_param_deps = dependency_idx[task_idx]['parameter_dependencies']
+        input_task_idx = task_param_deps[input_alias]['from_task']
+        input_task = task_lst[input_task_idx]
+
+        if group_name == 'default':
+            group_name_ = group_name
+        else:
+            group_name_ = 'user_group_' + group_name
+
+        group_dict = element_idx[input_task_idx]['groups']
+        group_names_fmt = ', '.join([f'"{i}"' for i in group_dict.keys()])
+        group_dat = group_dict.get(group_name_)
+
+        if group_dat is None:
+            msg = (f'No group "{group_name}" defined in the workflow for '
+                   f'input "{input_name}". Defined groups are: '
+                   f'{group_names_fmt}.')
+            raise UnsatisfiedGroupParameter(msg)
+
+        input_groups.update({
+            input_alias: {
+                **group_dat,
+                'group_name': group_name,
+                'task_idx': input_task_idx,
+                'task_name': input_task['name'],
+            }
+        })
+
+    return input_groups
+
+
 def get_element_idx(task_lst, dep_idx, num_iterations):
     """For each task, find the element indices that determine the elements to be used
     (i.e from upstream tasks) to populate task inputs.
@@ -1025,56 +1080,24 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
                 'num_elements_per_iteration': loc_in['length'],
                 'num_iterations': num_iterations,
                 'groups': groups,
-                'inputs': {i: {'input_idx': input_idx} for i in loc_in['inputs']},
+                'inputs': {
+                    i:
+                        {
+                            'local_input_idx': input_idx,
+                            'task_idx': [None] * len(input_idx),
+                            'element_idx': [None] * len(input_idx),
+                            'group': [None] * len(input_idx),
+                        }
+                        for i in loc_in['inputs']
+                },
                 'iteration_idx': [0] * loc_in['length'],
             }
 
         else:
             # This task depends on other tasks.
-            ins_local = list(loc_in['inputs'].keys())
-            ins_non_local = [i for i in schema.inputs if i['name'] not in ins_local]
-
-            # Get the (local inputs) group dict for each `ins_non_local` (from upstream
-            # tasks):
-            input_groups = {}
-            for non_loc_inp in ins_non_local:
-                input_alias = non_loc_inp['alias']
-                input_name = non_loc_inp['name']
-                input_context = non_loc_inp['context']
-                group_name = schema.get_input_by_alias(input_alias)['group']
-                for up_task in upstream_tasks:
-                    if input_context is not None:
-                        if up_task['context'] != input_context:
-                            continue
-                    if (
-                        input_name in up_task['schema'].outputs or
-                        (
-                            input_name in up_task['schema'].input_names and
-                            input_name in up_task['local_inputs']['inputs']
-                        )
-                    ):
-                        group_name_ = group_name
-                        if group_name != 'default':
-                            group_name_ = 'user_group_' + group_name
-                        group_dict = element_idx[up_task['task_idx']]['groups']
-                        group_names_fmt = ', '.join([f'"{i}"' for i in group_dict.keys()])
-                        group_dat = group_dict.get(group_name_)
-                        if group_dat is None:
-                            msg = (f'No group "{group_name}" defined in the workflow for '
-                                   f'input "{input_name}". Defined groups are: '
-                                   f'{group_names_fmt}.')
-                            raise UnsatisfiedGroupParameter(msg)
-                        input_groups.update({
-                            input_alias: {
-                                **group_dat,
-                                'group_name': group_name,
-                                'task_idx': up_task['task_idx'],
-                                'task_name': up_task['name'],
-                            }
-                        })
-                        break
-
+            input_groups = get_input_groups(idx, task_lst, dep_idx, element_idx)
             is_nesting_mixed = len(set([i['nest'] for i in input_groups.values()])) > 1
+
             for input_alias, group_info in input_groups.items():
 
                 if group_info['merge_priority'] is None and is_nesting_mixed:
@@ -1125,7 +1148,14 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
                         for i in loc_in['inputs']:
                             inp_alias = [j['alias'] for j in schema.inputs
                                          if j['name'] == i][0]
-                            ins_dict.update({inp_alias: {'input_idx': input_idx}})
+                            ins_dict.update({
+                                inp_alias: {
+                                    'local_input_idx': input_idx,
+                                    'task_idx': [None] * len(input_idx),
+                                    'element_idx': [None] * len(input_idx),
+                                    'group': [None] * len(input_idx),
+                                }
+                            })
 
                         for group_name, group in loc_in['groups'].items():
                             group = resolve_group(group, loc_in['inputs'], repeats_idx)
@@ -1134,11 +1164,13 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
                     else:
                         existing_size = incoming_size
                         repeats_idx = [None] * existing_size
+                        element_idx_i = in_group['group_element_idx_per_iteration']
                         ins_dict.update({
                             input_alias: {
-                                'task_idx': in_group['task_idx'],
-                                'group': in_group['group_name'],
-                                'element_idx': in_group['group_element_idx_per_iteration'],
+                                'local_input_idx': [None] * len(element_idx_i),
+                                'task_idx': [in_group['task_idx']] * len(element_idx_i),
+                                'element_idx': element_idx_i,
+                                'group': [in_group['group_name']] * len(element_idx_i),
                             }
                         })
                         continue
@@ -1147,22 +1179,20 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
 
                     # Repeat existing:
                     for k, v in ins_dict.items():
-                        if 'task_idx' in v:
-                            elems_idx = repeat(v['element_idx'], incoming_size)
-                            ins_dict[k]['element_idx'] = elems_idx
-                        else:
-                            input_idx = repeat(ins_dict[k]['input_idx'], incoming_size)
-                            ins_dict[k]['input_idx'] = input_idx
+                        for k2, v2 in v.items():
+                            ins_dict[k][k2] = repeat(v2, incoming_size)
 
                     # Tile incoming:
+                    element_idx_i = tile(
+                        in_group['group_element_idx_per_iteration'],
+                        existing_size,
+                    )
                     ins_dict.update({
                         input_alias: {
-                            'task_idx': in_group['task_idx'],
-                            'group': in_group['group_name'],
-                            'element_idx': tile(
-                                in_group['group_element_idx_per_iteration'],
-                                existing_size
-                            ),
+                            'local_input_idx': [None] * len(element_idx_i),
+                            'task_idx': [in_group['task_idx']] * len(element_idx_i),
+                            'group': [in_group['group_name']] * len(element_idx_i),
+                            'element_idx': element_idx_i,
                         }
                     })
 
@@ -1199,11 +1229,13 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
                         )
                         raise IncompatibleTaskNesting(msg)
 
+                    element_idx_i = in_group['group_element_idx_per_iteration']
                     ins_dict.update({
                         input_alias: {
-                            'task_idx': in_group['task_idx'],
-                            'group': in_group['group_name'],
-                            'element_idx': in_group['group_element_idx_per_iteration'],
+                            'local_input_idx': [None] * len(element_idx_i),
+                            'task_idx': [in_group['task_idx']] * len(element_idx_i),
+                            'group': [in_group['group_name']] * len(element_idx_i),
+                            'element_idx': element_idx_i,
                         }
                     })
 
@@ -1262,9 +1294,10 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
     # Add iterations:
     for idx, elem_idx_i in enumerate(element_idx):
 
+        num_iterations_i = elem_idx_i['num_iterations']
         new_iter_idx = [
             iter_idx
-            for iter_idx in range(elem_idx_i['num_iterations'])
+            for iter_idx in range(num_iterations_i)
             for _ in range(elem_idx_i['num_elements_per_iteration'])
         ]
         element_idx[idx]['iteration_idx'] = new_iter_idx
@@ -1272,7 +1305,7 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
 
         for input_alias, inputs_idx in elem_idx_i['inputs'].items():
 
-            ins_task_idx = inputs_idx.get('task_idx')
+            ins_task_idx = inputs_idx['task_idx'][0]
 
             if ins_task_idx is not None:
                 # For now, assume non-local inputs are parametrised from the same
@@ -1283,18 +1316,31 @@ def get_element_idx(task_lst, dep_idx, num_iterations):
                 ]
 
                 new_elems_idx = []
-                for iter_idx in range(elem_idx_i['num_iterations']):
+                new_task_idx = []
+                new_group = []
+                new_loc_ins_idx = []
+
+                for iter_idx in range(num_iterations_i):
                     for i in inputs_idx['element_idx']:
                         new_elems_idx.append(
                             [j + (iter_idx * num_elems_per_iter) for j in i]
                         )
-                element_idx[idx]['inputs'][input_alias]['element_idx'] = new_elems_idx
+                    new_task_idx.extend([ins_task_idx] * len(new_iter_idx))
+                    new_group.extend([inputs_idx['group'][0]] * len(new_iter_idx))
+                    new_loc_ins_idx.extend([None] * len(new_iter_idx))
 
             else:
                 # Copy local inputs' `inputs_idx` (local inputs must be the same for
                 # all iterations):
-                new_ins_idx = tile(inputs_idx['input_idx'], elem_idx_i['num_iterations'])
-                element_idx[idx]['inputs'][input_alias]['input_idx'] = new_ins_idx
+                new_loc_ins_idx = tile(inputs_idx['local_input_idx'], num_iterations_i)
+                new_task_idx = tile(inputs_idx['task_idx'], num_iterations_i)
+                new_elems_idx = tile(inputs_idx['element_idx'], num_iterations_i)
+                new_group = tile(inputs_idx['group'], num_iterations_i)
+
+            element_idx[idx]['inputs'][input_alias]['local_input_idx'] = new_loc_ins_idx
+            element_idx[idx]['inputs'][input_alias]['task_idx'] = new_task_idx
+            element_idx[idx]['inputs'][input_alias]['group'] = new_group
+            element_idx[idx]['inputs'][input_alias]['element_idx'] = new_elems_idx
 
     return element_idx
 

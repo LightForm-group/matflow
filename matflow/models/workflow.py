@@ -473,7 +473,7 @@ class Workflow(object):
 
                 for elem_idx_i in iter_elem_idx:
 
-                    file_path = local_ins[inputs_idx['input_idx'][elem_idx_i]]
+                    file_path = local_ins[inputs_idx['local_input_idx'][elem_idx_i]]
                     file_path_full = self.stage_directory.joinpath(file_path)
                     elem_path = self.get_element_path(task_idx, elem_idx_i)
                     dst_path = elem_path.joinpath(file_path_full.name)
@@ -606,8 +606,8 @@ class Workflow(object):
 
                 # Expand values for inter-task nesting:
                 values_fmt_all = [
-                    values_fmt[i]
-                    for i in elems_idx['inputs'][local_in_name]['input_idx']
+                    values_fmt[i] if i is not None else None
+                    for i in elems_idx['inputs'][local_in_name]['local_input_idx']
                 ]
                 cmd_line_inputs.update({local_in_name: values_fmt_all})
 
@@ -1256,22 +1256,25 @@ class Workflow(object):
             input_name = [i['name'] for i in task.schema.inputs
                           if i['alias'] == input_alias][0]
 
-            if ins_task_idx is not None:
+            if ins_task_idx[element_idx] is not None:
                 # Input values sourced from previous task outputs:
 
                 data_idx = []
                 for i in inputs_idx['element_idx'][element_idx]:
-                    src_element = self.tasks[ins_task_idx].elements[i]
+                    src_element = self.tasks[ins_task_idx[element_idx]].elements[i]
                     param_data_idx = src_element.get_parameter_data_idx(input_name)
                     data_idx.append(param_data_idx)
 
-                if inputs_idx['group'] == 'default':
+                if inputs_idx['group'][element_idx] == 'default':
                     data_idx = data_idx[0]
 
             else:
                 # Input values sourced from `local_inputs` of this task:
                 local_data_idx = task.local_inputs['inputs'][input_name]['vals_data_idx']
-                all_data_idx = [local_data_idx[i] for i in inputs_idx['input_idx']]
+                all_data_idx = [
+                    (local_data_idx[i] if i is not None else None)
+                    for i in inputs_idx['local_input_idx']
+                ]
                 data_idx = all_data_idx[element_idx]
 
             if is_array:
