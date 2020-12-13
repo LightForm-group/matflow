@@ -1024,7 +1024,7 @@ def get_input_groups(task_idx, task_lst, dependency_idx, element_idx):
     return input_groups
 
 
-def get_element_idx(task_lst, dep_idx, num_iterations):
+def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
     """For each task, find the element indices that determine the elements to be used
     (i.e from upstream tasks) to populate task inputs.
 
@@ -1415,7 +1415,7 @@ def validate_inputs(task_lst):
         schema.check_surplus_inputs(defined_inputs)
 
 
-def init_tasks(workflow, task_lst, is_from_file, num_iterations, check_integrity=True):
+def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
     """Construct and validate Task objects and the element indices
     from which to populate task inputs.
 
@@ -1465,22 +1465,15 @@ def init_tasks(workflow, task_lst, is_from_file, num_iterations, check_integrity
 
     validate_inputs(task_lst)
 
-    # Find element indices that determine the elements from which task inputs are drawn:
-    element_idx = get_element_idx(task_lst, dep_idx, num_iterations)
-
     task_objs = []
-    for task_idx, task_dict in enumerate(task_lst):
+    task_elements = []
+    for task_dict in task_lst:
 
         if is_from_file:
-            task_id = task_dict.pop('id')
-            elements = task_dict.pop('elements')
-        else:
-            task_id = None
-            num_elements = element_idx[task_idx]['num_elements']
-            elements = [{'element_idx': elem_idx} for elem_idx in range(num_elements)]
+            task_elements.append(task_dict.pop('elements'))
 
+        task_id = task_dict.pop('id') if is_from_file else None
         task = Task(workflow=workflow, **task_dict)
-        task.init_elements(elements)
 
         if is_from_file:
             task.id = task_id
@@ -1489,4 +1482,4 @@ def init_tasks(workflow, task_lst, is_from_file, num_iterations, check_integrity
 
         task_objs.append(task)
 
-    return task_objs, element_idx, dep_idx
+    return task_objs, task_elements, dep_idx

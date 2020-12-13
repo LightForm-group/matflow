@@ -31,7 +31,7 @@ from matflow.errors import (
 )
 from matflow.hicklable import to_hicklable
 from matflow.models.command import DEFAULT_FORMATTERS
-from matflow.models.construction import init_tasks
+from matflow.models.construction import init_tasks, get_element_idx
 from matflow.models.software import SoftwareInstance
 from matflow.models.task import TaskStatus
 from matflow.models.parameters import Parameters
@@ -93,13 +93,14 @@ class Workflow(object):
         '_figures',
         '_metadata',
         '_num_iterations',
+        '_iterate',
         '_iterate_run_options',
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extends=None, archive=None,
                  archive_excludes=None, figures=None, metadata=None, num_iterations=None,
-                 iterate_run_options=None, check_integrity=True, profile=None,
-                 __is_from_file=False):
+                 iterate=None, iterate_run_options=None, check_integrity=True,
+                 profile=None, __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
@@ -116,20 +117,38 @@ class Workflow(object):
                          for idx, i in enumerate(figures)
                          ] if figures else []
         self._metadata = metadata or {}
+
+        tasks, task_elements, dep_idx = init_tasks(self, tasks, self.is_from_file,
+                                                   check_integrity)
+        self._tasks = tasks
+        self._dependency_idx = dep_idx
+
         self._num_iterations = num_iterations or 1
+        self._iterate = self._validate_iterate(iterate, self.is_from_file)
         self._iterate_run_options = iterate_run_options or {}
 
-        tasks, elements_idx, dep_idx = init_tasks(
-            self,
-            tasks,
-            self.is_from_file,
-            self._num_iterations,
-            check_integrity=check_integrity
+        # Find element indices that determine the elements from which task inputs are drawn:
+        task_lst = [
+            {
+                'task_idx': i.task_idx,
+                'local_inputs': i.local_inputs,
+                'name': i.name,
+                'schema': i.schema,
+            } for i in tasks
+        ]
+        elements_idx = get_element_idx(
+            task_lst, dep_idx, self.num_iterations, self.iterate
         )
 
-        self._tasks = tasks
+        for task in self.tasks:
+            if self.is_from_file:
+                elements = task_elements[task.task_idx]
+            else:
+                num_elements = elements_idx[task.task_idx]['num_elements']
+                elements = [{'element_idx': elem_idx} for elem_idx in range(num_elements)]
+            task.init_elements(elements)
+
         self._elements_idx = elements_idx
-        self._dependency_idx = dep_idx
 
         if not self.is_from_file:
             self._check_archive_connection()
@@ -224,6 +243,36 @@ class Workflow(object):
                 for k, v in attributes.items():
                     handle[path].attrs[k] = v
 
+    def _validate_iterate(self, iterate_dict, is_from_file):
+
+        if not iterate_dict:
+            return iterate_dict
+
+        elif self.num_iterations is not 1:
+            msg = "Specify either `iterate` (dict) or `num_iterations` (int)."
+            raise ValueError(msg)
+
+        req_keys = ['parameter', 'num_iterations']
+        if is_from_file:
+            req_keys.append('task_pathway')
+        allowed_keys = set(req_keys)
+
+        miss_keys = list(set(req_keys) - set(iterate_dict))
+        bad_keys = list(set(iterate_dict) - allowed_keys)
+        msg = '`iterate` must be a dict.'
+        if miss_keys:
+            miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+            raise WorkflowIterationError(msg + f' Missing keys are: {miss_keys_fmt}.')
+        if bad_keys:
+            bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+            raise WorkflowIterationError(msg + f' Unknown keys are: {bad_keys_fmt}.')
+
+        if not is_from_file:
+            task_pathway = self.get_iteration_task_pathway(iterate_dict['parameter'])
+            iterate_dict.update({'task_pathway': task_pathway})
+
+        return iterate_dict
+
     @property
     def version(self):
         return len(self._history)
@@ -292,6 +341,10 @@ class Workflow(object):
     @property
     def num_iterations(self):
         return self._num_iterations
+
+    @property
+    def iterate(self):
+        return self._iterate
 
     @property
     def iterate_run_options(self):
@@ -1212,6 +1265,7 @@ class Workflow(object):
             'figures',
             'metadata',
             'num_iterations',
+            'iterate',
         ]
         for key in WARN_ON_MISSING:
             if key not in obj_json:
