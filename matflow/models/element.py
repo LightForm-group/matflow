@@ -1,5 +1,7 @@
 """matflow.models.element.py"""
 
+import copy
+
 from matflow.models.parameters import Parameters
 
 
@@ -100,3 +102,184 @@ class Element(object):
 
     def add_file(self, file_name, value=None, data_idx=None):
         return self.files.add_parameter(file_name, 'files', value, data_idx)
+
+    def get_element_dependencies(self, recurse=False):
+        """Get the task/element indices of elements that a given element depends on.
+
+        Parameters
+        ----------
+        recurse : bool, optional
+            If False, only include task/element indices that are direct dependencies of
+            the given element. If True, also include task/element indices that indirect
+            dependencies of the given element.
+
+        Returns
+        -------
+        dict of (int : list)
+            Dict whose keys are task indices and whose values are lists of element indices
+            for a given task.
+
+        Notes
+        -----
+        For the inverse, see `get_dependent_elements`.
+
+        """
+
+        task = self.task
+        workflow = task.workflow
+        elem_deps = {}
+        for inp_alias, ins in workflow.elements_idx[task.task_idx]['inputs'].items():
+            if ins['task_idx'][self.element_idx] is not None:
+                dep_elem_idx = ins['element_idx'][self.element_idx]
+                # (maybe not needed)
+                if ins['task_idx'][self.element_idx] not in elem_deps:
+                    elem_deps.update({ins['task_idx'][self.element_idx]: []})
+                elem_deps[ins['task_idx'][self.element_idx]].extend(dep_elem_idx)
+
+        if recurse:
+            new_elem_deps = copy.deepcopy(elem_deps)
+            for task_idx, element_idx in elem_deps.items():
+                for element_idx_i in element_idx:
+                    element_i = workflow.tasks[task_idx].elements[element_idx_i]
+                    add_elem_deps = element_i.get_element_dependencies(recurse=True)
+                    for k, v in add_elem_deps.items():
+                        if k not in new_elem_deps:
+                            new_elem_deps.update({k: []})
+                        new_elem_deps[k].extend(v)
+
+            elem_deps = new_elem_deps
+
+        # Remove repeats:
+        for k, v in elem_deps.items():
+            elem_deps[k] = list(set(v))
+
+        return elem_deps
+
+    def get_dependent_elements(self, recurse=False):
+        """Get the task/element indices of elements that depend on a given element.
+
+        Parameters
+        ----------
+        recurse : bool, optional
+            If False, only include task/element indices that depend directly on the given
+            element. If True, also include task/element indices that depend indirectly on
+            the given element.
+
+        Returns
+        -------
+        dict of (int : list)
+            Dict whose keys are task indices and whose values are lists of element indices
+            for a given task.
+
+        Notes
+        -----
+        For the inverse, see `get_element_dependencies`.
+
+        """
+
+        task = self.task
+        workflow = task.workflow
+        dep_elems = {}
+
+        for task_idx, elems_idx in enumerate(workflow.elements_idx):
+            for inp_alias, ins in elems_idx['inputs'].items():
+                if ins.get('task_idx') == task.task_idx:
+                    for element_idx, i in enumerate(ins['element_idx']):
+                        if self.element_idx in i:
+                            if task_idx not in dep_elems:
+                                dep_elems.update({task_idx: []})
+                            dep_elems[task_idx].append(element_idx)
+
+        if recurse:
+            new_dep_elems = copy.deepcopy(dep_elems)
+            for task_idx, element_idx in dep_elems.items():
+                for element_idx_i in element_idx:
+                    element_i = workflow.tasks[task_idx].elements[element_idx_i]
+                    add_elem_deps = element_i.get_dependent_elements(recurse=True)
+                    for k, v in add_elem_deps.items():
+                        if k not in new_dep_elems:
+                            new_dep_elems.update({k: []})
+                        new_dep_elems[k].extend(v)
+
+            dep_elems = new_dep_elems
+
+        # Remove repeats:
+        for k, v in dep_elems.items():
+            dep_elems[k] = list(set(v))
+
+        return dep_elems
+
+    def get_parameter_dependency_value(self, parameter_dependency_name):
+
+        workflow = self.task.workflow
+
+        in_tasks = workflow.get_input_tasks(parameter_dependency_name)
+        out_tasks = workflow.get_output_tasks(parameter_dependency_name)
+        elem_deps = self.get_element_dependencies(recurse=True)
+
+        if parameter_dependency_name in self.task.schema.input_names:
+            param_vals = [self.get_input(parameter_dependency_name)]
+
+        elif out_tasks:
+            elems = []
+            out_tasks_valid = set(out_tasks) & set(elem_deps)
+            if not out_tasks_valid:
+                msg = (f'Parameter "{parameter_dependency_name}" is not a dependency of '
+                       f'given element of task "{self.task.name}".')
+                raise ValueError(msg)
+            for task_idx in out_tasks_valid:
+                for i in elem_deps[task_idx]:
+                    elems.append(workflow.tasks[task_idx].elements[i])
+            param_vals = [elem.get_output(parameter_dependency_name) for elem in elems]
+
+        elif in_tasks:
+            elems = []
+            in_tasks_valid = set(in_tasks) & set(elem_deps)
+            if not in_tasks_valid:
+                msg = (f'Parameter "{parameter_dependency_name}" is not a dependency of '
+                       f'given element of task "{self.task.name}".')
+                raise ValueError(msg)
+            for task_idx in in_tasks_valid:
+                for i in elem_deps[task_idx]:
+                    elems.append(workflow.tasks[task_idx].elements[i])
+            param_vals = [elem.get_input(parameter_dependency_name) for elem in elems]
+        else:
+            msg = (f'Parameter "{parameter_dependency_name}" is not an input or output '
+                   f'parameter for any workflow task.')
+            raise ValueError(msg)
+
+        if len(param_vals) == 1:
+            param_vals = param_vals[0]
+
+        return param_vals
+
+    def get_dependent_parameter_value(self, dependent_parameter_name):
+
+        workflow = self.task.workflow
+
+        out_tasks = workflow.get_output_tasks(dependent_parameter_name)
+        dep_elems = self.get_dependent_elements(recurse=True)
+
+        if dependent_parameter_name in self.task.schema.outputs:
+            param_vals = [self.get_output(dependent_parameter_name)]
+
+        elif out_tasks:
+            elems = []
+            out_tasks_valid = set(out_tasks) & set(dep_elems)
+            if not out_tasks_valid:
+                msg = (f'Parameter "{dependent_parameter_name}" does not depend on the '
+                       f'given element of task "{self.task.name}".')
+                raise ValueError(msg)
+            for task_idx in out_tasks_valid:
+                for i in dep_elems[task_idx]:
+                    elems.append(workflow.tasks[task_idx].elements[i])
+            param_vals = [elem.get_output(dependent_parameter_name) for elem in elems]
+        else:
+            msg = (f'Parameter "{dependent_parameter_name}" is not an output parameter '
+                   f'for any workflow task.')
+            raise ValueError(msg)
+
+        if len(param_vals) == 1:
+            param_vals = param_vals[0]
+
+        return param_vals

@@ -27,6 +27,7 @@ from matflow.errors import (
     WorkflowPersistenceError,
     TaskElementExecutionError,
     UnexpectedSourceMapReturnError,
+    WorkflowIterationError,
 )
 from matflow.hicklable import to_hicklable
 from matflow.models.command import DEFAULT_FORMATTERS
@@ -1868,3 +1869,190 @@ class Workflow(object):
                 }
                 tasks_info.append(task_dict)
         return tasks_info
+
+    def get_input_tasks(self, parameter_name):
+        'Return task indices of tasks in which a given parameter is an input.'
+
+        input_task_idx = []
+        for task in self.tasks:
+            if parameter_name in task.schema.input_names:
+                input_task_idx.append(task.task_idx)
+
+        return input_task_idx
+
+    def get_output_tasks(self, parameter_name):
+        'Return task indices of tasks in which a given parameter is an output.'
+
+        output_task_idx = []
+        for task in self.tasks:
+            if parameter_name in task.schema.outputs:
+                output_task_idx.append(task.task_idx)
+
+        return output_task_idx
+
+    def get_dependent_tasks(self, task_idx, recurse=False):
+        """Get the indices of tasks that depend on a given task.
+
+        Notes
+        -----
+        For the inverse, see `get_task_dependencies`.
+
+        """
+
+        out = []
+        for idx, dep_idx in enumerate(self.dependency_idx):
+            if task_idx in dep_idx['task_dependencies']:
+                out.append(idx)
+
+        if recurse:
+            out += list(set([
+                additional_out
+                for task_idx_i in out
+                for additional_out in
+                self.get_dependent_tasks(task_idx_i, recurse=True)
+            ]))
+
+        return out
+
+    def get_task_dependencies(self, task_idx, recurse=False):
+        """Get the indicies of tasks that a given task depends on.
+
+        Notes
+        -----
+        For the inverse, see `get_dependent_tasks`.
+
+        """
+
+        out = self.dependency_idx[task_idx]['task_dependencies']
+
+        if recurse:
+            out += list(set([
+                additional_out
+                for task_idx_i in out
+                for additional_out in
+                self.get_task_dependencies(task_idx_i, recurse=True)
+            ]))
+
+        return out
+
+    def get_dependent_parameters(self, parameter_name, recurse=False, return_list=False):
+        """Get the names of parameters that depend on a given parameter.
+
+        Parameters
+        ----------
+        parameter_name : str
+        recurse : bool, optional
+            If False, only include output parameters from tasks for which the given
+            parameter is an input. If True, include output parameters from dependent tasks
+            as well. By default, False.
+        return_list : bool, optional
+            If True, return a list of output parameters. If False, return a dict whose
+            keys are the task indices and whose values are the output parameters from each
+            task. By default, False.
+
+        Returns
+        -------
+        dict of (int : list of str) or list of str        
+
+        Notes
+        -----
+        For the inverse, see `get_parameter_dependencies`.
+
+        """
+
+        # Get the tasks where given parameter is an input:
+        all_task_idx = self.get_input_tasks(parameter_name)
+
+        # If recurse, need outputs from dependent tasks as well:
+        if recurse:
+            all_task_idx += list(set([
+                additional_task
+                for task_idx_i in all_task_idx
+                for additional_task in
+                self.get_dependent_tasks(task_idx_i, recurse=True)
+            ]))
+
+        # Get output parameters from tasks:
+        params = {
+            task_idx: self.tasks[task_idx].schema.outputs
+            for task_idx in all_task_idx
+        }
+
+        if return_list:
+            params = list(set([i for param_vals in params.values() for i in param_vals]))
+
+        return params
+
+    def get_parameter_dependencies(self, parameter_name, recurse=False, return_list=False):
+        """Get the names of parameters that a given parameter depends on.
+
+        Parameters
+        ----------
+        parameter_name : str
+        recurse : bool, optional
+            If False, only include input parameters from tasks for which the given
+            parameter is an output. If True, include input parameters from task
+            dependencies as well. By default, False.
+        return_list : bool, optional
+            If True, return a list of input parameters. If False, return a dict whose keys
+            are the task indices and whose values are the input parameters from each task.
+            By default, False.
+
+        Returns
+        -------
+        dict of (int : list of str) or list of str
+
+        Notes
+        -----
+        For the inverse, see `get_dependent_parameters`.
+
+        """
+
+        # Get the tasks where given parameter is an output
+        all_task_idx = self.get_output_tasks(parameter_name)
+
+        # If recurse, need inputs from tasks dependencies as well:
+        if recurse:
+            all_task_idx = list(set([
+                additional_task
+                for task_idx_i in all_task_idx
+                for additional_task in
+                self.get_task_dependencies(task_idx_i, recurse=True)
+            ])) + all_task_idx
+
+        # Get input parameters from tasks:
+        params = {
+            task_idx: self.tasks[task_idx].schema.input_names
+            for task_idx in all_task_idx
+        }
+
+        if return_list:
+            params = list(set([i for param_vals in params.values() for i in param_vals]))
+
+        return params
+
+    def get_iteration_task_pathway(self, parameter_name):
+
+        originating_tasks = self.get_input_tasks(parameter_name)
+        dep_tasks = [j for i in originating_tasks
+                     for j in self.get_dependent_tasks(i, recurse=True)]
+
+        # Which dep_tasks produces the iteration parameter?
+        outputs_iter_param = [parameter_name in self.tasks[i].schema.outputs
+                              for i in dep_tasks]
+
+        if not any(outputs_iter_param):
+            msg = (f'Parameter "{parameter_name}" is not output by any task and so '
+                   f'cannot be iterated.')
+            raise WorkflowIterationError(msg)
+
+        # Only first task for now...
+        producing_task_idx = dep_tasks[outputs_iter_param.index(True)]
+        task_pathway = list(set(originating_tasks + dep_tasks))
+        out = {
+            'task_pathway': task_pathway,
+            'originating_tasks': originating_tasks,
+            'producing_task': producing_task_idx,
+        }
+
+        return out

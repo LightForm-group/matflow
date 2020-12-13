@@ -81,3 +81,7 @@ class UnexpectedSourceMapReturnError(Exception):
 
 class CommandError(Exception):
     """For problems with command groups and commands."""
+
+
+class WorkflowIterationError(Exception):
+    """For issues with resolving requested iterations."""
