@@ -92,11 +92,13 @@ class Workflow(object):
         '_figures',
         '_metadata',
         '_num_iterations',
+        '_iterate_run_options',
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extends=None, archive=None,
                  archive_excludes=None, figures=None, metadata=None, num_iterations=None,
-                 check_integrity=True, profile=None, __is_from_file=False):
+                 iterate_run_options=None, check_integrity=True, profile=None,
+                 __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
@@ -114,6 +116,7 @@ class Workflow(object):
                          ] if figures else []
         self._metadata = metadata or {}
         self._num_iterations = num_iterations or 1
+        self._iterate_run_options = iterate_run_options or {}
 
         tasks, elements_idx, dep_idx = init_tasks(
             self,
@@ -288,6 +291,10 @@ class Workflow(object):
     @property
     def num_iterations(self):
         return self._num_iterations
+
+    @property
+    def iterate_run_options(self):
+        return self._iterate_run_options
 
     @property
     def elements_idx(self):
@@ -838,7 +845,7 @@ class Workflow(object):
             'commands': ('matflow write-element-directories '
                          '--iteration-idx=$(($ITER_IDX+1))'),
             'stats': False,
-            'scheduler_options': {},
+            'scheduler_options': self.iterate_run_options,
             'name': 'iterate',
         })
 

@@ -18,9 +18,11 @@ class Config(object):
         'default_run_options',
         'default_preparation_run_options',
         'default_processing_run_options',
+        'default_iterate_run_options',
         'default_sticky_run_options',
         'default_sticky_preparation_run_options',
         'default_sticky_processing_run_options',
+        'default_sticky_iterate_run_options',
         'parallel_modes',
         'archive_locations',
     ]
@@ -230,9 +232,11 @@ class Config(object):
             'default_run_options',
             'default_preparation_run_options',
             'default_processing_run_options',
+            'default_iterate_run_options',
             'default_sticky_run_options',
             'default_sticky_preparation_run_options',
             'default_sticky_processing_run_options',
+            'default_sticky_iterate_run_options',
         ]:
             Config.__conf[i] = config_dat.get(i, {})
 

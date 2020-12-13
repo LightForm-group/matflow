@@ -45,6 +45,13 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
         profile_str = handle.read()
 
     profile = {'file': profile_str, 'parsed': copy.deepcopy(workflow_dict)}
+
+    iterate_run_opts = {
+        **Config.get('default_sticky_iterate_run_options'),
+        **Config.get('default_iterate_run_options'),
+    }
+    workflow_dict.update({'iterate_run_options': iterate_run_opts})
+
     workflow = Workflow(**workflow_dict, stage_directory=directory, profile=profile)
     workflow.set_ids()
 
