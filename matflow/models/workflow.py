@@ -254,7 +254,7 @@ class Workflow(object):
 
         req_keys = ['parameter', 'num_iterations']
         if is_from_file:
-            req_keys.append('task_pathway')
+            req_keys.extend(['task_pathway', 'producing_task', 'originating_tasks'])
         allowed_keys = set(req_keys)
 
         miss_keys = list(set(req_keys) - set(iterate_dict))
@@ -269,7 +269,7 @@ class Workflow(object):
 
         if not is_from_file:
             task_pathway = self.get_iteration_task_pathway(iterate_dict['parameter'])
-            iterate_dict.update({'task_pathway': task_pathway})
+            iterate_dict.update(task_pathway)
 
         return iterate_dict
 
@@ -713,6 +713,7 @@ class Workflow(object):
                     'stats': False,
                     'scheduler_options': task.get_scheduler_options('prepare'),
                     'name': self.get_hpcflow_job_name(task, 'prepare-sources'),
+                    'meta': {'from_tasks': [task.task_idx]},
                 }]
 
             if task.schema.is_func:
@@ -776,6 +777,7 @@ class Workflow(object):
                             'stats': False,
                             'scheduler_options': cur_prepare_opts,
                             'name': self.get_hpcflow_job_name(task, 'prepare-task'),
+                            'meta': {'from_tasks': [task.task_idx]},
                         },
                         {
                             'directory': '.',
@@ -784,6 +786,7 @@ class Workflow(object):
                             'stats': False,
                             'scheduler_options': cur_prepare_opts,
                             'name': self.get_hpcflow_job_name(task, 'prepare-task'),
+                            'meta': {'from_tasks': [task.task_idx]},
                         }
                     ])
 
@@ -795,6 +798,7 @@ class Workflow(object):
                         'stats': False,
                         'scheduler_options': cur_prepare_opts,
                         'name': self.get_hpcflow_job_name(task, 'prepare-task'),
+                        'meta': {'from_tasks': [task.task_idx]},
                     })
 
             if task.software_instance.requires_sources:
@@ -808,6 +812,7 @@ class Workflow(object):
                 'name': self.get_hpcflow_job_name(task, 'run'),
                 'stats': task.stats,
                 'stats_name': self.get_hpcflow_job_name(task, 'run', is_stats=True),
+                'meta': {'from_tasks': [task.task_idx]},
             }
             env = task.software_instance.env.as_str()
             if env:
@@ -839,6 +844,7 @@ class Workflow(object):
                         'stats': False,
                         'scheduler_options': cur_process_opts,
                         'name': self.get_hpcflow_job_name(task, 'process-prepare-task'),
+                        'meta': {'from_tasks': [task.task_idx, next_task.task_idx]},
                     })
                     add_process_groups = False
 
@@ -854,6 +860,7 @@ class Workflow(object):
                             'stats': False,
                             'scheduler_options': cur_process_opts,
                             'name': self.get_hpcflow_job_name(task, 'process-task'),
+                            'meta': {'from_tasks': [task.task_idx]},
                         },
                         {
                             'directory': '.',
@@ -862,6 +869,7 @@ class Workflow(object):
                             'stats': False,
                             'scheduler_options': cur_process_opts,
                             'name': self.get_hpcflow_job_name(task, 'process-task'),
+                            'meta': {'from_tasks': [task.task_idx]},
                         }
                     ])
                 else:
@@ -872,6 +880,7 @@ class Workflow(object):
                         'stats': False,
                         'scheduler_options': cur_process_opts,
                         'name': self.get_hpcflow_job_name(task, 'process-task'),
+                        'meta': {'from_tasks': [task.task_idx]},
                     })
 
             # Add variable for the task directories:
@@ -917,6 +926,27 @@ class Workflow(object):
                 'loop': {
                     'max_iterations': self.num_iterations,
                     'groups': list(range(len(command_groups))),
+                }
+            })
+
+        elif self.iterate:
+
+            # Find which command groups are to be repeated:
+            iterate_groups = []
+            for cmd_group_idx, cmd_group in enumerate(hf_data['command_groups']):
+                if (
+                    cmd_group['name'] == 'iterate' or
+                    any([i in self.iterate['task_pathway']
+                         for i in cmd_group['meta']['from_tasks']])
+                ):
+                    iterate_groups.append(cmd_group_idx)
+                hf_data['command_groups'][cmd_group_idx].pop('meta', None)
+                # TODO: allow "meta" key in hpcflow command groups.
+
+            hf_data.update({
+                'loop': {
+                    'max_iterations': self.iterate['num_iterations'],
+                    'groups': iterate_groups,
                 }
             })
 
@@ -1433,6 +1463,16 @@ class Workflow(object):
 
         """
 
+        if (
+            iteration_idx > 0 and
+            self.iterate and
+            task_idx not in self.iterate['task_pathway']
+        ):
+            # In the case where `prepare_task` for this task is in the same hpcflow
+            # command group as a `process_task` from the previous task, which is
+            # undergoing iteration.
+            return
+
         task = self.tasks[task_idx]
         num_elems = self.elements_idx[task.task_idx]['num_elements_per_iteration']
         iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
@@ -1635,6 +1675,16 @@ class Workflow(object):
             and we just need to collate the results from each element directory.
 
         """
+
+        if (
+            iteration_idx > 0 and
+            self.iterate and
+            task_idx not in self.iterate['task_pathway']
+        ):
+            # In the case where `process_task` for this task is in the same hpcflow
+            # command group as a `prepare_task` from the next task, which is undergoing
+            # iteration.
+            return
 
         task = self.tasks[task_idx]
         num_elems = self.elements_idx[task.task_idx]['num_elements_per_iteration']

@@ -12,7 +12,7 @@ is easier. The classes themselves mainly serve to provide useful properties.
 
 import copy
 from warnings import warn
-
+from pprint import pprint
 import numpy as np
 from hpcflow.scheduler import SunGridEngine
 
@@ -1058,8 +1058,18 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
 
     # todo ensure default nest and merge_priority are set on each group (in local_inputs).
 
+    print(f'iterate: {iterate}')
+    print(f'num_iterations: {num_iterations}')
+
     element_idx = []
     for idx, downstream_task in enumerate(task_lst):
+
+        if iterate and idx in iterate['task_pathway']:
+            num_iterations = iterate['num_iterations']
+        else:
+            num_iterations = 1
+
+        print(f'idx: {idx}; num_iterations: {num_iterations}')
 
         upstream_tasks = [task_lst[i] for i in dep_idx[idx]['task_dependencies']]
 
@@ -1341,6 +1351,9 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
             element_idx[idx]['inputs'][input_alias]['task_idx'] = new_task_idx
             element_idx[idx]['inputs'][input_alias]['group'] = new_group
             element_idx[idx]['inputs'][input_alias]['element_idx'] = new_elems_idx
+
+    print('element_idx')
+    pprint(element_idx)
 
     return element_idx
 
