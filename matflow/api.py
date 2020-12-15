@@ -180,7 +180,11 @@ def write_element_directories(iteration_idx, directory):
     'Generate element directories for a given iteration.'
     load_extensions()
     workflow = load_workflow(directory)
-    if iteration_idx < workflow.num_iterations:
+    if workflow.iterate:
+        num_iters = workflow.iterate['num_iterations']
+    else:
+        num_iters = workflow.num_iterations
+    if iteration_idx < num_iters:
         workflow.write_element_directories(iteration_idx)
         workflow.prepare_iteration(iteration_idx)
 

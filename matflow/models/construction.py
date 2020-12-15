@@ -1058,18 +1058,11 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
 
     # todo ensure default nest and merge_priority are set on each group (in local_inputs).
 
-    print(f'iterate: {iterate}')
-    print(f'num_iterations: {num_iterations}')
-
     element_idx = []
     for idx, downstream_task in enumerate(task_lst):
 
         if iterate and idx in iterate['task_pathway']:
             num_iterations = iterate['num_iterations']
-        else:
-            num_iterations = 1
-
-        print(f'idx: {idx}; num_iterations: {num_iterations}')
 
         upstream_tasks = [task_lst[i] for i in dep_idx[idx]['task_dependencies']]
 
@@ -1302,58 +1295,131 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
         element_idx.append(elem_idx_i)
 
     # Add iterations:
-    for idx, elem_idx_i in enumerate(element_idx):
+    for task_idx, elem_idx_i in enumerate(element_idx):
 
         num_iterations_i = elem_idx_i['num_iterations']
-        new_iter_idx = [
-            iter_idx
-            for iter_idx in range(num_iterations_i)
-            for _ in range(elem_idx_i['num_elements_per_iteration'])
-        ]
-        element_idx[idx]['iteration_idx'] = new_iter_idx
-        element_idx[idx]['num_elements'] = len(new_iter_idx)
 
-        for input_alias, inputs_idx in elem_idx_i['inputs'].items():
+        # print(f'Considering task {task_idx}, with num_iterations_i: {num_iterations_i}')
 
-            ins_task_idx = inputs_idx['task_idx'][0]
+        # First iteration is in place, add additional iterations (if they exist for this
+        # task):
+        for iter_idx in range(1, num_iterations_i):
 
-            if ins_task_idx is not None:
-                # For now, assume non-local inputs are parametrised from the same
-                # iteration as the upstream task:
+            # print(f'\tAdding elements for iteration {iter_idx}')
 
-                num_elems_per_iter = element_idx[ins_task_idx][
-                    'num_elements_per_iteration'
-                ]
+            elem_iter_idx = np.array(elem_idx_i['iteration_idx'])
+            elems_per_iter = elem_idx_i['num_elements_per_iteration']
+            iter_zero_idx = np.where(elem_iter_idx == 0)[0]
+            # print(f'\titer_zero_idx: {iter_zero_idx}')
 
-                new_elems_idx = []
-                new_task_idx = []
-                new_group = []
-                new_loc_ins_idx = []
+            for input_alias, inputs_idx in elem_idx_i['inputs'].items():
 
-                for iter_idx in range(num_iterations_i):
-                    for i in inputs_idx['element_idx']:
-                        new_elems_idx.append(
-                            [j + (iter_idx * num_elems_per_iter) for j in i]
+                # print(f'\t\tConsidering input "{input_alias}":\n\t\t\tinputs_idx: '
+                #       f'{inputs_idx}.')
+
+                if (
+                    iterate and
+                    input_alias == iterate['parameter'] and
+                    task_idx in iterate['originating_tasks']
+                ):
+                    # New elements should derive from the "producing task" of the previous
+                    # iteration:
+
+                    task_dep = iterate['producing_task']
+                    elem_iter_idx_task_dep = np.array(
+                        element_idx[task_dep]['iteration_idx']
+                    )
+
+                    # elements of task dependency belonging to the previous iteration:
+                    iter_prev_idx_task_dep = np.where(
+                        elem_iter_idx_task_dep == iter_idx - 1
+                    )[0]
+
+                    # print(f'\t\t\tElements should derive from the '
+                    #       f'previous iteration (iter_idx-1={iter_idx-1}) "producing '
+                    #       f'task": {task_dep}; elem_iter_idx_task_dep: '
+                    #       f'{elem_iter_idx_task_dep}; iter_prev_idx_task_dep: '
+                    #       f'{iter_prev_idx_task_dep}.')
+
+                    # Very hacky mess:
+                    new_group = inputs_idx['group'][0] or 'default'
+                    iter_current_group = [new_group] * elems_per_iter
+
+                    # Very hacky mess:
+                    iter_current_elems_idx = [
+                        [iter_prev_idx_task_dep[0]] * len(
+                            inputs_idx['element_idx'][0] or [0]
                         )
-                    new_task_idx.extend([ins_task_idx] * len(new_iter_idx))
-                    new_group.extend([inputs_idx['group'][0]] * len(new_iter_idx))
-                    new_loc_ins_idx.extend([None] * len(new_iter_idx))
+                    ] * elems_per_iter
 
-            else:
-                # Copy local inputs' `inputs_idx` (local inputs must be the same for
-                # all iterations):
-                new_loc_ins_idx = tile(inputs_idx['local_input_idx'], num_iterations_i)
-                new_task_idx = tile(inputs_idx['task_idx'], num_iterations_i)
-                new_elems_idx = tile(inputs_idx['element_idx'], num_iterations_i)
-                new_group = tile(inputs_idx['group'], num_iterations_i)
+                    iter_current_task = [task_dep] * elems_per_iter
+                    iter_current_loc = [None] * elems_per_iter
 
-            element_idx[idx]['inputs'][input_alias]['local_input_idx'] = new_loc_ins_idx
-            element_idx[idx]['inputs'][input_alias]['task_idx'] = new_task_idx
-            element_idx[idx]['inputs'][input_alias]['group'] = new_group
-            element_idx[idx]['inputs'][input_alias]['element_idx'] = new_elems_idx
+                    add_elements = {
+                        'local_input_idx': iter_current_loc,
+                        'task_idx': iter_current_task,
+                        'element_idx': iter_current_elems_idx,
+                        'group': iter_current_group,
+                    }
+                    # print(f'\t\t\tAdditional elements are: {add_elements}')
 
-    print('element_idx')
-    pprint(element_idx)
+                else:
+                    # New elements should derive from tasks of the most recent iteration:
+                    # print(f'\t\t\tElements should derive from the '
+                    #       f'most recent iteration.')
+                    if inputs_idx['local_input_idx'][0] is not None:
+                        # Tile local inputs for new iteration:
+                        add_elements = {k: [inputs_idx[k][i] for i in iter_zero_idx]
+                                        for k in inputs_idx}
+                        # print(f'\t\t\tFound local inputs: additional elements '
+                        #       f'are: {add_elements}')
+                    else:
+                        # Use elements from the most recent iteration of the dependency
+                        # task:
+                        task_dep = inputs_idx['task_idx'][0]
+                        elem_iter_idx_task_dep = np.array(
+                            element_idx[task_dep]['iteration_idx']
+                        )
+
+                        # elements of task dependency belonging to the most recent
+                        # iteration:
+                        iter_last_idx_task_dep = np.where(
+                            elem_iter_idx_task_dep == np.max(elem_iter_idx_task_dep)
+                        )[0]
+
+                        iter_zero_elems_idx = [inputs_idx['element_idx'][i]
+                                               for i in iter_zero_idx]
+                        iter_current_elems_idx = [
+                            [iter_last_idx_task_dep[j] for j in i]
+                            for i in iter_zero_elems_idx
+                        ]
+
+                        iter_current_group = [inputs_idx['group'][0]] * elems_per_iter
+                        iter_current_task = [inputs_idx['task_idx'][0]] * elems_per_iter
+                        iter_current_loc = [None] * elems_per_iter
+
+                        add_elements = {
+                            'local_input_idx': iter_current_loc,
+                            'task_idx': iter_current_task,
+                            'element_idx': iter_current_elems_idx,
+                            'group': iter_current_group,
+                        }
+
+                        # print(f'\t\t\tFound non-local inputs: additional elements '
+                        #       f'are: {add_elements}')
+
+                for k in elem_idx_i['inputs'][input_alias]:
+                    elem_idx_i['inputs'][input_alias][k] += add_elements[k]
+
+            # Update num_elements, iteration_idx with each iter_idx loop:
+            new_iter_idx = (
+                element_idx[task_idx]['iteration_idx'] + [iter_idx] * elems_per_iter
+            )
+            element_idx[task_idx]['iteration_idx'] = new_iter_idx
+            element_idx[task_idx]['num_elements'] = len(new_iter_idx)
+
+    # print('element_idx')
+    # pprint(element_idx)
 
     return element_idx
 

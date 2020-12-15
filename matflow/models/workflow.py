@@ -511,6 +511,13 @@ class Workflow(object):
 
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
+            if (
+                iteration_idx > 0 and
+                self.iterate and
+                task.task_idx not in self.iterate['task_pathway']
+            ):
+                continue
+
             task_idx = task.task_idx
             num_elems = elems_idx['num_elements_per_iteration']
             iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
@@ -549,6 +556,13 @@ class Workflow(object):
     def prepare_iteration(self, iteration_idx):
 
         for elems_idx, task in zip(self.elements_idx, self.tasks):
+
+            if (
+                iteration_idx > 0 and
+                self.iterate and
+                task.task_idx not in self.iterate['task_pathway']
+            ):
+                continue
 
             num_elems = elems_idx['num_elements_per_iteration']
             iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
@@ -940,8 +954,6 @@ class Workflow(object):
                          for i in cmd_group['meta']['from_tasks']])
                 ):
                     iterate_groups.append(cmd_group_idx)
-                hf_data['command_groups'][cmd_group_idx].pop('meta', None)
-                # TODO: allow "meta" key in hpcflow command groups.
 
             hf_data.update({
                 'loop': {
@@ -949,6 +961,10 @@ class Workflow(object):
                     'groups': iterate_groups,
                 }
             })
+
+        for cmd_group_idx, cmd_group in enumerate(hf_data['command_groups']):
+            # TODO: allow "meta" key in hpcflow command groups.
+            hf_data['command_groups'][cmd_group_idx].pop('meta', None)
 
         if self.archive:
             hf_data.update({'archive_locations': {self.archive: self.archive_definition}})
