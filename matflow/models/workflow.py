@@ -1401,8 +1401,8 @@ class Workflow(object):
 
             # Get inputs required for this file:
             in_map_inputs = {
-                input_name: element.get_input(input_name)
-                for input_name in in_map['inputs']
+                input_alias: element.get_input(input_name)
+                for input_alias in in_map['inputs']
             }
             file_path = task_elem_path.joinpath(in_map['file'])
 
