@@ -493,14 +493,14 @@ class Workflow(object):
         return out
 
     @requires_path_exists
-    def _get_element_temp_prepare_path(self, task_idx, element_idx):
+    def _get_element_temp_array_prepare_path(self, task_idx, element_idx):
         task = self.tasks[task_idx]
         element_path = self.get_element_path(task_idx, element_idx)
         out = element_path.joinpath(f'task_prepare_{task.id}_element_{element_idx}.hdf5')
         return out
 
     @requires_path_exists
-    def _get_element_temp_process_path(self, task_idx, element_idx):
+    def _get_element_temp_array_process_path(self, task_idx, element_idx):
         task = self.tasks[task_idx]
         element_path = self.get_element_path(task_idx, element_idx)
         out = element_path.joinpath(f'task_process_{task.id}_element_{element_idx}.hdf5')
@@ -1420,7 +1420,7 @@ class Workflow(object):
                     element.add_file(in_map['file'], value=file_dat)
 
         if is_array:
-            temp_path = self._get_element_temp_prepare_path(task_idx, element_idx)
+            temp_path = self._get_element_temp_array_prepare_path(task_idx, element_idx)
             dat = {'inputs': inputs_to_update, 'files': files_to_update}
             hickle.dump(dat, temp_path)
 
@@ -1497,7 +1497,7 @@ class Workflow(object):
 
             if is_array:
 
-                temp_path = self._get_element_temp_prepare_path(
+                temp_path = self._get_element_temp_array_prepare_path(
                     task_idx,
                     element.element_idx,
                 )
@@ -1675,7 +1675,7 @@ class Workflow(object):
                     element.add_output(output_name, value=file_dat)
 
         if is_array:
-            temp_path = self._get_element_temp_process_path(task_idx, element_idx)
+            temp_path = self._get_element_temp_array_process_path(task_idx, element_idx)
             dat = {'outputs': outputs_to_update, 'files': files_to_update}
             hickle.dump(dat, temp_path)
 
@@ -1710,7 +1710,7 @@ class Workflow(object):
 
             if is_array:
 
-                temp_path = self._get_element_temp_process_path(
+                temp_path = self._get_element_temp_array_process_path(
                     task_idx,
                     element.element_idx,
                 )
