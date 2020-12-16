@@ -1,6 +1,5 @@
 
 import inspect
-import warnings
 
 from matflow.errors import UnsatisfiedSchemaError
 

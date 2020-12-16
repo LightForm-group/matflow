@@ -5,9 +5,6 @@ Module containing functionality for executing commands.
 """
 
 import copy
-from pathlib import Path, PureWindowsPath, PurePosixPath
-from subprocess import run, PIPE
-from pprint import pprint
 
 import numpy as np
 
@@ -402,11 +399,11 @@ class CommandGroup(object):
 
             fmt_commands.append(cmd_dict)
 
-        return (fmt_commands, var_names)
+        return fmt_commands, var_names
 
 
 class Command(object):
-    'Class to represent a command to be executed by a shell.'
+    """Class to represent a command to be executed by a shell."""
 
     def __init__(self, command, options=None, parameters=None, stdin=None, stdout=None,
                  stderr=None, parallel_mode=None):

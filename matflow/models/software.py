@@ -1,6 +1,5 @@
 import copy
 import socket
-from collections import namedtuple
 
 from matflow.errors import SoftwareInstanceError, MissingSoftwareSourcesError
 from matflow.utils import extract_variable_names
@@ -25,7 +24,11 @@ class SourcesPreparation(object):
         return self._commands
 
     def get_formatted_commands(self, source_vars, sources_dir, task_idx):
-        out = [{'line': f'matflow prepare-sources --task-idx={task_idx}'}]
+        out = [{
+            'line': (f'matflow prepare-sources '
+                     f'--task-idx={task_idx} '
+                     f'--iteration-idx=$ITER_IDX')
+        }]
         if self.commands:
             for new_cmd in self.commands.splitlines():
                 new_cmd = new_cmd.replace('<<sources_dir>>', sources_dir)
@@ -218,7 +221,7 @@ class SoftwareInstance(object):
         )
 
     def as_dict(self):
-        'Return attributes dict with preceding underscores removed.'
+        """Return attributes dict with preceding underscores removed."""
         self_dict = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
         self_dict['software'] = self_dict.pop('software_friendly')
         self_dict['env'] = self_dict['env'].value

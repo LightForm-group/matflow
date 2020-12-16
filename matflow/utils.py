@@ -5,11 +5,14 @@ import io
 import collections
 import copy
 import itertools
+import h5py
 import numpy as np
 import random
 import re
 import time
 from contextlib import redirect_stdout
+from datetime import datetime
+from pathlib import Path
 
 from ruamel.yaml import YAML
 
@@ -134,22 +137,22 @@ def nest_lists(my_list):
 
 
 def repeat(lst, reps):
-    'Repeat 1D list elements.'
+    """Repeat 1D list elements."""
     return list(itertools.chain.from_iterable(itertools.repeat(x, reps) for x in lst))
 
 
 def tile(lst, tiles):
-    'Tile a 1D list.'
+    """Tile a 1D list."""
     return lst * tiles
 
 
 def index(lst, idx):
-    'Get elements of a list.'
+    """Get elements of a list."""
     return [lst[i] for i in idx]
 
 
 def arange(size):
-    'Get 1D list of increasing integers.'
+    """Get 1D list of increasing integers."""
     return list(range(size))
 
 
@@ -377,3 +380,96 @@ def extract_variable_names(source_str, delimiters):
     var_names = re.findall(pattern, source_str)
 
     return var_names
+
+
+def get_nested_item(obj, address):
+    out = obj
+    for i in address:
+        out = out[i]
+    return out
+
+
+def get_workflow_paths(base_dir, quiet=True):
+    base_dir = Path(base_dir)
+    wkflows = []
+    for i in base_dir.glob('**/*'):
+        if i.name == 'workflow.hdf5':
+            wk_full_path = i
+            wk_rel_path = wk_full_path.relative_to(base_dir)
+            wk_disp_path = wk_rel_path.parent
+            with h5py.File(wk_full_path, 'r') as handle:
+                try:
+                    try:
+                        handle["/workflow_obj/data/'figures'"]
+                    except KeyError:
+                        if not quiet:
+                            print(f'No "figures" key for workflow: {wk_disp_path}.')
+                        continue
+                    timestamp_path = "/workflow_obj/data/'history'/data/data_0/'timestamp'/data"
+                    timestamp_dict = {k[1:-1]: v['data'][()]
+                                      for k, v in handle[timestamp_path].items()}
+                    timestamp = datetime(**timestamp_dict)
+                    wkflows.append({
+                        'ID': handle.attrs['workflow_id'],
+                        'full_path': str(wk_full_path),
+                        'display_path': str(wk_disp_path),
+                        'timestamp': timestamp,
+                        'display_timestamp': timestamp.strftime(r'%Y-%m-%d %H:%M:%S'),
+                    })
+                except:
+                    if not quiet:
+                        print(f'No timestamp for workflow: {wk_disp_path}')
+    return wkflows
+
+
+def order_workflow_paths_by_date(workflow_paths):
+    return sorted(workflow_paths, key=lambda x: x['timestamp'])
+
+
+def nested_dict_arrays_to_list(obj):
+    if isinstance(obj, np.ndarray):
+        obj = obj.tolist()
+    elif isinstance(obj, dict):
+        for key, val in obj.items():
+            obj[key] = nested_dict_arrays_to_list(val)
+    return obj
+
+
+def move_element_forward(lst, index, position, return_map=True):
+    """Move a list element forward in the list to a new index position."""
+
+    if index > position:
+        raise ValueError('`index` cannot be larger than `position`, since that would '
+                         'not be a "forward" move!')
+
+    if position > len(lst) - 1:
+        raise ValueError('`position` must be a valid list index.')
+
+    sub_list_1 = lst[:position + 1]
+    sub_list_2 = lst[position + 1:]
+    elem = sub_list_1.pop(index)
+    out = sub_list_1 + [elem] + sub_list_2
+
+    # Indices to the left of the element that is to be moved do not change:
+    idx_map_left = {i: i for i in range(0, index)}
+
+    # The index of the moved element changes to `position`
+    idx_map_element = {index: position}
+
+    # Indicies to the right of the element up to the new position are decremented:
+    idx_map_middle = {i: i - 1 for i in range(index + 1, position + 1)}
+
+    # Indices to the right of the new position do not change:
+    idx_map_right = {i: i for i in range(position + 1, len(lst))}
+
+    idx_map = {
+        **idx_map_left,
+        **idx_map_element,
+        **idx_map_middle,
+        **idx_map_right
+    }
+
+    if return_map:
+        return out, idx_map
+    else:
+        return out

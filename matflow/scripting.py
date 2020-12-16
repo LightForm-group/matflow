@@ -10,14 +10,14 @@ from pkg_resources import resource_string
 
 
 def main_func(func):
-    '''Decorator used to annotate which function within a snippet is the main function.'''
+    """Decorator used to annotate which function within a snippet is the main function."""
     def main_inner(*args, **kwargs):
         func(*args, **kwargs)
     return main_inner
 
 
 def get_snippet(package_name, snippet_name, decorator=True):
-    'Get a Python snippet function (as a string) from the snippets directory.'
+    """Get a Python snippet function (as a string) from the snippets directory."""
     out = resource_string(package_name, f'snippets/{snippet_name}').decode()
     if not decorator:
         # Remove the `@main_func` decorator and import.
@@ -82,7 +82,7 @@ def extract_snippet_main(snippet_str):
 
 
 def get_snippet_signature(package_name, script_name):
-    'Get imports, inputs and outputs of a Python snippet function.'
+    """Get imports, inputs and outputs of a Python snippet function."""
 
     snippet_str = get_snippet(package_name, script_name)
     snippet_str = extract_snippet_main(snippet_str)
