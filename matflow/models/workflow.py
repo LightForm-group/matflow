@@ -736,7 +736,8 @@ class Workflow(object):
                 fmt_commands = [
                     {
                         'line': (f'matflow run-python-task --task-idx={task.task_idx} '
-                                 f'--element-idx=$(($SGE_TASK_ID-1)) '
+                                 f'--element-idx='
+                                 f'$((($ITER_IDX * $SGE_TASK_LAST) + $SGE_TASK_ID - 1)) '
                                  f'--directory={self.path}')
                     }
                 ]
@@ -916,15 +917,16 @@ class Workflow(object):
                 'archive_excludes': self.archive_excludes,
             })
 
-        command_groups.append({
-            'directory': '.',
-            'nesting': 'hold',
-            'commands': ('matflow write-element-directories '
-                         '--iteration-idx=$(($ITER_IDX+1))'),
-            'stats': False,
-            'scheduler_options': self.iterate_run_options,
-            'name': 'iterate',
-        })
+        if self.num_iterations > 1 or self.iterate:
+            command_groups.append({
+                'directory': '.',
+                'nesting': 'hold',
+                'commands': ('matflow write-element-directories '
+                             '--iteration-idx=$(($ITER_IDX+1))'),
+                'stats': False,
+                'scheduler_options': self.iterate_run_options,
+                'name': 'iterate',
+            })
 
         hf_data = {
             'parallel_modes': Config.get('parallel_modes'),
@@ -1400,10 +1402,26 @@ class Workflow(object):
         for in_map in task.schema.input_map:
 
             # Get inputs required for this file:
-            in_map_inputs = {
-                input_alias: element.get_input(input_alias)
-                for input_alias in in_map['inputs']
-            }
+            in_map_inputs = {}
+            for input_alias in in_map['inputs']:
+                input_dict = task.schema.get_input_by_alias(input_alias)
+                if input_dict.get('include_all_iterations'):
+                    # Collate elements from all iterations. Need to get all elements at
+                    # the same relative position within the iteration as this one:
+                    all_iter_elems = self.get_elements_from_all_iterations(
+                        task_idx,
+                        element_idx,
+                        up_to_current=True,
+                    )
+                    in_map_inputs.update({
+                        input_alias: {
+                            f'iteration_{iter_idx}': elem.get_input(input_alias)
+                            for iter_idx, elem in enumerate(all_iter_elems)
+                        }
+                    })
+                else:
+                    in_map_inputs.update({input_alias: element.get_input(input_alias)})
+
             file_path = task_elem_path.joinpath(in_map['file'])
 
             # Run input map to generate required input files:
@@ -1425,11 +1443,15 @@ class Workflow(object):
             hickle.dump(dat, temp_path)
 
     @requires_path_exists
-    def prepare_sources(self, task_idx):
+    def prepare_sources(self, task_idx, iteration_idx):
         """Prepare source files for the task preparation commands."""
 
         # Note: in future, we might want to parametrise the source function, which is
         # why we delay its invocation until task run time.
+
+        if iteration_idx > 0:
+            # Source files need to be generated only once per workflow (currently).
+            return
 
         task = self.tasks[task_idx]
 
@@ -1439,8 +1461,6 @@ class Workflow(object):
         source_map = Config.get('sources_maps')[(task.name, task.method, task.software)]
         source_func = source_map['func']
         source_files = source_func()
-
-        print(f'source_files:\n{source_files}')
 
         expected_src_vars = set(source_map['sources'].keys())
         returned_src_vars = set(source_files.keys())
@@ -2176,3 +2196,42 @@ class Workflow(object):
         }
 
         return out
+
+    def get_elements_from_all_iterations(self, task_idx, element_idx, up_to_current=True):
+        """
+        Get equivalent elements from all iterations.
+
+        Parameters
+        ----------
+        task_idx : int
+        element_idx : int
+        up_to_current : bool, optional
+            If True, only return elements from iterations up to and including the
+            iteration of the given element. If False, return elements from all iterations.
+
+        Returns
+        -------
+        list of Element
+
+        """
+
+        elems_idx_i = self.elements_idx[task_idx]
+
+        iter_idx_bool = np.zeros_like(elems_idx_i['iteration_idx'], dtype=bool)
+        iter_idx_bool[element_idx] = True
+        iter_idx_reshape = np.array(iter_idx_bool).reshape(
+            (elems_idx_i['num_iterations'],
+             elems_idx_i['num_elements_per_iteration'])
+        )
+
+        current_iter, idx_within_iteration = [i[0] for i in np.where(iter_idx_reshape)]
+        if not up_to_current:
+            iter_idx_reshape[:, idx_within_iteration] = True
+        else:
+            for i in range(current_iter):
+                iter_idx_reshape[i, idx_within_iteration] = True
+
+        all_elem_idx = np.where(iter_idx_reshape.flatten())[0]
+        ell_elems = [self.tasks[task_idx].elements[i] for i in all_elem_idx]
+
+        return ell_elems

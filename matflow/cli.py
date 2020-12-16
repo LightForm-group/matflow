@@ -84,10 +84,11 @@ def run_python_task(task_idx, element_idx, directory=None):
 
 @cli.command()
 @click.option('--task-idx', '-t', type=click.INT, required=True)
+@click.option('--iteration-idx', '-i', type=click.INT, required=True)
 @click.option('--directory', '-d', type=click.Path(exists=True))
-def prepare_sources(task_idx, directory=None):
+def prepare_sources(task_idx, iteration_idx, directory=None):
     print('matflow.cli.prepare_sources', flush=True)
-    api.prepare_sources(task_idx, directory)
+    api.prepare_sources(task_idx, iteration_idx, directory)
 
 
 @cli.command()
