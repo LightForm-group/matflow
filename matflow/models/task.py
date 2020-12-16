@@ -537,7 +537,7 @@ class Task(object):
     def __init__(self, workflow, name, method, software_instance,
                  prepare_software_instance, process_software_instance, task_idx,
                  run_options=None, prepare_run_options=None, process_run_options=None,
-                 status=None, stats=True, context='', local_inputs=None, schema=None,
+                 status=None, stats=False, context='', local_inputs=None, schema=None,
                  resource_usage=None, base=None, sequences=None, repeats=None,
                  groups=None, nest=None, merge_priority=None, output_map_options=None,
                  command_pathway_idx=None):

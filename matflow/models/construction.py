@@ -744,7 +744,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
 
         def_keys = {
             'run_options': {},
-            'stats': True,
+            'stats': False,
             'base': None,
             'sequences': None,
             'repeats': 1,
