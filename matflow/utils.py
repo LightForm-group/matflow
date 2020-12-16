@@ -433,3 +433,43 @@ def nested_dict_arrays_to_list(obj):
         for key, val in obj.items():
             obj[key] = nested_dict_arrays_to_list(val)
     return obj
+
+
+def move_element_forward(lst, index, position, return_map=True):
+    """Move a list element forward in the list to a new index position."""
+
+    if index > position:
+        raise ValueError('`index` cannot be larger than `position`, since that would '
+                         'not be a "forward" move!')
+
+    if position > len(lst) - 1:
+        raise ValueError('`position` must be a valid list index.')
+
+    sub_list_1 = lst[:position + 1]
+    sub_list_2 = lst[position + 1:]
+    elem = sub_list_1.pop(index)
+    out = sub_list_1 + [elem] + sub_list_2
+
+    # Indices to the left of the element that is to be moved do not change:
+    idx_map_left = {i: i for i in range(0, index)}
+
+    # The index of the moved element changes to `position`
+    idx_map_element = {index: position}
+
+    # Indicies to the right of the element up to the new position are decremented:
+    idx_map_middle = {i: i - 1 for i in range(index + 1, position + 1)}
+
+    # Indices to the right of the new position do not change:
+    idx_map_right = {i: i for i in range(position + 1, len(lst))}
+
+    idx_map = {
+        **idx_map_left,
+        **idx_map_element,
+        **idx_map_middle,
+        **idx_map_right
+    }
+
+    if return_map:
+        return out, idx_map
+    else:
+        return out

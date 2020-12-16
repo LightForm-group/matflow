@@ -18,9 +18,11 @@ class Config(object):
         'default_run_options',
         'default_preparation_run_options',
         'default_processing_run_options',
+        'default_iterate_run_options',
         'default_sticky_run_options',
         'default_sticky_preparation_run_options',
         'default_sticky_processing_run_options',
+        'default_sticky_iterate_run_options',
         'parallel_modes',
         'archive_locations',
     ]
@@ -112,7 +114,7 @@ class Config(object):
         return config_dat, config_file
 
     @staticmethod
-    def set_config(config_dir=None, raise_on_set=False):
+    def set_config(config_dir=None, raise_on_set=False, refresh=False):
         """Load configuration from a YAML file."""
 
         config_dir = Config.resolve_config_dir(config_dir)
@@ -120,7 +122,8 @@ class Config(object):
         if Config._is_set:
             if raise_on_set:
                 raise ConfigurationError('Configuration is already set.')
-            return
+            elif not refresh:
+                return
 
         config_dat, _ = Config.get_config_file(config_dir)
         schema_sources = [Path(i).expanduser() for i in config_dat['task_schema_sources']]
@@ -229,9 +232,11 @@ class Config(object):
             'default_run_options',
             'default_preparation_run_options',
             'default_processing_run_options',
+            'default_iterate_run_options',
             'default_sticky_run_options',
             'default_sticky_preparation_run_options',
             'default_sticky_processing_run_options',
+            'default_sticky_iterate_run_options',
         ]:
             Config.__conf[i] = config_dat.get(i, {})
 

@@ -213,7 +213,14 @@ class TaskSchema(object):
     def _validate_inputs_outputs(self):
         """Basic checks on inputs and outputs."""
 
-        allowed_inp_specifiers = ['group', 'context', 'alias', 'file', 'default']
+        allowed_inp_specifiers = [
+            'group',
+            'context',
+            'alias',
+            'file',
+            'default',
+            'include_all_iterations',  # inputs from all iterations sent to the input map?
+        ]
         req_inp_keys = ['name']
         allowed_inp_keys = req_inp_keys + allowed_inp_specifiers
         allowed_inp_keys_fmt = ', '.join(['"{}"'.format(i) for i in allowed_inp_keys])
@@ -224,7 +231,12 @@ class TaskSchema(object):
         # Normalise schema inputs:
         for inp_idx, inp in enumerate(self.inputs):
 
-            inp_defs = {'context': None, 'group': 'default', 'file': False}
+            inp_defs = {
+                'context': None,
+                'group': 'default',
+                'file': False,
+                'include_all_iterations': False,
+            }
             inp = get_specifier_dict(inp, name_key='name', defaults=inp_defs)
 
             for r in req_inp_keys:
@@ -244,12 +256,6 @@ class TaskSchema(object):
                 raise TaskSchemaError(err + msg)
 
             self.inputs[inp_idx] = inp
-
-        # Check the task does not output an input(!):
-        for i in self.outputs:
-            if i in self.input_names:
-                msg = f'Task schema input "{i}" cannot also be an output!'
-                raise TaskSchemaError(err + msg)
 
         # Check correct keys in supplied input/output maps:
         for in_map_idx, in_map in enumerate(self.input_map):
@@ -531,7 +537,7 @@ class Task(object):
     def __init__(self, workflow, name, method, software_instance,
                  prepare_software_instance, process_software_instance, task_idx,
                  run_options=None, prepare_run_options=None, process_run_options=None,
-                 status=None, stats=True, context='', local_inputs=None, schema=None,
+                 status=None, stats=False, context='', local_inputs=None, schema=None,
                  resource_usage=None, base=None, sequences=None, repeats=None,
                  groups=None, nest=None, merge_priority=None, output_map_options=None,
                  command_pathway_idx=None):
@@ -789,7 +795,7 @@ class Task(object):
         return fmt_commands, input_vars
 
     def get_prepare_task_commands(self, is_array=False):
-        cmd = f'matflow prepare-task --task-idx={self.task_idx}'
+        cmd = f'matflow prepare-task --task-idx={self.task_idx} --iteration-idx=$ITER_IDX'
         cmd += f' --array' if is_array else ''
         cmds = [cmd]
         if self.software_instance.task_preparation:
@@ -800,7 +806,7 @@ class Task(object):
 
     def get_prepare_task_element_commands(self, is_array=False):
         cmd = (f'matflow prepare-task-element --task-idx={self.task_idx} '
-               f'--element-idx=$(($SGE_TASK_ID-1)) '
+               f'--element-idx=$((($ITER_IDX * $SGE_TASK_LAST) + $SGE_TASK_ID - 1)) '
                f'--directory={self.workflow.path}')
         cmd += f' --array' if is_array else ''
         cmds = [cmd]
@@ -811,7 +817,7 @@ class Task(object):
         return out
 
     def get_process_task_commands(self, is_array=False):
-        cmd = f'matflow process-task --task-idx={self.task_idx}'
+        cmd = f'matflow process-task --task-idx={self.task_idx} --iteration-idx=$ITER_IDX'
         cmd += f' --array' if is_array else ''
         cmds = [cmd]
         if self.software_instance.task_processing:
@@ -822,7 +828,7 @@ class Task(object):
 
     def get_process_task_element_commands(self, is_array=False):
         cmd = (f'matflow process-task-element --task-idx={self.task_idx} '
-               f'--element-idx=$(($SGE_TASK_ID-1)) '
+               f'--element-idx=$((($ITER_IDX * $SGE_TASK_LAST) + $SGE_TASK_ID - 1)) '
                f'--directory={self.workflow.path}')
         cmd += f' --array' if is_array else ''
         cmds = [cmd]

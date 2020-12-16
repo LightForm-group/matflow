@@ -27,10 +27,11 @@ from matflow.errors import (
     WorkflowPersistenceError,
     TaskElementExecutionError,
     UnexpectedSourceMapReturnError,
+    WorkflowIterationError,
 )
 from matflow.hicklable import to_hicklable
 from matflow.models.command import DEFAULT_FORMATTERS
-from matflow.models.construction import init_tasks
+from matflow.models.construction import init_tasks, get_element_idx
 from matflow.models.software import SoftwareInstance
 from matflow.models.task import TaskStatus
 from matflow.models.parameters import Parameters
@@ -40,6 +41,7 @@ from matflow.utils import (
     datetime_to_dict,
     get_nested_item,
     nested_dict_arrays_to_list,
+    index,
 )
 
 
@@ -84,16 +86,21 @@ class Workflow(object):
         '_stage_directory',
         '_tasks',
         '_elements_idx',
+        '_dependency_idx',
         '_history',
         '_archive',
         '_archive_excludes',
         '_figures',
         '_metadata',
+        '_num_iterations',
+        '_iterate',
+        '_iterate_run_options',
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extends=None, archive=None,
-                 archive_excludes=None, figures=None, metadata=None,
-                 check_integrity=True, profile=None, __is_from_file=False):
+                 archive_excludes=None, figures=None, metadata=None, num_iterations=None,
+                 iterate=None, iterate_run_options=None, check_integrity=True,
+                 profile=None, __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
@@ -111,8 +118,36 @@ class Workflow(object):
                          ] if figures else []
         self._metadata = metadata or {}
 
-        tasks, elements_idx = init_tasks(self, tasks, self.is_from_file, check_integrity)
+        tasks, task_elements, dep_idx = init_tasks(self, tasks, self.is_from_file,
+                                                   check_integrity)
         self._tasks = tasks
+        self._dependency_idx = dep_idx
+
+        self._num_iterations = num_iterations or 1
+        self._iterate = self._validate_iterate(iterate, self.is_from_file)
+        self._iterate_run_options = iterate_run_options or {}
+
+        # Find element indices that determine the elements from which task inputs are drawn:
+        task_lst = [
+            {
+                'task_idx': i.task_idx,
+                'local_inputs': i.local_inputs,
+                'name': i.name,
+                'schema': i.schema,
+            } for i in tasks
+        ]
+        elements_idx = get_element_idx(
+            task_lst, dep_idx, self.num_iterations, self.iterate
+        )
+
+        for task in self.tasks:
+            if self.is_from_file:
+                elements = task_elements[task.task_idx]
+            else:
+                num_elements = elements_idx[task.task_idx]['num_elements']
+                elements = [{'element_idx': elem_idx} for elem_idx in range(num_elements)]
+            task.init_elements(elements)
+
         self._elements_idx = elements_idx
 
         if not self.is_from_file:
@@ -208,6 +243,36 @@ class Workflow(object):
                 for k, v in attributes.items():
                     handle[path].attrs[k] = v
 
+    def _validate_iterate(self, iterate_dict, is_from_file):
+
+        if not iterate_dict:
+            return iterate_dict
+
+        elif self.num_iterations is not 1:
+            msg = "Specify either `iterate` (dict) or `num_iterations` (int)."
+            raise ValueError(msg)
+
+        req_keys = ['parameter', 'num_iterations']
+        if is_from_file:
+            req_keys.extend(['task_pathway', 'producing_task', 'originating_tasks'])
+        allowed_keys = set(req_keys)
+
+        miss_keys = list(set(req_keys) - set(iterate_dict))
+        bad_keys = list(set(iterate_dict) - allowed_keys)
+        msg = '`iterate` must be a dict.'
+        if miss_keys:
+            miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+            raise WorkflowIterationError(msg + f' Missing keys are: {miss_keys_fmt}.')
+        if bad_keys:
+            bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+            raise WorkflowIterationError(msg + f' Unknown keys are: {bad_keys_fmt}.')
+
+        if not is_from_file:
+            task_pathway = self.get_iteration_task_pathway(iterate_dict['parameter'])
+            iterate_dict.update(task_pathway)
+
+        return iterate_dict
+
     @property
     def version(self):
         return len(self._history)
@@ -274,8 +339,24 @@ class Workflow(object):
         return self._metadata
 
     @property
+    def num_iterations(self):
+        return self._num_iterations
+
+    @property
+    def iterate(self):
+        return self._iterate
+
+    @property
+    def iterate_run_options(self):
+        return self._iterate_run_options
+
+    @property
     def elements_idx(self):
         return self._elements_idx
+
+    @property
+    def dependency_idx(self):
+        return self._dependency_idx
 
     @property
     def extends(self):
@@ -412,40 +493,38 @@ class Workflow(object):
         return out
 
     @requires_path_exists
-    def _get_element_temp_prepare_path(self, task_idx, element_idx):
+    def _get_element_temp_array_prepare_path(self, task_idx, element_idx):
         task = self.tasks[task_idx]
         element_path = self.get_element_path(task_idx, element_idx)
         out = element_path.joinpath(f'task_prepare_{task.id}_element_{element_idx}.hdf5')
         return out
 
     @requires_path_exists
-    def _get_element_temp_process_path(self, task_idx, element_idx):
+    def _get_element_temp_array_process_path(self, task_idx, element_idx):
         task = self.tasks[task_idx]
         element_path = self.get_element_path(task_idx, element_idx)
         out = element_path.joinpath(f'task_process_{task.id}_element_{element_idx}.hdf5')
         return out
 
-    def write_directories(self):
-        """Generate task and element directories."""
-
-        if self.path.exists():
-            raise ValueError('Directories for this workflow already exist.')
-
-        self.path.mkdir(exist_ok=False)
+    def write_element_directories(self, iteration_idx):
+        """Generate element directories for a given iteration."""
 
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
-            # Generate task directory:
+            if (
+                iteration_idx > 0 and
+                self.iterate and
+                task.task_idx not in self.iterate['task_pathway']
+            ):
+                continue
+
             task_idx = task.task_idx
-            self.get_task_path(task_idx).mkdir()
+            num_elems = elems_idx['num_elements_per_iteration']
+            iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
 
-            if task.software_instance.requires_sources:
-                self.get_task_sources_path(task_idx).mkdir()
-
-            num_elems = elems_idx['num_elements']
             # Generate element directories:
-            for i in range(num_elems):
-                self.get_element_path(task_idx, i).mkdir(exist_ok=True)
+            for elem_idx_i in iter_elem_idx:
+                self.get_element_path(task_idx, elem_idx_i).mkdir(exist_ok=True)
 
             # Copy any local input files to the element directories:
             for input_alias, inputs_idx in self.elements_idx[task_idx]['inputs'].items():
@@ -460,11 +539,11 @@ class Workflow(object):
                 input_dict = task.local_inputs['inputs'][input_name]
                 local_ins = [input_dict['vals'][i] for i in input_dict['vals_idx']]
 
-                for element_idx in range(num_elems):
+                for elem_idx_i in iter_elem_idx:
 
-                    file_path = local_ins[inputs_idx['input_idx'][element_idx]]
+                    file_path = local_ins[inputs_idx['local_input_idx'][elem_idx_i]]
                     file_path_full = self.stage_directory.joinpath(file_path)
-                    elem_path = self.get_element_path(task_idx, i)
+                    elem_path = self.get_element_path(task_idx, elem_idx_i)
                     dst_path = elem_path.joinpath(file_path_full.name)
 
                     if not file_path_full.is_file():
@@ -473,6 +552,53 @@ class Workflow(object):
                         raise ValueError(msg)
 
                     shutil.copyfile(file_path_full, dst_path)
+
+    def prepare_iteration(self, iteration_idx):
+
+        for elems_idx, task in zip(self.elements_idx, self.tasks):
+
+            if (
+                iteration_idx > 0 and
+                self.iterate and
+                task.task_idx not in self.iterate['task_pathway']
+            ):
+                continue
+
+            num_elems = elems_idx['num_elements_per_iteration']
+            iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
+            cmd_line_inputs, input_vars = self._get_command_line_inputs(task.task_idx)
+
+            for local_in_name, var_name in input_vars.items():
+
+                var_file_name = '{}.txt'.format(var_name)
+
+                # Create text file in each element directory for each in `input_vars`:
+                for elem_idx_i in iter_elem_idx:
+
+                    task_elem_path = self.get_element_path(task.task_idx, elem_idx_i)
+                    in_val = cmd_line_inputs[local_in_name][elem_idx_i]
+
+                    var_file_path = task_elem_path.joinpath(var_file_name)
+                    with var_file_path.open('w') as handle:
+                        handle.write(in_val + '\n')
+
+    def write_directories(self):
+        """Generate task and element directories for the first iteration."""
+
+        if self.path.exists():
+            raise ValueError('Directories for this workflow already exist.')
+
+        self.path.mkdir(exist_ok=False)
+
+        for elems_idx, task in zip(self.elements_idx, self.tasks):
+
+            # Generate task directory:
+            self.get_task_path(task.task_idx).mkdir()
+
+            if task.software_instance.requires_sources:
+                self.get_task_sources_path(task.task_idx).mkdir()
+
+        self.write_element_directories(iteration_idx=0)
 
     def get_hpcflow_job_name(self, task, job_type, is_stats=False):
         """Get the scheduler job name for a given task index and job type.
@@ -520,6 +646,48 @@ class Workflow(object):
 
         return out
 
+    def _get_command_line_inputs(self, task_idx):
+
+        task = self.tasks[task_idx]
+        elems_idx = self.elements_idx[task_idx]
+        _, input_vars = task.get_formatted_commands()
+
+        cmd_line_inputs = {}
+        for local_in_name, local_in in task.local_inputs['inputs'].items():
+
+            if local_in_name in input_vars:
+                # TODO: We currently only consider input_vars for local inputs.
+
+                # Expand values for intra-task nesting:
+                values = [self.get_element_data(i)
+                          for i in local_in['vals_data_idx']]
+
+                # Format values:
+                fmt_func_scope = Config.get('CLI_arg_maps').get((
+                    task.schema.name,
+                    task.schema.method,
+                    task.schema.implementation
+                ))
+                fmt_func = None
+                if fmt_func_scope:
+                    fmt_func = fmt_func_scope.get(local_in_name)
+                if not fmt_func:
+                    fmt_func = DEFAULT_FORMATTERS.get(
+                        type(values[0]),
+                        lambda x: str(x)
+                    )
+
+                values_fmt = [fmt_func(i) for i in values]
+
+                # Expand values for inter-task nesting:
+                values_fmt_all = [
+                    values_fmt[i] if i is not None else None
+                    for i in elems_idx['inputs'][local_in_name]['local_input_idx']
+                ]
+                cmd_line_inputs.update({local_in_name: values_fmt_all})
+
+        return cmd_line_inputs, input_vars
+
     @requires_path_exists
     def get_hpcflow_workflow(self):
         """Generate an hpcflow workflow to execute this workflow."""
@@ -559,6 +727,7 @@ class Workflow(object):
                     'stats': False,
                     'scheduler_options': task.get_scheduler_options('prepare'),
                     'name': self.get_hpcflow_job_name(task, 'prepare-sources'),
+                    'meta': {'from_tasks': [task.task_idx]},
                 }]
 
             if task.schema.is_func:
@@ -567,7 +736,8 @@ class Workflow(object):
                 fmt_commands = [
                     {
                         'line': (f'matflow run-python-task --task-idx={task.task_idx} '
-                                 f'--element-idx=$(($SGE_TASK_ID-1)) '
+                                 f'--element-idx='
+                                 f'$((($ITER_IDX * $SGE_TASK_LAST) + $SGE_TASK_ID - 1)) '
                                  f'--directory={self.path}')
                     }
                 ]
@@ -583,41 +753,7 @@ class Workflow(object):
                     fmt_commands_new.append(i)
                 fmt_commands = fmt_commands_new
 
-                cmd_line_inputs = {}
-                for local_in_name, local_in in task.local_inputs['inputs'].items():
-                    if local_in_name in input_vars:
-                        # TODO: We currently only consider input_vars for local inputs.
-
-                        # Expand values for intra-task nesting:
-                        values = [self.get_element_data(i)
-                                  for i in local_in['vals_data_idx']]
-
-                        # Format values:
-                        fmt_func_scope = Config.get('CLI_arg_maps').get((
-                            task.schema.name,
-                            task.schema.method,
-                            task.schema.implementation
-                        ))
-                        fmt_func = None
-                        if fmt_func_scope:
-                            fmt_func = fmt_func_scope.get(local_in_name)
-                        if not fmt_func:
-                            fmt_func = DEFAULT_FORMATTERS.get(
-                                type(values[0]),
-                                lambda x: str(x)
-                            )
-
-                        values_fmt = [fmt_func(i) for i in values]
-
-                        # Expand values for inter-task nesting:
-                        values_fmt_all = [
-                            values_fmt[i]
-                            for i in elems_idx['inputs'][local_in_name]['input_idx']
-                        ]
-                        cmd_line_inputs.update({local_in_name: values_fmt_all})
-
                 for local_in_name, var_name in input_vars.items():
-
                     var_file_name = '{}.txt'.format(var_name)
                     variables.update({
                         var_name: {
@@ -628,16 +764,6 @@ class Workflow(object):
                             'value': '{}',
                         }
                     })
-
-                    # Create text file in each element directory for each in `input_vars`:
-                    for i in range(elems_idx['num_elements']):
-
-                        task_elem_path = self.get_element_path(task.task_idx, i)
-                        in_val = cmd_line_inputs[local_in_name][i]
-
-                        var_file_path = task_elem_path.joinpath(var_file_name)
-                        with var_file_path.open('w') as handle:
-                            handle.write(in_val + '\n')
 
             task_path_rel = str(self.get_task_path(task.task_idx).name)
 
@@ -666,6 +792,7 @@ class Workflow(object):
                             'stats': False,
                             'scheduler_options': cur_prepare_opts,
                             'name': self.get_hpcflow_job_name(task, 'prepare-task'),
+                            'meta': {'from_tasks': [task.task_idx]},
                         },
                         {
                             'directory': '.',
@@ -674,6 +801,7 @@ class Workflow(object):
                             'stats': False,
                             'scheduler_options': cur_prepare_opts,
                             'name': self.get_hpcflow_job_name(task, 'prepare-task'),
+                            'meta': {'from_tasks': [task.task_idx]},
                         }
                     ])
 
@@ -685,6 +813,7 @@ class Workflow(object):
                         'stats': False,
                         'scheduler_options': cur_prepare_opts,
                         'name': self.get_hpcflow_job_name(task, 'prepare-task'),
+                        'meta': {'from_tasks': [task.task_idx]},
                     })
 
             if task.software_instance.requires_sources:
@@ -698,6 +827,7 @@ class Workflow(object):
                 'name': self.get_hpcflow_job_name(task, 'run'),
                 'stats': task.stats,
                 'stats_name': self.get_hpcflow_job_name(task, 'run', is_stats=True),
+                'meta': {'from_tasks': [task.task_idx]},
             }
             env = task.software_instance.env.as_str()
             if env:
@@ -729,6 +859,7 @@ class Workflow(object):
                         'stats': False,
                         'scheduler_options': cur_process_opts,
                         'name': self.get_hpcflow_job_name(task, 'process-prepare-task'),
+                        'meta': {'from_tasks': [task.task_idx, next_task.task_idx]},
                     })
                     add_process_groups = False
 
@@ -744,6 +875,7 @@ class Workflow(object):
                             'stats': False,
                             'scheduler_options': cur_process_opts,
                             'name': self.get_hpcflow_job_name(task, 'process-task'),
+                            'meta': {'from_tasks': [task.task_idx]},
                         },
                         {
                             'directory': '.',
@@ -752,6 +884,7 @@ class Workflow(object):
                             'stats': False,
                             'scheduler_options': cur_process_opts,
                             'name': self.get_hpcflow_job_name(task, 'process-task'),
+                            'meta': {'from_tasks': [task.task_idx]},
                         }
                     ])
                 else:
@@ -762,6 +895,7 @@ class Workflow(object):
                         'stats': False,
                         'scheduler_options': cur_process_opts,
                         'name': self.get_hpcflow_job_name(task, 'process-task'),
+                        'meta': {'from_tasks': [task.task_idx]},
                     })
 
             # Add variable for the task directories:
@@ -783,6 +917,17 @@ class Workflow(object):
                 'archive_excludes': self.archive_excludes,
             })
 
+        if self.num_iterations > 1 or self.iterate:
+            command_groups.append({
+                'directory': '.',
+                'nesting': 'hold',
+                'commands': ('matflow write-element-directories '
+                             '--iteration-idx=$(($ITER_IDX+1))'),
+                'stats': False,
+                'scheduler_options': self.iterate_run_options,
+                'name': 'iterate',
+            })
+
         hf_data = {
             'parallel_modes': Config.get('parallel_modes'),
             'scheduler': 'sge',
@@ -791,6 +936,37 @@ class Workflow(object):
             'command_groups': command_groups,
             'variables': variables,
         }
+
+        if self.num_iterations > 1:
+            hf_data.update({
+                'loop': {
+                    'max_iterations': self.num_iterations,
+                    'groups': list(range(len(command_groups))),
+                }
+            })
+
+        elif self.iterate:
+
+            # Find which command groups are to be repeated:
+            iterate_groups = []
+            for cmd_group_idx, cmd_group in enumerate(hf_data['command_groups']):
+                if (
+                    cmd_group['name'] == 'iterate' or
+                    any([i in self.iterate['task_pathway']
+                         for i in cmd_group['meta']['from_tasks']])
+                ):
+                    iterate_groups.append(cmd_group_idx)
+
+            hf_data.update({
+                'loop': {
+                    'max_iterations': self.iterate['num_iterations'],
+                    'groups': iterate_groups,
+                }
+            })
+
+        for cmd_group_idx, cmd_group in enumerate(hf_data['command_groups']):
+            # TODO: allow "meta" key in hpcflow command groups.
+            hf_data['command_groups'][cmd_group_idx].pop('meta', None)
 
         if self.archive:
             hf_data.update({'archive_locations': {self.archive: self.archive_definition}})
@@ -1053,6 +1229,9 @@ class Workflow(object):
 
         self.loaded_path = path
 
+        # Write command line argument files into element dirs:
+        self.prepare_iteration(iteration_idx=0)
+
     @classmethod
     def load_HDF5_file(cls, path=None, full_path=False, check_integrity=True):
         """Load workflow from an HDF5 file.
@@ -1133,6 +1312,8 @@ class Workflow(object):
         WARN_ON_MISSING = [
             'figures',
             'metadata',
+            'num_iterations',
+            'iterate',
         ]
         for key in WARN_ON_MISSING:
             if key not in obj_json:
@@ -1185,21 +1366,25 @@ class Workflow(object):
             input_name = [i['name'] for i in task.schema.inputs
                           if i['alias'] == input_alias][0]
 
-            if ins_task_idx is not None:
+            if ins_task_idx[element_idx] is not None:
                 # Input values sourced from previous task outputs:
 
                 data_idx = []
                 for i in inputs_idx['element_idx'][element_idx]:
-                    src_element = self.tasks[ins_task_idx].elements[i]
-                    data_idx.append(src_element.get_output_data_idx(input_name))
+                    src_element = self.tasks[ins_task_idx[element_idx]].elements[i]
+                    param_data_idx = src_element.get_parameter_data_idx(input_name)
+                    data_idx.append(param_data_idx)
 
-                if inputs_idx['group'] == 'default':
+                if inputs_idx['group'][element_idx] == 'default':
                     data_idx = data_idx[0]
 
             else:
                 # Input values sourced from `local_inputs` of this task:
                 local_data_idx = task.local_inputs['inputs'][input_name]['vals_data_idx']
-                all_data_idx = [local_data_idx[i] for i in inputs_idx['input_idx']]
+                all_data_idx = [
+                    (local_data_idx[i] if i is not None else None)
+                    for i in inputs_idx['local_input_idx']
+                ]
                 data_idx = all_data_idx[element_idx]
 
             if is_array:
@@ -1217,10 +1402,26 @@ class Workflow(object):
         for in_map in task.schema.input_map:
 
             # Get inputs required for this file:
-            in_map_inputs = {
-                input_name: element.get_input(input_name)
-                for input_name in in_map['inputs']
-            }
+            in_map_inputs = {}
+            for input_alias in in_map['inputs']:
+                input_dict = task.schema.get_input_by_alias(input_alias)
+                if input_dict.get('include_all_iterations'):
+                    # Collate elements from all iterations. Need to get all elements at
+                    # the same relative position within the iteration as this one:
+                    all_iter_elems = self.get_elements_from_all_iterations(
+                        task_idx,
+                        element_idx,
+                        up_to_current=True,
+                    )
+                    in_map_inputs.update({
+                        input_alias: {
+                            f'iteration_{iter_idx}': elem.get_input(input_alias)
+                            for iter_idx, elem in enumerate(all_iter_elems)
+                        }
+                    })
+                else:
+                    in_map_inputs.update({input_alias: element.get_input(input_alias)})
+
             file_path = task_elem_path.joinpath(in_map['file'])
 
             # Run input map to generate required input files:
@@ -1237,16 +1438,20 @@ class Workflow(object):
                     element.add_file(in_map['file'], value=file_dat)
 
         if is_array:
-            temp_path = self._get_element_temp_prepare_path(task_idx, element_idx)
+            temp_path = self._get_element_temp_array_prepare_path(task_idx, element_idx)
             dat = {'inputs': inputs_to_update, 'files': files_to_update}
             hickle.dump(dat, temp_path)
 
     @requires_path_exists
-    def prepare_sources(self, task_idx):
+    def prepare_sources(self, task_idx, iteration_idx):
         """Prepare source files for the task preparation commands."""
 
         # Note: in future, we might want to parametrise the source function, which is
         # why we delay its invocation until task run time.
+
+        if iteration_idx > 0:
+            # Source files need to be generated only once per workflow (currently).
+            return
 
         task = self.tasks[task_idx]
 
@@ -1256,8 +1461,6 @@ class Workflow(object):
         source_map = Config.get('sources_maps')[(task.name, task.method, task.software)]
         source_func = source_map['func']
         source_files = source_func()
-
-        print(f'source_files:\n{source_files}')
 
         expected_src_vars = set(source_map['sources'].keys())
         returned_src_vars = set(source_files.keys())
@@ -1284,7 +1487,7 @@ class Workflow(object):
                 handle.write(file_str)
 
     @requires_path_exists
-    def prepare_task(self, task_idx, is_array=False):
+    def prepare_task(self, task_idx, iteration_idx, is_array=False):
         """Prepare inputs and run input maps.
 
         Parameters
@@ -1296,12 +1499,25 @@ class Workflow(object):
 
         """
 
+        if (
+            iteration_idx > 0 and
+            self.iterate and
+            task_idx not in self.iterate['task_pathway']
+        ):
+            # In the case where `prepare_task` for this task is in the same hpcflow
+            # command group as a `process_task` from the previous task, which is
+            # undergoing iteration.
+            return
+
         task = self.tasks[task_idx]
-        for element in task.elements:
+        num_elems = self.elements_idx[task.task_idx]['num_elements_per_iteration']
+        iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
+
+        for element in index(task.elements, iter_elem_idx):
 
             if is_array:
 
-                temp_path = self._get_element_temp_prepare_path(
+                temp_path = self._get_element_temp_array_prepare_path(
                     task_idx,
                     element.element_idx,
                 )
@@ -1424,6 +1640,7 @@ class Workflow(object):
         out_map_lookup = Config.get('output_maps').get(schema_id)
 
         # Run output maps:
+        file_is_saved = []
         for out_map in task.schema.output_map:
 
             # Filter only those file paths required for this output:
@@ -1433,7 +1650,12 @@ class Workflow(object):
                 file_paths.append(out_file_path)
 
                 # Save generated file as string in workflow:
-                if i['save'] and out_file_path.is_file():
+                if (
+                    i['save'] and
+                    out_file_path.is_file() and
+                    i['name'] not in file_is_saved
+                ):
+                    file_is_saved.append(i['name'])
                     with out_file_path.open('r') as handle:
                         file_dat = handle.read()
                     if is_array:
@@ -1473,12 +1695,12 @@ class Workflow(object):
                     element.add_output(output_name, value=file_dat)
 
         if is_array:
-            temp_path = self._get_element_temp_process_path(task_idx, element_idx)
+            temp_path = self._get_element_temp_array_process_path(task_idx, element_idx)
             dat = {'outputs': outputs_to_update, 'files': files_to_update}
             hickle.dump(dat, temp_path)
 
     @requires_path_exists
-    def process_task(self, task_idx, is_array=False):
+    def process_task(self, task_idx, iteration_idx, is_array=False):
         """Process outputs from an executed task: run output map and save outputs.
 
         Parameters
@@ -1490,12 +1712,25 @@ class Workflow(object):
 
         """
 
+        if (
+            iteration_idx > 0 and
+            self.iterate and
+            task_idx not in self.iterate['task_pathway']
+        ):
+            # In the case where `process_task` for this task is in the same hpcflow
+            # command group as a `prepare_task` from the next task, which is undergoing
+            # iteration.
+            return
+
         task = self.tasks[task_idx]
-        for element in task.elements:
+        num_elems = self.elements_idx[task.task_idx]['num_elements_per_iteration']
+        iter_elem_idx = [i + (iteration_idx * num_elems) for i in range(num_elems)]
+
+        for element in index(task.elements, iter_elem_idx):
 
             if is_array:
 
-                temp_path = self._get_element_temp_process_path(
+                temp_path = self._get_element_temp_array_process_path(
                     task_idx,
                     element.element_idx,
                 )
@@ -1601,10 +1836,8 @@ class Workflow(object):
             for task_group in handle[tasks_path].values():
                 element_path = task_group.name + "/'elements'/data"
 
-                # print(f'task_group: {task_group}')
                 element_dicts = []
                 for elem_group in handle[element_path].values():
-                    # print(f'elem_group: {elem_group}')
                     params_paths = {
                         'inputs': elem_group.name + "/'inputs_data_idx'/data",
                         'outputs': elem_group.name + "/'outputs_data_idx'/data",
@@ -1619,9 +1852,6 @@ class Workflow(object):
                                 elem_idx = elem_idx.tolist()
                             else:
                                 elem_idx = [elem_idx]
-                            # print(f'param_name: {param_name}')
-                            # print(f'param_type: {param_type}')
-                            # print(f'elem_idx: type: {type(elem_idx)} {elem_idx}')
                             params_dict[param_type].update(
                                 {param_name: [idx_map[i] for i in elem_idx]}
                             )
@@ -1779,3 +2009,229 @@ class Workflow(object):
                 }
                 tasks_info.append(task_dict)
         return tasks_info
+
+    def get_input_tasks(self, parameter_name):
+        'Return task indices of tasks in which a given parameter is an input.'
+
+        input_task_idx = []
+        for task in self.tasks:
+            if parameter_name in task.schema.input_names:
+                input_task_idx.append(task.task_idx)
+
+        return input_task_idx
+
+    def get_output_tasks(self, parameter_name):
+        'Return task indices of tasks in which a given parameter is an output.'
+
+        output_task_idx = []
+        for task in self.tasks:
+            if parameter_name in task.schema.outputs:
+                output_task_idx.append(task.task_idx)
+
+        return output_task_idx
+
+    def get_dependent_tasks(self, task_idx, recurse=False):
+        """Get the indices of tasks that depend on a given task.
+
+        Notes
+        -----
+        For the inverse, see `get_task_dependencies`.
+
+        """
+
+        out = []
+        for idx, dep_idx in enumerate(self.dependency_idx):
+            if task_idx in dep_idx['task_dependencies']:
+                out.append(idx)
+
+        if recurse:
+            out += list(set([
+                additional_out
+                for task_idx_i in out
+                for additional_out in
+                self.get_dependent_tasks(task_idx_i, recurse=True)
+            ]))
+
+        return out
+
+    def get_task_dependencies(self, task_idx, recurse=False):
+        """Get the indicies of tasks that a given task depends on.
+
+        Notes
+        -----
+        For the inverse, see `get_dependent_tasks`.
+
+        """
+
+        out = self.dependency_idx[task_idx]['task_dependencies']
+
+        if recurse:
+            out += list(set([
+                additional_out
+                for task_idx_i in out
+                for additional_out in
+                self.get_task_dependencies(task_idx_i, recurse=True)
+            ]))
+
+        return out
+
+    def get_dependent_parameters(self, parameter_name, recurse=False, return_list=False):
+        """Get the names of parameters that depend on a given parameter.
+
+        Parameters
+        ----------
+        parameter_name : str
+        recurse : bool, optional
+            If False, only include output parameters from tasks for which the given
+            parameter is an input. If True, include output parameters from dependent tasks
+            as well. By default, False.
+        return_list : bool, optional
+            If True, return a list of output parameters. If False, return a dict whose
+            keys are the task indices and whose values are the output parameters from each
+            task. By default, False.
+
+        Returns
+        -------
+        dict of (int : list of str) or list of str        
+
+        Notes
+        -----
+        For the inverse, see `get_parameter_dependencies`.
+
+        """
+
+        # Get the tasks where given parameter is an input:
+        all_task_idx = self.get_input_tasks(parameter_name)
+
+        # If recurse, need outputs from dependent tasks as well:
+        if recurse:
+            all_task_idx += list(set([
+                additional_task
+                for task_idx_i in all_task_idx
+                for additional_task in
+                self.get_dependent_tasks(task_idx_i, recurse=True)
+            ]))
+
+        # Get output parameters from tasks:
+        params = {
+            task_idx: self.tasks[task_idx].schema.outputs
+            for task_idx in all_task_idx
+        }
+
+        if return_list:
+            params = list(set([i for param_vals in params.values() for i in param_vals]))
+
+        return params
+
+    def get_parameter_dependencies(self, parameter_name, recurse=False, return_list=False):
+        """Get the names of parameters that a given parameter depends on.
+
+        Parameters
+        ----------
+        parameter_name : str
+        recurse : bool, optional
+            If False, only include input parameters from tasks for which the given
+            parameter is an output. If True, include input parameters from task
+            dependencies as well. By default, False.
+        return_list : bool, optional
+            If True, return a list of input parameters. If False, return a dict whose keys
+            are the task indices and whose values are the input parameters from each task.
+            By default, False.
+
+        Returns
+        -------
+        dict of (int : list of str) or list of str
+
+        Notes
+        -----
+        For the inverse, see `get_dependent_parameters`.
+
+        """
+
+        # Get the tasks where given parameter is an output
+        all_task_idx = self.get_output_tasks(parameter_name)
+
+        # If recurse, need inputs from tasks dependencies as well:
+        if recurse:
+            all_task_idx = list(set([
+                additional_task
+                for task_idx_i in all_task_idx
+                for additional_task in
+                self.get_task_dependencies(task_idx_i, recurse=True)
+            ])) + all_task_idx
+
+        # Get input parameters from tasks:
+        params = {
+            task_idx: self.tasks[task_idx].schema.input_names
+            for task_idx in all_task_idx
+        }
+
+        if return_list:
+            params = list(set([i for param_vals in params.values() for i in param_vals]))
+
+        return params
+
+    def get_iteration_task_pathway(self, parameter_name):
+
+        originating_tasks = self.get_input_tasks(parameter_name)
+        dep_tasks = [j for i in originating_tasks
+                     for j in self.get_dependent_tasks(i, recurse=True)]
+
+        # Which dep_tasks produces the iteration parameter?
+        outputs_iter_param = [parameter_name in self.tasks[i].schema.outputs
+                              for i in dep_tasks]
+
+        if not any(outputs_iter_param):
+            msg = (f'Parameter "{parameter_name}" is not output by any task and so '
+                   f'cannot be iterated.')
+            raise WorkflowIterationError(msg)
+
+        # Only first task for now...
+        producing_task_idx = dep_tasks[outputs_iter_param.index(True)]
+        task_pathway = list(set(originating_tasks + dep_tasks))
+        out = {
+            'task_pathway': task_pathway,
+            'originating_tasks': originating_tasks,
+            'producing_task': producing_task_idx,
+        }
+
+        return out
+
+    def get_elements_from_all_iterations(self, task_idx, element_idx, up_to_current=True):
+        """
+        Get equivalent elements from all iterations.
+
+        Parameters
+        ----------
+        task_idx : int
+        element_idx : int
+        up_to_current : bool, optional
+            If True, only return elements from iterations up to and including the
+            iteration of the given element. If False, return elements from all iterations.
+
+        Returns
+        -------
+        list of Element
+
+        """
+
+        elems_idx_i = self.elements_idx[task_idx]
+
+        iter_idx_bool = np.zeros_like(elems_idx_i['iteration_idx'], dtype=bool)
+        iter_idx_bool[element_idx] = True
+        iter_idx_reshape = np.array(iter_idx_bool).reshape(
+            (elems_idx_i['num_iterations'],
+             elems_idx_i['num_elements_per_iteration'])
+        )
+
+        current_iter, idx_within_iteration = [i[0] for i in np.where(iter_idx_reshape)]
+        if not up_to_current:
+            iter_idx_reshape[:, idx_within_iteration] = True
+        else:
+            for i in range(current_iter):
+                iter_idx_reshape[i, idx_within_iteration] = True
+
+        all_elem_idx = np.where(iter_idx_reshape.flatten())[0]
+        ell_elems = [self.tasks[task_idx].elements[i] for i in all_elem_idx]
+
+        return ell_elems
