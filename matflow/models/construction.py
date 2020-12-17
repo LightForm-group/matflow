@@ -1294,18 +1294,23 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
 
         element_idx.append(elem_idx_i)
 
-    # Add iterations:
-    for task_idx, elem_idx_i in enumerate(element_idx):
+    # First iteration is in place, add additional iterations (if they exist for this
+    # task):
+    max_num_iter = max([i['num_iterations'] for i in element_idx])
+    for iter_idx in range(1, max_num_iter):
 
-        num_iterations_i = elem_idx_i['num_iterations']
+        # print(f'Adding elements for iteration {iter_idx}')
 
-        # print(f'Considering task {task_idx}, with num_iterations_i: {num_iterations_i}')
+        # Add iterations:
+        for task_idx, elem_idx_i in enumerate(element_idx):
 
-        # First iteration is in place, add additional iterations (if they exist for this
-        # task):
-        for iter_idx in range(1, num_iterations_i):
+            num_iterations_i = elem_idx_i['num_iterations']
 
-            # print(f'\tAdding elements for iteration {iter_idx}')
+            if iter_idx >= num_iterations_i:
+                continue
+
+            # print(f'\tConsidering task {task_idx}, with num_iterations_i: '
+            #       f'{num_iterations_i}')
 
             elem_iter_idx = np.array(elem_idx_i['iteration_idx'])
             elems_per_iter = elem_idx_i['num_elements_per_iteration']

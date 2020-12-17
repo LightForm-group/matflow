@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.13] - 2020.12.17
+
+### Fixed 
+
+- Fix bug when populating `Workflow.elements_idx` for more than two iterations.
+
 ## [0.2.12] - 2020.12.16
 
 ### Added
