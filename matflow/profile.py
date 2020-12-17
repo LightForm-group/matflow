@@ -20,6 +20,8 @@ def parse_workflow_profile(profile_path):
         'archive_excludes',
         'figures',
         'metadata',
+        'num_iterations',
+        'iterate',
     ]
 
     miss_keys = list(set(req_keys) - set(profile.keys()))
@@ -44,6 +46,8 @@ def parse_workflow_profile(profile_path):
         'tasks': profile['tasks'],
         'figures': profile.get('figures'),
         'metadata': profile.get('metadata'),
+        'num_iterations': profile.get('num_iterations'),
+        'iterate': profile.get('iterate'),
         'extends': profile.get('extends'),
         'archive': profile.get('archive'),
         'archive_excludes': profile.get('archive_excludes'),

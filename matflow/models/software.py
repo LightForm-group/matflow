@@ -24,7 +24,11 @@ class SourcesPreparation(object):
         return self._commands
 
     def get_formatted_commands(self, source_vars, sources_dir, task_idx):
-        out = [{'line': f'matflow prepare-sources --task-idx={task_idx}'}]
+        out = [{
+            'line': (f'matflow prepare-sources '
+                     f'--task-idx={task_idx} '
+                     f'--iteration-idx=$ITER_IDX')
+        }]
         if self.commands:
             for new_cmd in self.commands.splitlines():
                 new_cmd = new_cmd.replace('<<sources_dir>>', sources_dir)

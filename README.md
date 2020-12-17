@@ -18,7 +18,7 @@ MatFlow uses extension packages to interact with arbitrary software. Here is a l
 | [formable](https://github.com/LightForm-group/formable) | Formability analyses in Python | [Released](https://github.com/LightForm-group/matflow-formable) |
 | [DefDAP](https://github.com/MechMicroMan/DefDAP) | A python library for correlating EBSD and HRDIC data. | [Released](https://github.com/LightForm-group/matflow-defdap) |
 | [Abaqus](https://www.3ds.com/products-services/simulia/products/abaqus/) | Finite element analysis | In-progress |
-| [Neper](http://www.neper.info) | Polycrystal generation and meshing | In-progress |
+| [Neper](http://www.neper.info) | Polycrystal generation and meshing | [Released/In-progress](https://github.com/LightForm-group/matflow-neper) |
 
 
 ### Example inputs/outputs 

@@ -220,7 +220,14 @@ class TaskSchema(object):
     def _validate_inputs_outputs(self):
         """Basic checks on inputs and outputs."""
 
-        allowed_inp_specifiers = ['group', 'context', 'alias', 'file', 'default']
+        allowed_inp_specifiers = [
+            'group',
+            'context',
+            'alias',
+            'file',
+            'default',
+            'include_all_iterations',  # inputs from all iterations sent to the input map?
+        ]
         req_inp_keys = ['name']
         allowed_inp_keys = req_inp_keys + allowed_inp_specifiers
         allowed_inp_keys_fmt = ', '.join(['"{}"'.format(i) for i in allowed_inp_keys])
@@ -231,7 +238,12 @@ class TaskSchema(object):
         # Normalise schema inputs:
         for inp_idx, inp in enumerate(self.inputs):
 
-            inp_defs = {'context': None, 'group': 'default', 'file': False}
+            inp_defs = {
+                'context': None,
+                'group': 'default',
+                'file': False,
+                'include_all_iterations': False,
+            }
             inp = get_specifier_dict(inp, name_key='name', defaults=inp_defs)
 
             for r in req_inp_keys:
@@ -252,11 +264,101 @@ class TaskSchema(object):
 
             self.inputs[inp_idx] = inp
 
-        # Check the task does not output an input(!):
-        for i in self.outputs:
-            if i in self.input_names:
-                msg = f'Task schema input "{i}" cannot also be an output!'
+        # Check correct keys in supplied input/output maps:
+        for in_map_idx, in_map in enumerate(self.input_map):
+
+            req_keys = ['inputs', 'file']
+            allowed_keys = set(req_keys + ['save', 'file_initial'])
+            miss_keys = list(set(req_keys) - set(in_map.keys()))
+            bad_keys = list(set(in_map.keys()) - allowed_keys)
+
+            msg = (f'Input maps must map a list of `inputs` into a `file` (with an '
+                   f'optional `save` key).')
+            if miss_keys:
+                miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+                raise TaskSchemaError(err + msg + f' Missing keys are: {miss_keys_fmt}.')
+            if bad_keys:
+                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+                raise TaskSchemaError(err + msg + f' Unknown keys are: {bad_keys_fmt}.')
+
+            if not isinstance(in_map['inputs'], list):
+                msg = 'Input map `inputs` must be a list.'
                 raise TaskSchemaError(err + msg)
+
+        out_map_opt_names = []
+        for out_map_idx, out_map in enumerate(self.output_map):
+
+            req_keys = ['files', 'output']
+            allowed_keys = set(req_keys + ['options'])
+            miss_keys = list(set(req_keys) - set(out_map.keys()))
+            bad_keys = list(set(out_map.keys()) - allowed_keys)
+
+            msg = (f'Output maps must map a list of `files` into an `output` (with '
+                   f'optional `options`). ')
+            if miss_keys:
+                miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
+                raise TaskSchemaError(err + msg + f'Missing keys are: {miss_keys_fmt}.')
+
+            if bad_keys:
+                bad_keys_fmt = ', '.join(['"{}"'.format(i) for i in bad_keys])
+                raise TaskSchemaError(err + msg + f'Unknown keys are: {bad_keys_fmt}.')
+
+            if not isinstance(out_map['output'], str):
+                msg = 'Output map `output` must be a string.'
+                raise TaskSchemaError(err + msg)
+
+            for out_map_file_idx, out_map_file in enumerate(out_map['files']):
+                if ('name' not in out_map_file) or ('save' not in out_map_file):
+                    msg = (f'Specify keys `name` (str) and `save` (bool) in output map '
+                           f'`files` key.')
+                    raise TaskSchemaError(err + msg)
+
+            # Normalise and check output map options:
+            out_map_opts = out_map.get('options', [])
+            if out_map_opts:
+                if not isinstance(out_map_opts, list):
+                    msg = (
+                        f'If specified, output map options should be a list, but the '
+                        f'following was specified: {out_map_opts}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+            for out_map_opt_idx, out_map_opt_i in enumerate(out_map_opts):
+
+                opts = get_specifier_dict(out_map_opt_i, name_key='name')
+                req_opts_keys = ['name']
+                allowed_opts_keys = req_opts_keys + ['default']
+                bad_opts_keys = list(set(opts.keys()) - set(allowed_opts_keys))
+                miss_opts_keys = list(set(req_opts_keys) - set(opts.keys()))
+
+                if bad_opts_keys:
+                    bad_opts_keys_fmt = ', '.join([f'"{i}"' for i in bad_opts_keys])
+                    msg = (
+                        f'Unknown output map option keys for output map index '
+                        f'{out_map_idx} and output map option index {out_map_opt_idx}: '
+                        f'{bad_opts_keys_fmt}. Allowed keys are: {allowed_opts_keys}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+
+                if miss_opts_keys:
+                    miss_opts_keys_fmt = ', '.join([f'"{i}"' for i in miss_opts_keys])
+                    msg = (
+                        f'Missing output map option keys for output map index '
+                        f'{out_map_idx} and output map option index {out_map_opt_idx}: '
+                        f'{miss_opts_keys_fmt}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+
+                if opts['name'] in out_map_opt_names:
+                    msg = (
+                        f'Output map options must be uniquely named across all output '
+                        f'maps of a given task schema, but the output map option '
+                        f'"{opts["name"]}" is repeated.'
+                    )
+                    raise TaskSchemaError(err + msg)
+                else:
+                    out_map_opt_names.append(opts['name'])
+
+                self.output_map[out_map_idx]['options'][out_map_opt_idx] = opts
 
         # Check inputs/outputs named in input/output_maps are in inputs/outputs lists:
         for cmd_idx, command in enumerate(self.command_group.all_commands):
@@ -428,7 +530,7 @@ class Task(object):
     def __init__(self, workflow, name, method, software_instance,
                  prepare_software_instance, process_software_instance, task_idx,
                  run_options=None, prepare_run_options=None, process_run_options=None,
-                 status=None, stats=True, context='', local_inputs=None, schema=None,
+                 status=None, stats=False, context='', local_inputs=None, schema=None,
                  resource_usage=None, base=None, sequences=None, repeats=None,
                  groups=None, nest=None, merge_priority=None, output_map_options=None,
                  command_pathway_idx=None):
@@ -686,7 +788,7 @@ class Task(object):
         return fmt_commands, input_vars
 
     def get_prepare_task_commands(self, is_array=False):
-        cmd = f'matflow prepare-task --task-idx={self.task_idx}'
+        cmd = f'matflow prepare-task --task-idx={self.task_idx} --iteration-idx=$ITER_IDX'
         cmd += f' --array' if is_array else ''
         cmds = [cmd]
         if self.software_instance.task_preparation:
@@ -697,7 +799,7 @@ class Task(object):
 
     def get_prepare_task_element_commands(self, is_array=False):
         cmd = (f'matflow prepare-task-element --task-idx={self.task_idx} '
-               f'--element-idx=$(($SGE_TASK_ID-1)) '
+               f'--element-idx=$((($ITER_IDX * $SGE_TASK_LAST) + $SGE_TASK_ID - 1)) '
                f'--directory={self.workflow.path}')
         cmd += f' --array' if is_array else ''
         cmds = [cmd]
@@ -708,7 +810,7 @@ class Task(object):
         return out
 
     def get_process_task_commands(self, is_array=False):
-        cmd = f'matflow process-task --task-idx={self.task_idx}'
+        cmd = f'matflow process-task --task-idx={self.task_idx} --iteration-idx=$ITER_IDX'
         cmd += f' --array' if is_array else ''
         cmds = [cmd]
         if self.software_instance.task_processing:
@@ -719,7 +821,7 @@ class Task(object):
 
     def get_process_task_element_commands(self, is_array=False):
         cmd = (f'matflow process-task-element --task-idx={self.task_idx} '
-               f'--element-idx=$(($SGE_TASK_ID-1)) '
+               f'--element-idx=$((($ITER_IDX * $SGE_TASK_LAST) + $SGE_TASK_ID - 1)) '
                f'--directory={self.workflow.path}')
         cmd += f' --array' if is_array else ''
         cmds = [cmd]

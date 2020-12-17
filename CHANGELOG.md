@@ -1,16 +1,38 @@
 # Change Log
 
-## [0.x.xx] - xxxx.xx.xx
+## [0.2.13] - 2020.12.17
+
+### Fixed 
+
+- Fix bug when populating `Workflow.elements_idx` for more than two iterations.
+
+## [0.2.12] - 2020.12.16
 
 ### Added
 
-- Figures definitions
-- Workflow metadata attribute for storing arbitrary metadata
+- Add `Workflow.figures` attribute for storing associated figure definitions.
+- Add `Workflow.metadata` attribute for storing arbitrary metadata (will later be used for Zenodo archiving).
+- Add various `Workflow` static methods to help with retrieving information in the viewer without loading the whole workflow via `hickle`.
+- Add `get_task_schemas` to API to load the available task schemas without generating a workflow.
+- Add `refresh` bool parameter to `Config.set_config`, to force a reload of the configuration.
+- Support inputs as dependencies as well as outputs.
+- Support "parameter modifying" tasks (a task which outputs a parameter that is also an input to that task).
+- Add `iterate_run_options` to Workflow.
+- Add new methods for finding dependent and dependency tasks/parameters, upstream/downstream parameter values associated with a given element.
+- Add input option: `include_all_iterations`. If True, inputs from all iterations are passed to input map functions.
 
 ### Fixed
 
 - Only save input/output map files if they exist!
 - Fix bug in propagating groups correctly
+- Various code formatting issues
+- Fix failure to raise on invalid schemas.
+- Fix bug when the same file is to be saved from multiple output maps.
+
+### Changed
+- Redo task sorting algorithm such that minimal ordering changes are made.
+- Set `stats` bool to False by default.
+- Bump hpcflow version to v0.1.12.
 
 ## [0.2.11] - 2020.09.29
 

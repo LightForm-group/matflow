@@ -12,7 +12,7 @@ is easier. The classes themselves mainly serve to provide useful properties.
 
 import copy
 from warnings import warn
-
+from pprint import pprint
 import numpy as np
 from hpcflow.scheduler import SunGridEngine
 
@@ -30,11 +30,11 @@ from matflow.errors import (
     MissingSchemaError,
     UnsatisfiedSchemaError,
     MissingSoftwareSourcesError,
+    TaskParameterError,
 )
 from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list,
-                           to_sub_list, get_specifier_dict)
+                           to_sub_list, get_specifier_dict, move_element_forward)
 from matflow.models.task import Task, TaskSchema
-from matflow.models.element import Element
 from matflow.models.software import SoftwareInstance
 
 
@@ -47,7 +47,7 @@ def normalise_local_inputs(base=None, sequences=None, is_from_file=False):
     sequences : list, optional
     is_from_file : bool
         Has this task dict been loaded from a workflow file or is it associated
-        with a brand new workflow?    
+        with a brand new workflow?
 
     Returns
     -------
@@ -61,7 +61,7 @@ def normalise_local_inputs(base=None, sequences=None, is_from_file=False):
                 base dict (non-sequence parameters), this is set to -1. For parameters
                 specified in the sequences list, this is whatever is specified by the user
                 or 0 if not specified.
-            vals : list 
+            vals : list
                 List of values for this input parameter. This will be a list of length one
                 for input parameters specified within the base dict.
 
@@ -142,25 +142,18 @@ def normalise_local_inputs(base=None, sequences=None, is_from_file=False):
     return inputs_lst
 
 
-def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
+def get_local_inputs(task, is_from_file):
     """Combine task base/sequences/repeats to get the locally defined inputs for a task.
 
     Parameters
     ----------
-    all_tasks : list of dict
-        Each dict represents a task. This is passed to allow validation of inputs, since
-        inputs of this task may be specified as outputs of another task.
-    task_idx : int
-        Index of the task in `all_tasks` for which local inputs are to be found.
-    dep_idx : list of list of int
+    task : dict
+        Dict representing a task.
     is_from_file : bool
         Has this task dict been loaded from a workflow file or is it associated
-        with a brand new workflow?    
+        with a brand new workflow?
 
     """
-
-    task = all_tasks[task_idx]
-    task_dep_idx = dep_idx[task_idx]
 
     base = task['base']
     num_repeats = task['repeats'] or 1
@@ -171,22 +164,21 @@ def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
     schema = task['schema']
 
     inputs_lst = normalise_local_inputs(base, sequences, is_from_file)
+    default_inputs_lst = []
+
+    for input_dict in schema.inputs:
+        if 'default' in input_dict:
+            default_inputs_lst.append({
+                'name': input_dict['name'],
+                'nest_idx': -1,
+                'vals': [input_dict['default']],
+            })
+
     defined_inputs = [i['name'] for i in inputs_lst]
     schema.check_surplus_inputs(defined_inputs)
 
-    for dep_idx_i in task_dep_idx:
-        for output in all_tasks[dep_idx_i]['schema'].outputs:
-            if output in schema.input_names:
-                defined_inputs.append(output)
-
-    default_values = schema.validate_inputs(defined_inputs)
-    for in_name, in_val in default_values.items():
-        inputs_lst.append({
-            'name': in_name,
-            'nest_idx': -1,
-            'vals': [in_val],
-        })
-
+    # Find the number of elements associated with this task due to its local input
+    # sequences:
     inputs_lst.sort(key=lambda x: x['nest_idx'])
     if inputs_lst:
         lengths = [len(i['vals']) for i in inputs_lst]
@@ -202,7 +194,8 @@ def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
     else:
         total_len = 1
 
-    local_ins = {'inputs': {}}
+    local_ins = {'inputs': {}, 'default_inputs': {}}
+    repeats_idx = [0]
 
     for idx, input_i in enumerate(inputs_lst):
 
@@ -218,7 +211,6 @@ def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
         vals_idx = repeat(vals_idx, num_repeats)
         repeats_idx = tile(arange(num_repeats), total_len)
 
-        local_ins['repeats_idx'] = repeats_idx
         local_ins['inputs'].update({
             input_i['name']: {
                 'vals': input_i['vals'],
@@ -227,6 +219,16 @@ def get_local_inputs(all_tasks, task_idx, dep_idx, is_from_file):
         })
         prev_reps = rep_i
         prev_tile = tile_i
+
+    local_ins['repeats_idx'] = repeats_idx
+
+    for def_input_i in default_inputs_lst:
+        local_ins['default_inputs'].update({
+            def_input_i['name']: {
+                'vals': def_input_i['vals'],
+                'vals_idx': repeat([0] * total_len, num_repeats),
+            }
+        })
 
     allowed_grp = schema.input_names + ['repeats']
     allowed_grp_fmt = ', '.join([f'"{i}"' for i in allowed_grp])
@@ -340,6 +342,80 @@ def get_software_instance(software, run_options, all_software, type_label=''):
     return match
 
 
+def get_input_dependency(task_info_lst, input_dict, input_task_idx):
+
+    param_name = input_dict['name']
+    param_context = input_dict['context']
+    param_task = task_info_lst[input_task_idx]
+
+    downstream_task_context = param_task['context']
+    downstream_task_name = param_task['name']
+
+    # Initially collate as a list of dependencies. Then apply some rules to find the
+    # preferred single dependency.
+    input_dependency = []
+
+    for task_idx, task_info in enumerate(task_info_lst):
+
+        if task_idx == input_task_idx:
+            continue
+
+        upstream_context = task_info['context']
+
+        # Determine if a dependency is allowed to exist between the given parameter and
+        # this task, by considering the parameter context, downstream task context and
+        # upstream task context:
+        if (
+            param_context == upstream_context or (
+                (upstream_context == downstream_task_context) and (param_context is None)
+            ) or (
+                upstream_context == ''
+            )
+        ):
+            # A dependency may exist! The parameter as an output in an upstream task takes
+            #  precedence over the parameter as an input in that same task:
+            if param_name in task_info['schema'].outputs:
+                input_dependency.append({
+                    'from_task': task_idx,
+                    'dependency_type': 'output',
+                    'is_parameter_modifying_task': False,
+                })
+            elif (
+                param_name in task_info['schema'].input_names and
+                param_name in task_info['local_inputs']['inputs']
+            ):
+                input_dependency.append({
+                    'from_task': task_idx,
+                    'dependency_type': 'input',
+                    'is_parameter_modifying_task': False,
+                })
+
+            # Make a note if this task is a parameter-modifying task for this parameter,
+            # i.e. the parameter is both an input and an output:
+            if (
+                param_name in task_info['schema'].outputs and
+                param_name in task_info['schema'].input_names
+            ):
+                input_dependency[-1].update({'is_parameter_modifying_task': True})
+
+    if len(input_dependency) > 1:
+        # Only keep "parameter modifying tasks", because such task will be dependent on
+        # the "parameter generating" tasks:
+        input_dependency = [i for i in input_dependency
+                            if i['is_parameter_modifying_task']]
+
+    # Make sure only a single dependency exists.
+    if len(input_dependency) > 1:
+        msg = (
+            f'Task input parameter "{param_name}" from task "{downstream_task_name}" with '
+            f'task context "{downstream_task_context}" is found as an input/output '
+            f'parameter for multiple tasks, which makes the task dependency ill-defined.'
+        )
+        raise IncompatibleWorkflow(msg)
+
+    return input_dependency[0] if input_dependency else {}
+
+
 def get_dependency_idx(task_info_lst):
     """Find the dependencies between tasks.
 
@@ -349,6 +425,7 @@ def get_dependency_idx(task_info_lst):
         Each dict must have keys:
             context : str
             schema : TaskSchema
+            local_inputs : dict
 
     Returns
     -------
@@ -373,54 +450,151 @@ def get_dependency_idx(task_info_lst):
     """
 
     dependency_idx = []
-    all_outputs = []
-    for task_info in task_info_lst:
+    for task_idx, task_info in enumerate(task_info_lst):
 
-        downstream_context = task_info['context']
-        schema_inputs = task_info['schema'].inputs
-        schema_outputs = task_info['schema'].outputs
+        task_name, task_context = task_info['name'], task_info['context']
 
-        # List outputs with their corresponding task contexts:
-        all_outputs.extend([(i, downstream_context) for i in schema_outputs])
+        dep_idx_i = {
+            'task_name': task_name,
+            'task_context': task_context,
+            'original_idx': task_idx,
+            'current_idx': task_idx,
+            'task_dependencies': [],
+            'parameter_dependencies': {},
+        }
 
         # Find which tasks this task depends on:
-        output_idx = []
-        for input_j in schema_inputs:
+        task_dep_idx = []
+        for input_dict in task_info['schema'].inputs:
 
-            param_name = input_j['name']
-            param_context = input_j['context']
+            input_name = input_dict['name']
+            input_alias = input_dict['alias']
+            is_locally_defined = input_name in task_info['local_inputs']['inputs']
+            default_defined = input_name in task_info['local_inputs']['default_inputs']
+            input_dependency = get_input_dependency(task_info_lst, input_dict, task_idx)
 
-            for task_idx_k, task_info_k in enumerate(task_info_lst):
+            add_input_dep = False
+            if is_locally_defined:
 
-                if param_name not in task_info_k['schema'].outputs:
-                    continue
+                if input_dependency:
+                    in_dep_task = task_info_lst[input_dependency['from_task']]
+                    in_dep_task_name = in_dep_task['name']
+                    in_dep_task_context = in_dep_task['context']
+                    msg = (
+                        f'Input parameter "{input_name}" for task "{task_name}" with '
+                        f'task context "{task_context}" has both a local value and a '
+                        f'non-local value. The non-local value is derived from an '
+                        f'{input_dependency["dependency_type"]} of task '
+                        f'"{in_dep_task_name}" with task context '
+                        f'"{in_dep_task_context}". The local value will be used.'
+                    )
+                    warn(msg)
 
-                upstream_context = task_info_k['context']
-                if (
-                    param_context == upstream_context or (
-                        (upstream_context == downstream_context) and
-                        (param_context is None)
-                    ) or (upstream_context == '')
-                ):
-                    output_idx.append(task_idx_k)
+            elif input_dependency:
+                add_input_dep = True
 
-        dependency_idx.append(list(set(output_idx)))
+            elif default_defined:
+                # Move the default value into the local inputs:
+                task_info_lst[task_idx]['local_inputs']['inputs'][input_name] = (
+                    copy.deepcopy(task_info['local_inputs']['default_inputs'][input_name])
+                )
 
-    if len(all_outputs) != len(set(all_outputs)):
-        msg = 'Multiple tasks in the workflow have the same output and context!'
-        raise IncompatibleWorkflow(msg)
+            else:
+                msg = (f'Task input "{input_name}" for task "{task_name}" with task '
+                       f'context "{task_context}" appears to be missing. A value must be '
+                       f'specified locally, or a default value must be provided in the '
+                       f'schema, or an additional task should be added to the workflow '
+                       f'that generates the parameter. If such a task already exists, '
+                       f'try reordering the tasks in the order in which would you expect '
+                       f'them to run.')
+                raise TaskParameterError(msg)
+
+            if add_input_dep:
+                dep_idx_i['parameter_dependencies'].update({
+                    input_alias: input_dependency
+                })
+                task_dep_idx.append(input_dependency['from_task'])
+
+        dep_idx_i['task_dependencies'] = list(set(task_dep_idx))
+        dependency_idx.append(dep_idx_i)
 
     # Check for circular dependencies in task inputs/outputs:
     all_deps = []
     for idx, deps in enumerate(dependency_idx):
-        for i in deps:
+        for i in deps['task_dependencies']:
             all_deps.append(tuple(sorted([idx, i])))
 
     if len(all_deps) != len(set(all_deps)):
-        msg = 'Workflow tasks are circularly dependent!'
+        msg = (f'Workflow tasks are circularly dependent! `dependency_idx` is: '
+               f'{dependency_idx}')
         raise IncompatibleWorkflow(msg)
 
     return dependency_idx
+
+
+def find_good_task_dependency_position(dep_idx, task_dependencies):
+    seen_ids = []
+    for position, dep_idx_i in enumerate(dep_idx):
+        seen_ids.append(dep_idx_i['current_idx'])
+        if all([i in seen_ids for i in task_dependencies]):
+            return position
+    raise RuntimeError('No good position exists!')
+
+
+def sort_dependency_idx(dependency_idx):
+
+    dep_idx = copy.deepcopy(dependency_idx)
+
+    # Maximum number of iterations should be that required to completely reverse the
+    # order, where each item in the list is dependent on only the next task in the list
+    # (except the final task):
+    N = len(dep_idx)
+    MAX_ITER = int((N**2 - N + 2) / 2)
+
+    count = 0
+    while True:
+
+        count += 1
+        if count > MAX_ITER:
+            raise RuntimeError(f'Could not sort dependency index in {MAX_ITER} '
+                               f'iterations!')
+
+        repositioned = False
+        seen_ids = []
+        for idx_i, dep_idx_i in enumerate(dep_idx):
+
+            needs_reposition = any([i not in seen_ids
+                                    for i in dep_idx_i['task_dependencies']])
+            if needs_reposition:
+
+                good_position = find_good_task_dependency_position(
+                    dep_idx,
+                    dep_idx_i['task_dependencies'],
+                )
+                dep_idx, remap_idx = move_element_forward(dep_idx, idx_i, good_position)
+                repositioned = True
+
+                # Update dependencies:
+                for idx_j, dep_idx_j in enumerate(dep_idx):
+                    new_task_deps = [remap_idx[i] for i in dep_idx_j['task_dependencies']]
+                    dep_idx[idx_j]['task_dependencies'] = new_task_deps
+                    dep_idx[idx_j]['current_idx'] = idx_j
+                    for p_name, p_dep in dep_idx_j['parameter_dependencies'].items():
+                        new_task_dep = remap_idx[p_dep['from_task']]
+                        dep_idx[idx_j]['parameter_dependencies'][p_name]['from_task'] = (
+                            new_task_dep
+                        )
+
+                # After repositioning, restart ordering from the beginning:
+                break
+
+            seen_ids.append(dep_idx_i['current_idx'])
+
+        if not repositioned:
+            # No repositions were required for any task, our job is done:
+            break
+
+    return dep_idx
 
 
 def validate_run_options(run_opts, type_label=''):
@@ -570,7 +744,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
 
         def_keys = {
             'run_options': {},
-            'stats': True,
+            'stats': False,
             'base': None,
             'sequences': None,
             'repeats': 1,
@@ -652,9 +826,6 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             type_label='.process',
         )
 
-        # print(f'prepare_soft_inst:\n{prepare_soft_inst}')
-        # print(f'process_soft_inst:\n{process_soft_inst}')
-
         schema_key = (task['name'], task['method'], soft_inst.software)
 
         task['software_instance'] = soft_inst
@@ -667,9 +838,10 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             msg = (f'No matching task schema found for task name "{task["name"]}" with '
                    f'method "{task["method"]}" and software "{soft_inst.software}".')
             raise MissingSchemaError(msg)
-        if not Config.get('schema_validity')[schema_key]:
-            msg = (f'No matching extension function found for the schema with '
-                   f'implementation: {soft_inst.software}.')
+        if not Config.get('schema_validity')[schema_key][0]:
+            msg = (f'Task schema invalid for task schema name "{task["name"]}" with '
+                   f'method "{task["method"]}" and software "{soft_inst.software}": '
+                   f'{Config.get("schema_validity")[schema_key][1]}')
             raise UnsatisfiedSchemaError(msg)
 
         # Check any sources required by the main software instance are defined in the
@@ -702,6 +874,7 @@ def order_tasks(task_lst):
         must contain the keys:
             context : str
             schema : TaskSchema
+            output_map_options
 
     Returns
     -------
@@ -715,20 +888,14 @@ def order_tasks(task_lst):
 
     """
 
-    dep_idx = get_dependency_idx(task_lst)
-
     for i_idx, i in enumerate(task_lst):
         out_opts = i['schema'].validate_output_map_options(i['output_map_options'])
         task_lst[i_idx]['output_map_options'] = out_opts
 
-    # Find the index at which each task must be positioned to satisfy input
-    # dependencies, and reorder tasks (and `dep_idx`!):
-    min_idx = [max(i or [0]) + 1 for i in dep_idx]
-    task_srt_idx = np.argsort(min_idx)
-
-    task_lst_srt = [task_lst[i] for i in task_srt_idx]
-    dep_idx_srt = [[np.argsort(task_srt_idx)[j] for j in dep_idx[i]]
-                   for i in task_srt_idx]
+    dep_idx = get_dependency_idx(task_lst)
+    dep_idx_srt = sort_dependency_idx(dep_idx)
+    sort_idx = [i['original_idx'] for i in dep_idx_srt]
+    task_lst_srt = [task_lst[i] for i in sort_idx]
 
     # Add sorted task idx:
     for idx, i in enumerate(task_lst_srt):
@@ -791,11 +958,12 @@ def resolve_group(group, local_inputs, repeats_idx):
 
     group_resolved = copy.deepcopy(group)
     group_resolved.update({
-        'group_idx': group_idx,
-        'group_element_idx': group_elem_idx,
-        'num_groups': len(group_elem_idx),
-        'group_size': len(group_elem_idx[0]),
+        'group_idx_per_iteration': group_idx,
+        'group_element_idx_per_iteration': group_elem_idx,
+        'num_groups_per_iteration': len(group_elem_idx),
+        'group_size_per_iteration': len(group_elem_idx[0]),
         'group_by': new_group_by,
+        'num_groups': len(group_elem_idx),
     })
 
     if 'merge_priority' not in group_resolved:
@@ -804,7 +972,59 @@ def resolve_group(group, local_inputs, repeats_idx):
     return group_resolved
 
 
-def get_element_idx(task_lst, dep_idx):
+def get_input_groups(task_idx, task_lst, dependency_idx, element_idx):
+    """Get the (local inputs) group dict for each non-local input of a task.
+
+    Parameters
+    ----------
+    non_local_inputs : list of dict
+
+    """
+
+    task = task_lst[task_idx]
+    local_input_names = list(task['local_inputs']['inputs'].keys())
+    non_local_inputs = [i for i in task['schema'].inputs
+                        if i['name'] not in local_input_names]
+
+    input_groups = {}
+    for non_local_input_i in non_local_inputs:
+
+        input_alias = non_local_input_i['alias']
+        input_name = non_local_input_i['name']
+        group_name = task['schema'].get_input_by_alias(input_alias)['group']
+
+        task_param_deps = dependency_idx[task_idx]['parameter_dependencies']
+        input_task_idx = task_param_deps[input_alias]['from_task']
+        input_task = task_lst[input_task_idx]
+
+        if group_name == 'default':
+            group_name_ = group_name
+        else:
+            group_name_ = 'user_group_' + group_name
+
+        group_dict = element_idx[input_task_idx]['groups']
+        group_names_fmt = ', '.join([f'"{i}"' for i in group_dict.keys()])
+        group_dat = group_dict.get(group_name_)
+
+        if group_dat is None:
+            msg = (f'No group "{group_name}" defined in the workflow for '
+                   f'input "{input_name}". Defined groups are: '
+                   f'{group_names_fmt}.')
+            raise UnsatisfiedGroupParameter(msg)
+
+        input_groups.update({
+            input_alias: {
+                **group_dat,
+                'group_name': group_name,
+                'task_idx': input_task_idx,
+                'task_name': input_task['name'],
+            }
+        })
+
+    return input_groups
+
+
+def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
     """For each task, find the element indices that determine the elements to be used
     (i.e from upstream tasks) to populate task inputs.
 
@@ -822,8 +1042,8 @@ def get_element_idx(task_lst, dep_idx):
             schema : TaskSchema
             task_idx : int
 
-    dep_idx : list of list of int
-        List of length equal to `task_lst`, whose elements are integer lists that link a
+    dep_idx : list of dict
+        List of length equal to `task_lst`, whose elements are ... TODO. ..integer lists that link a
         given task to the indices of tasks upon which it depends.
 
     Returns
@@ -841,7 +1061,10 @@ def get_element_idx(task_lst, dep_idx):
     element_idx = []
     for idx, downstream_task in enumerate(task_lst):
 
-        upstream_tasks = [task_lst[i] for i in dep_idx[idx]]
+        if iterate and idx in iterate['task_pathway']:
+            num_iterations = iterate['num_iterations']
+
+        upstream_tasks = [task_lst[i] for i in dep_idx[idx]['task_dependencies']]
 
         # local inputs dict:
         loc_in = downstream_task['local_inputs']
@@ -857,50 +1080,27 @@ def get_element_idx(task_lst, dep_idx):
             input_idx = arange(loc_in['length'])
             elem_idx_i = {
                 'num_elements': loc_in['length'],
+                'num_elements_per_iteration': loc_in['length'],
+                'num_iterations': num_iterations,
                 'groups': groups,
-                'inputs': {i: {'input_idx': input_idx} for i in loc_in['inputs']},
+                'inputs': {
+                    i:
+                        {
+                            'local_input_idx': input_idx,
+                            'task_idx': [None] * len(input_idx),
+                            'element_idx': [None] * len(input_idx),
+                            'group': [None] * len(input_idx),
+                        }
+                        for i in loc_in['inputs']
+                },
+                'iteration_idx': [0] * loc_in['length'],
             }
 
         else:
             # This task depends on other tasks.
-            ins_local = list(loc_in['inputs'].keys())
-            ins_non_local = [i for i in schema.inputs if i['name'] not in ins_local]
-
-            # Get the (local inputs) group dict for each `ins_non_local` (from upstream
-            # tasks):
-            input_groups = {}
-            for non_loc_inp in ins_non_local:
-                input_alias = non_loc_inp['alias']
-                input_name = non_loc_inp['name']
-                input_context = non_loc_inp['context']
-                group_name = schema.get_input_by_alias(input_alias)['group']
-                for up_task in upstream_tasks:
-                    if input_context is not None:
-                        if up_task['context'] != input_context:
-                            continue
-                    if input_name in up_task['schema'].outputs:
-                        group_name_ = group_name
-                        if group_name != 'default':
-                            group_name_ = 'user_group_' + group_name
-                        group_dict = element_idx[up_task['task_idx']]['groups']
-                        group_names_fmt = ', '.join([f'"{i}"' for i in group_dict.keys()])
-                        group_dat = group_dict.get(group_name_)
-                        if group_dat is None:
-                            msg = (f'No group "{group_name}" defined in the workflow for '
-                                   f'input "{input_name}". Defined groups are: '
-                                   f'{group_names_fmt}.')
-                            raise UnsatisfiedGroupParameter(msg)
-                        input_groups.update({
-                            input_alias: {
-                                **group_dat,
-                                'group_name': group_name,
-                                'task_idx': up_task['task_idx'],
-                                'task_name': up_task['name'],
-                            }
-                        })
-                        break
-
+            input_groups = get_input_groups(idx, task_lst, dep_idx, element_idx)
             is_nesting_mixed = len(set([i['nest'] for i in input_groups.values()])) > 1
+
             for input_alias, group_info in input_groups.items():
 
                 if group_info['merge_priority'] is None and is_nesting_mixed:
@@ -936,8 +1136,8 @@ def get_element_idx(task_lst, dep_idx):
                 if in_group['group_name'] != 'default':
                     consumed_groups.append('user_group_' + in_group['group_name'])
 
-                incoming_size = in_group['num_groups']
-                group_size = in_group['group_size']
+                incoming_size = in_group['num_groups_per_iteration']
+                group_size = in_group['group_size_per_iteration']
                 if group_size > 1:
                     non_unit_group_sizes.update({in_group['task_idx']: True})
                 elif in_group['task_idx'] not in non_unit_group_sizes:
@@ -951,7 +1151,14 @@ def get_element_idx(task_lst, dep_idx):
                         for i in loc_in['inputs']:
                             inp_alias = [j['alias'] for j in schema.inputs
                                          if j['name'] == i][0]
-                            ins_dict.update({inp_alias: {'input_idx': input_idx}})
+                            ins_dict.update({
+                                inp_alias: {
+                                    'local_input_idx': input_idx,
+                                    'task_idx': [None] * len(input_idx),
+                                    'element_idx': [None] * len(input_idx),
+                                    'group': [None] * len(input_idx),
+                                }
+                            })
 
                         for group_name, group in loc_in['groups'].items():
                             group = resolve_group(group, loc_in['inputs'], repeats_idx)
@@ -960,11 +1167,13 @@ def get_element_idx(task_lst, dep_idx):
                     else:
                         existing_size = incoming_size
                         repeats_idx = [None] * existing_size
+                        element_idx_i = in_group['group_element_idx_per_iteration']
                         ins_dict.update({
                             input_alias: {
-                                'task_idx': in_group['task_idx'],
-                                'group': in_group['group_name'],
-                                'element_idx': in_group['group_element_idx'],
+                                'local_input_idx': [None] * len(element_idx_i),
+                                'task_idx': [in_group['task_idx']] * len(element_idx_i),
+                                'element_idx': element_idx_i,
+                                'group': [in_group['group_name']] * len(element_idx_i),
                             }
                         })
                         continue
@@ -973,38 +1182,40 @@ def get_element_idx(task_lst, dep_idx):
 
                     # Repeat existing:
                     for k, v in ins_dict.items():
-                        if 'task_idx' in v:
-                            elems_idx = repeat(v['element_idx'], incoming_size)
-                            ins_dict[k]['element_idx'] = elems_idx
-                        else:
-                            input_idx = repeat(ins_dict[k]['input_idx'], incoming_size)
-                            ins_dict[k]['input_idx'] = input_idx
+                        for k2, v2 in v.items():
+                            ins_dict[k][k2] = repeat(v2, incoming_size)
 
                     # Tile incoming:
+                    element_idx_i = tile(
+                        in_group['group_element_idx_per_iteration'],
+                        existing_size,
+                    )
                     ins_dict.update({
                         input_alias: {
-                            'task_idx': in_group['task_idx'],
-                            'group': in_group['group_name'],
-                            'element_idx': tile(
-                                in_group['group_element_idx'],
-                                existing_size
-                            ),
+                            'local_input_idx': [None] * len(element_idx_i),
+                            'task_idx': [in_group['task_idx']] * len(element_idx_i),
+                            'group': [in_group['group_name']] * len(element_idx_i),
+                            'element_idx': element_idx_i,
                         }
                     })
 
                     # Generate new groups for each group name:
                     for g_name, g in groups.items():
 
-                        new_g_idx = extend_index_list(g['group_idx'], incoming_size)
+                        new_g_idx = extend_index_list(
+                            g['group_idx_per_iteration'], incoming_size)
                         new_ge_idx = to_sub_list(
                             extend_index_list(
-                                flatten_list(g['group_element_idx']),
+                                flatten_list(g['group_element_idx_per_iteration']),
                                 incoming_size),
-                            g['group_size']
+                            g['group_size_per_iteration']
                         )
-                        groups[g_name]['group_idx'] = new_g_idx
-                        groups[g_name]['group_element_idx'] = new_ge_idx
-                        groups[g_name]['num_groups'] = g['num_groups'] * incoming_size
+                        new_num_groups = g['num_groups_per_iteration'] * incoming_size
+
+                        groups[g_name]['group_idx_per_iteration'] = new_g_idx
+                        groups[g_name]['group_element_idx_per_iteration'] = new_ge_idx
+                        groups[g_name]['num_groups_per_iteration'] = new_num_groups
+                        groups[g_name]['num_groups'] = new_num_groups
 
                     existing_size *= incoming_size
 
@@ -1021,11 +1232,13 @@ def get_element_idx(task_lst, dep_idx):
                         )
                         raise IncompatibleTaskNesting(msg)
 
+                    element_idx_i = in_group['group_element_idx_per_iteration']
                     ins_dict.update({
                         input_alias: {
-                            'task_idx': in_group['task_idx'],
-                            'group': in_group['group_name'],
-                            'element_idx': in_group['group_element_idx'],
+                            'local_input_idx': [None] * len(element_idx_i),
+                            'task_idx': [in_group['task_idx']] * len(element_idx_i),
+                            'group': [in_group['group_name']] * len(element_idx_i),
+                            'element_idx': element_idx_i,
                         }
                     })
 
@@ -1052,40 +1265,176 @@ def get_element_idx(task_lst, dep_idx):
 
             for group_name, g in prop_groups.items():
 
-                group_reps = existing_size // (g['num_groups'] * g['group_size'])
-                new_g_idx = extend_index_list(g['group_idx'], group_reps)
+                group_reps = existing_size // (g['num_groups_per_iteration']
+                                               * g['group_size_per_iteration'])
+                new_g_idx = extend_index_list(g['group_idx_per_iteration'], group_reps)
                 new_ge_idx = to_sub_list(
                     extend_index_list(
-                        flatten_list(g['group_element_idx']),
+                        flatten_list(g['group_element_idx_per_iteration']),
                         group_reps),
-                    g['group_size']
+                    g['group_size_per_iteration']
                 )
-                prop_groups[group_name]['group_idx'] = new_g_idx
-                prop_groups[group_name]['group_element_idx'] = new_ge_idx
-                prop_groups[group_name]['num_groups'] = g['num_groups'] * group_reps
+                new_num_groups = g['num_groups_per_iteration'] * group_reps
+
+                prop_groups[group_name]['group_idx_per_iteration'] = new_g_idx
+                prop_groups[group_name]['group_element_idx_per_iteration'] = new_ge_idx
+                prop_groups[group_name]['num_groups_per_iteration'] = new_num_groups
+                prop_groups[group_name]['num_groups'] = new_num_groups
 
             all_groups = {**groups, **prop_groups}
 
             elem_idx_i = {
                 'num_elements': existing_size,
+                'num_elements_per_iteration': existing_size,
+                'num_iterations': num_iterations,
                 'inputs': ins_dict,
                 'groups': all_groups,
+                'iteration_idx': [0] * existing_size,
             }
 
         element_idx.append(elem_idx_i)
 
+    # First iteration is in place, add additional iterations (if they exist for this
+    # task):
+    max_num_iter = max([i['num_iterations'] for i in element_idx])
+    for iter_idx in range(1, max_num_iter):
+
+        # print(f'Adding elements for iteration {iter_idx}')
+
+        # Add iterations:
+        for task_idx, elem_idx_i in enumerate(element_idx):
+
+            num_iterations_i = elem_idx_i['num_iterations']
+
+            if iter_idx >= num_iterations_i:
+                continue
+
+            # print(f'\tConsidering task {task_idx}, with num_iterations_i: '
+            #       f'{num_iterations_i}')
+
+            elem_iter_idx = np.array(elem_idx_i['iteration_idx'])
+            elems_per_iter = elem_idx_i['num_elements_per_iteration']
+            iter_zero_idx = np.where(elem_iter_idx == 0)[0]
+            # print(f'\titer_zero_idx: {iter_zero_idx}')
+
+            for input_alias, inputs_idx in elem_idx_i['inputs'].items():
+
+                # print(f'\t\tConsidering input "{input_alias}":\n\t\t\tinputs_idx: '
+                #       f'{inputs_idx}.')
+
+                if (
+                    iterate and
+                    input_alias == iterate['parameter'] and
+                    task_idx in iterate['originating_tasks']
+                ):
+                    # New elements should derive from the "producing task" of the previous
+                    # iteration:
+
+                    task_dep = iterate['producing_task']
+                    elem_iter_idx_task_dep = np.array(
+                        element_idx[task_dep]['iteration_idx']
+                    )
+
+                    # elements of task dependency belonging to the previous iteration:
+                    iter_prev_idx_task_dep = np.where(
+                        elem_iter_idx_task_dep == iter_idx - 1
+                    )[0]
+
+                    # print(f'\t\t\tElements should derive from the '
+                    #       f'previous iteration (iter_idx-1={iter_idx-1}) "producing '
+                    #       f'task": {task_dep}; elem_iter_idx_task_dep: '
+                    #       f'{elem_iter_idx_task_dep}; iter_prev_idx_task_dep: '
+                    #       f'{iter_prev_idx_task_dep}.')
+
+                    # Very hacky mess:
+                    new_group = inputs_idx['group'][0] or 'default'
+                    iter_current_group = [new_group] * elems_per_iter
+
+                    # Very hacky mess:
+                    iter_current_elems_idx = [
+                        [iter_prev_idx_task_dep[0]] * len(
+                            inputs_idx['element_idx'][0] or [0]
+                        )
+                    ] * elems_per_iter
+
+                    iter_current_task = [task_dep] * elems_per_iter
+                    iter_current_loc = [None] * elems_per_iter
+
+                    add_elements = {
+                        'local_input_idx': iter_current_loc,
+                        'task_idx': iter_current_task,
+                        'element_idx': iter_current_elems_idx,
+                        'group': iter_current_group,
+                    }
+                    # print(f'\t\t\tAdditional elements are: {add_elements}')
+
+                else:
+                    # New elements should derive from tasks of the most recent iteration:
+                    # print(f'\t\t\tElements should derive from the '
+                    #       f'most recent iteration.')
+                    if inputs_idx['local_input_idx'][0] is not None:
+                        # Tile local inputs for new iteration:
+                        add_elements = {k: [inputs_idx[k][i] for i in iter_zero_idx]
+                                        for k in inputs_idx}
+                        # print(f'\t\t\tFound local inputs: additional elements '
+                        #       f'are: {add_elements}')
+                    else:
+                        # Use elements from the most recent iteration of the dependency
+                        # task:
+                        task_dep = inputs_idx['task_idx'][0]
+                        elem_iter_idx_task_dep = np.array(
+                            element_idx[task_dep]['iteration_idx']
+                        )
+
+                        # elements of task dependency belonging to the most recent
+                        # iteration:
+                        iter_last_idx_task_dep = np.where(
+                            elem_iter_idx_task_dep == np.max(elem_iter_idx_task_dep)
+                        )[0]
+
+                        iter_zero_elems_idx = [inputs_idx['element_idx'][i]
+                                               for i in iter_zero_idx]
+                        iter_current_elems_idx = [
+                            [iter_last_idx_task_dep[j] for j in i]
+                            for i in iter_zero_elems_idx
+                        ]
+
+                        iter_current_group = [inputs_idx['group'][0]] * elems_per_iter
+                        iter_current_task = [inputs_idx['task_idx'][0]] * elems_per_iter
+                        iter_current_loc = [None] * elems_per_iter
+
+                        add_elements = {
+                            'local_input_idx': iter_current_loc,
+                            'task_idx': iter_current_task,
+                            'element_idx': iter_current_elems_idx,
+                            'group': iter_current_group,
+                        }
+
+                        # print(f'\t\t\tFound non-local inputs: additional elements '
+                        #       f'are: {add_elements}')
+
+                for k in elem_idx_i['inputs'][input_alias]:
+                    elem_idx_i['inputs'][input_alias][k] += add_elements[k]
+
+            # Update num_elements, iteration_idx with each iter_idx loop:
+            new_iter_idx = (
+                element_idx[task_idx]['iteration_idx'] + [iter_idx] * elems_per_iter
+            )
+            element_idx[task_idx]['iteration_idx'] = new_iter_idx
+            element_idx[task_idx]['num_elements'] = len(new_iter_idx)
+
+    # print('element_idx')
+    # pprint(element_idx)
+
     return element_idx
 
 
-def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
+def init_local_inputs(task_lst, is_from_file, check_integrity):
     """Normalise local inputs for each task.
 
     Parameters
     ----------
     task_lst : list of dict
-
-    dep_idx : list of list of int
-
     is_from_file : bool
         Has this task dict been loaded from a workflow file or is it associated
         with a brand new workflow?
@@ -1100,28 +1449,11 @@ def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
 
     for task_idx, task in enumerate(task_lst):
 
-        local_ins = get_local_inputs(task_lst, task_idx, dep_idx, is_from_file)
-
-        if is_from_file and check_integrity:
-
-            # Don't compare the vals_data_idx:
-            loaded_local_inputs = copy.deepcopy(task['local_inputs'])
-            for vals_dict in loaded_local_inputs['inputs'].values():
-                del vals_dict['vals_data_idx']
-
-            if local_ins != loaded_local_inputs:
-                msg = (
-                    f'Regenerated local inputs (task: "{task["name"]}") '
-                    f'are not equivalent to those loaded from the '
-                    f'workflow file. Stored local inputs are:'
-                    f'\n{task["local_inputs"]}\nRegenerated local '
-                    f'inputs are:\n{local_ins}\n.'
-                )
-                raise WorkflowPersistenceError(msg)
-
+        if is_from_file:
             local_ins = task['local_inputs']
-
-        task_lst[task_idx]['local_inputs'] = local_ins
+        else:
+            local_ins = get_local_inputs(task, is_from_file)
+            task_lst[task_idx]['local_inputs'] = local_ins
 
         # Select and set the correct command pathway index according to local inputs:
         loc_ins_vals = {}
@@ -1160,6 +1492,16 @@ def init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity):
                                 out_map_file_idx]['name'] = new_fn
 
     return task_lst
+
+
+def validate_inputs(task_lst):
+    """Validate supplied task inputs."""
+
+    for task in task_lst:
+
+        schema = task['schema']
+        defined_inputs = task['local_inputs']['inputs'].keys()
+        schema.check_surplus_inputs(defined_inputs)
 
 
 def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
@@ -1204,28 +1546,23 @@ def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
         )
     ]
 
+    # Validate and normalise locally defined inputs:
+    task_lst = init_local_inputs(task_lst, is_from_file, check_integrity=False)
+
     # Get dependencies, sort and add `task_idx` to each task:
     task_lst, dep_idx = order_tasks(task_lst)
 
-    # Validate and normalise locally defined inputs:
-    task_lst = init_local_inputs(task_lst, dep_idx, is_from_file, check_integrity)
-
-    # Find element indices that determine the elements from which task inputs are drawn:
-    element_idx = get_element_idx(task_lst, dep_idx)
+    validate_inputs(task_lst)
 
     task_objs = []
-    for task_idx, task_dict in enumerate(task_lst):
+    task_elements = []
+    for task_dict in task_lst:
 
         if is_from_file:
-            task_id = task_dict.pop('id')
-            elements = task_dict.pop('elements')
-        else:
-            task_id = None
-            num_elements = element_idx[task_idx]['num_elements']
-            elements = [{'element_idx': elem_idx} for elem_idx in range(num_elements)]
+            task_elements.append(task_dict.pop('elements'))
 
+        task_id = task_dict.pop('id') if is_from_file else None
         task = Task(workflow=workflow, **task_dict)
-        task.init_elements(elements)
 
         if is_from_file:
             task.id = task_id
@@ -1234,4 +1571,4 @@ def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
 
         task_objs.append(task)
 
-    return task_objs, element_idx
+    return task_objs, task_elements, dep_idx

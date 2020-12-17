@@ -45,6 +45,13 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
         profile_str = handle.read()
 
     profile = {'file': profile_str, 'parsed': copy.deepcopy(workflow_dict)}
+
+    iterate_run_opts = {
+        **Config.get('default_sticky_iterate_run_options'),
+        **Config.get('default_iterate_run_options'),
+    }
+    workflow_dict.update({'iterate_run_options': iterate_run_opts})
+
     workflow = Workflow(**workflow_dict, stage_directory=directory, profile=profile)
     workflow.set_ids()
 
@@ -101,11 +108,13 @@ def load_workflow(directory, full_path=False):
     return workflow
 
 
-def prepare_task(task_idx, directory, is_array=False):
-    """Prepare a task for execution by setting inputs and running input maps."""
+def prepare_task(task_idx, iteration_idx, directory, is_array=False):
+    """Prepare a task (iteration) for execution by setting inputs and running input
+    maps."""
+
     load_extensions()
     workflow = load_workflow(directory)
-    workflow.prepare_task(task_idx, is_array=is_array)
+    workflow.prepare_task(task_idx, iteration_idx, is_array=is_array)
 
 
 def prepare_task_element(task_idx, element_idx, directory, is_array=False):
@@ -115,11 +124,11 @@ def prepare_task_element(task_idx, element_idx, directory, is_array=False):
     workflow.prepare_task_element(task_idx, element_idx, is_array=is_array)
 
 
-def process_task(task_idx, directory, is_array=False):
-    """Process a completed task by running the output map."""
+def process_task(task_idx, iteration_idx, directory, is_array=False):
+    """Process a completed task (iteration) by running the output map."""
     load_extensions()
     workflow = load_workflow(directory)
-    workflow.process_task(task_idx, is_array=is_array)
+    workflow.process_task(task_idx, iteration_idx, is_array=is_array)
 
 
 def process_task_element(task_idx, element_idx, directory, is_array=False):
@@ -136,11 +145,11 @@ def run_python_task(task_idx, element_idx, directory):
     workflow.run_python_task(task_idx, element_idx)
 
 
-def prepare_sources(task_idx, directory):
+def prepare_sources(task_idx, iteration_idx, directory):
     """Prepare source files."""
     load_extensions()
     workflow = load_workflow(directory)
-    workflow.prepare_sources(task_idx)
+    workflow.prepare_sources(task_idx, iteration_idx)
 
 
 def append_schema_source(schema_source_path):
@@ -165,3 +174,21 @@ def kill(directory):
 def cloud_connect(provider):
     Config.set_config()
     hpcflow_cloud_connect(provider, config_dir=Config.get('hpcflow_config_dir'))
+
+
+def write_element_directories(iteration_idx, directory):
+    'Generate element directories for a given iteration.'
+    load_extensions()
+    workflow = load_workflow(directory)
+    if workflow.iterate:
+        num_iters = workflow.iterate['num_iterations']
+    else:
+        num_iters = workflow.num_iterations
+    if iteration_idx < num_iters:
+        workflow.write_element_directories(iteration_idx)
+        workflow.prepare_iteration(iteration_idx)
+
+
+def get_task_schemas():
+    Config.set_config()
+    return Config.get('task_schemas')
