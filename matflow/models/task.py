@@ -842,3 +842,35 @@ class Task(object):
     def HDF5_path(self):
         """Get the HDF5 path to this task."""
         return self.workflow.HDF5_path + f'/\'tasks\'/data/data_{self.task_idx}'
+
+    def get_elements_from_iteration(self, iteration_idx):
+        """Get a list of Element objects corresponding to a given iteration index.
+
+        Parameters
+        ----------
+        iteration_idx : int
+
+        Returns
+        -------
+        list of Element
+
+        """
+
+        elems_idx = self.workflow.elements_idx[self.task_idx]
+        all_elems_iter_idx = elems_idx['iteration_idx']
+        max_iter_idx = max(all_elems_iter_idx)
+
+        iteration_idx_original = iteration_idx
+
+        if iteration_idx < 0:
+            iteration_idx += (max_iter_idx + 1)
+
+        if iteration_idx < 0 or iteration_idx > max_iter_idx:
+            msg = (f'Maximum iteration index of task "{self.name}" is {max_iter_idx} but '
+                   f'specified iteration_idx was {iteration_idx_original}.')
+            raise ValueError(msg)
+
+        elems = [i for i in self.elements
+                 if all_elems_iter_idx[i.element_idx] == iteration_idx]
+
+        return elems
