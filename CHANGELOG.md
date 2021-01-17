@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.14] - 2021.01.17
+
+### Added
+
+- Add method `Task.get_elements_from_iteration(iteration_idx)`.
+
 ## [0.2.13] - 2020.12.17
 
 ### Fixed 
