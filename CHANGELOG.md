@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.15] - 2021.01.18
+
+### Changed
+
+- Change an Exception to a warning in `Workflow.get_element_data` to allow manually deleting element data without corrupting.
+
 ## [0.2.14] - 2021.01.17
 
 ### Added
