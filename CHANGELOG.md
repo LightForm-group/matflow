@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.15] - xxxx.xx.xx
+
+### Fixed
+
+- Bump hpcflow to v0.1.13 to fix #80.
+
 ## [0.2.14] - 2021.01.17
 
 ### Added
