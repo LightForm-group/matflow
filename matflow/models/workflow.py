@@ -438,8 +438,8 @@ class Workflow(object):
             out = []
             for i in idx:
                 if i > (num_dat - 1):
-                    raise ValueError(f'Element data has {num_dat} member(s), but idx={i} '
-                                     f'requested.')
+                    warn(f'Element data has {num_dat} member(s), but idx={i} '
+                         f'requested. Perhaps some element data has been deleted.')
                 dat_path = path + f'/{idx_map[i]}'
                 out.append(hickle.load(handle, path=dat_path))
 

@@ -1,10 +1,16 @@
 # Change Log
 
-## [0.2.15] - xxxx.xx.xx
+## [0.2.16] - xxxx.xx.xx
 
 ### Fixed
 
 - Bump hpcflow to v0.1.13 to fix #80.
+
+## [0.2.15] - 2021.01.18
+
+### Changed
+
+- Change an Exception to a warning in `Workflow.get_element_data` to allow manually deleting element data without corrupting.
 
 ## [0.2.14] - 2021.01.17
 
