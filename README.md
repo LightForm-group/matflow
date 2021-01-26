@@ -11,14 +11,14 @@ See [this repository](https://github.com/LightForm-group/UoM-CSF-matflow) for in
 MatFlow uses extension packages to interact with arbitrary software. Here is a list of current MatFlow extensions.
 
 ### Released/in-progress extensions
-| Software | Description | Status |
-| ------ | ------------- | ------- |
-| [DAMASK](https://damask.mpie.de/) | Düsseldorf Advanced Material Simulation Kit (crystal plasticity) | [Released](https://github.com/LightForm-group/matflow-damask) |
-| [MTEX](https://mtex-toolbox.github.io/) | Matlab toolbox for analyzing and modeling crystallographic textures | [Released](https://github.com/LightForm-group/matflow-mtex) |
-| [formable](https://github.com/LightForm-group/formable) | Formability analyses in Python | [Released](https://github.com/LightForm-group/matflow-formable) |
-| [DefDAP](https://github.com/MechMicroMan/DefDAP) | A python library for correlating EBSD and HRDIC data. | [Released](https://github.com/LightForm-group/matflow-defdap) |
-| [Abaqus](https://www.3ds.com/products-services/simulia/products/abaqus/) | Finite element analysis | In-progress |
-| [Neper](http://www.neper.info) | Polycrystal generation and meshing | [Released/In-progress](https://github.com/LightForm-group/matflow-neper) |
+| Software | Description | Status | Version |
+| ------ | ------------- | ------- | ------- |
+| [DAMASK](https://damask.mpie.de/) | Düsseldorf Advanced Material Simulation Kit (crystal plasticity) | [Released](https://github.com/LightForm-group/matflow-damask) | [![PyPI version](https://img.shields.io/pypi/v/matflow-damask)](https://pypi.org/project/matflow-damask) |
+| [MTEX](https://mtex-toolbox.github.io/) | Matlab toolbox for analyzing and modeling crystallographic textures | [Released](https://github.com/LightForm-group/matflow-mtex) | [![PyPI version](https://img.shields.io/pypi/v/matflow-mtex)](https://pypi.org/project/matflow-mtex) |
+| [formable](https://github.com/LightForm-group/formable) | Formability analyses in Python | [Released](https://github.com/LightForm-group/matflow-formable) | [![PyPI version](https://img.shields.io/pypi/v/matflow-formable)](https://pypi.org/project/matflow-formable) |
+| [DefDAP](https://github.com/MechMicroMan/DefDAP) | A python library for correlating EBSD and HRDIC data. | [Released](https://github.com/LightForm-group/matflow-defdap) | [![PyPI version](https://img.shields.io/pypi/v/matflow-defdap)](https://pypi.org/project/matflow-defdap) |
+| [Abaqus](https://www.3ds.com/products-services/simulia/products/abaqus/) | Finite element analysis | In-progress | [![PyPI version](https://img.shields.io/pypi/v/matflow-abaqus)](https://pypi.org/project/matflow-abaqus) |
+| [Neper](http://www.neper.info) | Polycrystal generation and meshing | [Released/In-progress](https://github.com/LightForm-group/matflow-neper) | [![PyPI version](https://img.shields.io/pypi/v/matflow-neper)](https://pypi.org/project/matflow-neper) |
 
 
 ### Example inputs/outputs 
