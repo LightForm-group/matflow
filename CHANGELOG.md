@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.16] - 2021.02.05
+
+### Fixed
+
+- Bump hpcflow to v0.1.13 to fix #80 and then to v0.1.14 to fix a database locking issue and a bug with choosing the correct working directories.
+
 ## [0.2.15] - 2021.01.18
 
 ### Changed
