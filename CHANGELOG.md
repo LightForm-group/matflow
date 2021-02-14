@@ -6,6 +6,10 @@
 
 - Fix issue [#82](https://github.com/LightForm-group/matflow/issues/82) where the default group is not defined in the `Workflow.element_idx` for tasks where no local inputs are defined.
 
+### Added
+
+- Add support for flexible positioning of parameter-modifying tasks ([#81](https://github.com/LightForm-group/matflow/issues/81))
+
 ## [0.2.16] - 2021.02.05
 
 ### Fixed
