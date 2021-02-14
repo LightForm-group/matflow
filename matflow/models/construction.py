@@ -10,8 +10,6 @@ is easier. The classes themselves mainly serve to provide useful properties.
 
 """
 
-from sys import exit
-
 import copy
 from warnings import warn
 from pprint import pprint
@@ -1113,9 +1111,6 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
     element_idx = []
     for idx, downstream_task in enumerate(task_lst):
 
-        print(
-            f'get_element_idx: downstream_task: {downstream_task["name"]}\n--------------------------------------------')
-
         if iterate and idx in iterate['task_pathway']:
             num_iterations = iterate['num_iterations']
 
@@ -1124,11 +1119,6 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
         # local inputs dict:
         loc_in = downstream_task['local_inputs']
         schema = downstream_task['schema']
-
-        print('local_in:')
-        pprint(loc_in)
-        # default group defined in loc_in is not used in element idx unless there are locally defined inputs...
-        # this is a bug?
 
         if not upstream_tasks:
             # This task does not depend on any other tasks.
@@ -1354,9 +1344,6 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
                 'groups': all_groups,
                 'iteration_idx': [0] * existing_size,
             }
-
-        print('adding element idx i: ')
-        pprint(elem_idx_i)
 
         element_idx.append(elem_idx_i)
 
