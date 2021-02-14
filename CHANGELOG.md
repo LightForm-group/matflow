@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.17] - 2021.xx.xx
+
+### Fixed
+
+- Fix issue [#82](https://github.com/LightForm-group/matflow/issues/82) where the default group is not defined in the `Workflow.element_idx` for tasks where no local inputs are defined.
+
 ## [0.2.16] - 2021.02.05
 
 ### Fixed
