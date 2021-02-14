@@ -1326,11 +1326,6 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
                                 }
                             })
 
-                        for group_name, group in loc_in['groups'].items():
-                            print(f'\t local group_name: {group_name}; group: {group}')
-                            group = resolve_group(group, loc_in['inputs'], repeats_idx)
-                            groups.update({group_name: group})
-
                     else:
                         existing_size = incoming_size
                         repeats_idx = [None] * existing_size
@@ -1343,6 +1338,12 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
                                 'group': [in_group['group_name']] * len(element_idx_i),
                             }
                         })
+
+                    for group_name, group in loc_in['groups'].items():
+                        group = resolve_group(group, loc_in['inputs'], repeats_idx)
+                        groups.update({group_name: group})
+
+                    if not loc_in['inputs']:
                         continue
 
                 if in_group['nest']:
