@@ -1150,7 +1150,6 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate):
         else:
             # This task depends on other tasks.
             input_groups = get_input_groups(idx, task_lst, dep_idx, element_idx)
-
             is_nesting_mixed = len(set([i['nest'] for i in input_groups.values()])) > 1
 
             for input_alias, group_info in input_groups.items():
