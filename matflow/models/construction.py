@@ -1043,6 +1043,7 @@ def get_input_groups(task_idx, task_lst, dependency_idx, element_idx):
         input_alias = non_local_input_i['alias']
         input_name = non_local_input_i['name']
         group_name = task['schema'].get_input_by_alias(input_alias)['group']
+
         task_param_deps = dependency_idx[task_idx]['parameter_dependencies']
         input_task_idx = task_param_deps[input_alias]['from_task']
         input_task = task_lst[input_task_idx]
