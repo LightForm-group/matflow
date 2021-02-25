@@ -2,7 +2,8 @@
 
 # MatFlow
 
-MatFlow is a computational workflow management code for materials science.
+MMatflow is a framework for running reproducible workflows in materials science developed in the EPSRC programme grant [LightForm](http://lightform.org.uk), a research programme on light alloy formability. It is a python program that interacts with software (open-source and proprietary) used in materials science via extensions (see supported extensions below). It is particularly suited for hybrid workflows
+(involving experimental data and computational work), like for example HPC model calibration. Outputs,together with details of the worflow are automatically stored in an open source file format for post-processing, which Matflow can automatically upload to data repositories like [Zenodo](https://zenodo.org/).
 
 See [this repository](https://github.com/LightForm-group/UoM-CSF-matflow) for information regarding a MatFlow installation.
 
