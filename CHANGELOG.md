@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.18] - 2021.xx.xx
+
+### Fixed
+
+- Fix misleading error message when a task parameter specified as a file path does not actually exist as a file.
+
 ## [0.2.17] - 2021.02.15
 
 ### Fixed

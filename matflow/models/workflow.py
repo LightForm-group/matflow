@@ -542,13 +542,15 @@ class Workflow(object):
                 for elem_idx_i in iter_elem_idx:
 
                     file_path = local_ins[inputs_idx['local_input_idx'][elem_idx_i]]
+
+                    # If `file_path` is absolute, joinpath will simply return `file_path`:
                     file_path_full = self.stage_directory.joinpath(file_path)
                     elem_path = self.get_element_path(task_idx, elem_idx_i)
                     dst_path = elem_path.joinpath(file_path_full.name)
 
                     if not file_path_full.is_file():
-                        msg = (f'Input "{input_name}" with relative path "{file_path}" is'
-                               f'not a file relative to {self.stage_directory}.')
+                        msg = (f'Input file "{input_name}" with path "{file_path_full}" '
+                               f'does not exist!')
                         raise ValueError(msg)
 
                     shutil.copyfile(file_path_full, dst_path)
