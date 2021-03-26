@@ -372,7 +372,10 @@ def get_input_dependency(task_info_lst, input_dict, input_task_idx):
         ):
             # A dependency may exist! The parameter as an output in an upstream task takes
             #  precedence over the parameter as an input in that same task:
-            if param_name in task_info['schema'].outputs:
+            if (
+                param_name in task_info['schema'].outputs and
+                task_info['name'] not in input_dict['ignore_dependency_from']
+            ):
                 input_dependency.append({
                     'from_task': task_idx,
                     'dependency_type': 'output',
@@ -380,7 +383,8 @@ def get_input_dependency(task_info_lst, input_dict, input_task_idx):
                 })
             elif (
                 param_name in task_info['schema'].input_names and
-                param_name in task_info['local_inputs']['inputs']
+                param_name in task_info['local_inputs']['inputs'] and
+                task_info['name'] not in input_dict['ignore_dependency_from']
             ):
                 input_dependency.append({
                     'from_task': task_idx,

@@ -7,6 +7,10 @@
 - Fix misleading error message when a task parameter specified as a file path does not actually exist as a file.
 - Fix bug where if all possible dependency pathways are circularly dependent, this is not caught by MatFlow.
 
+### Added
+
+- Add new parameter key `ignore_dependency_from`, which is a list of task names. This allows us to exclude tasks when considering the dependencies of this parameter. Fix [#89](https://github.com/LightForm-group/matflow/issues/89).
+
 ## [0.2.17] - 2021.02.15
 
 ### Fixed
