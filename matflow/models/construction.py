@@ -446,7 +446,6 @@ def get_dependency_idx(task_info_lst):
         }
 
         # Find which tasks this task depends on:
-        task_dep_idx = []
         for input_dict in task_info['schema'].inputs:
 
             input_name = input_dict['name']
@@ -516,14 +515,20 @@ def find_good_task_dependency_position(dep_idx, task_dependencies):
 
 def singularise_input_dependencies(dep_idx_multi):
 
-    # Enumerate all different "pathways" through the multiple parameter dependencies:
+    # Each param_keys item is a tuple: (task index, parameter name):
     param_keys = []
+
+    # Each param_vals list item is a range over the number of possible dependencies for a
+    # given parameter:
     param_vals = []
+
+    # Enumerate all different "pathways" through the multiple parameter dependencies:
     for idx, dep_idx in enumerate(dep_idx_multi):
         for param_name, param_deps in dep_idx['parameter_dependencies'].items():
             param_keys.append((idx, param_name))
             param_vals.append(range(len(param_deps)))
 
+    # List of possible complete pathways through the various dependency options:
     param_val_pathways = list(product(*param_vals))
 
     trial_dep_idx = []
@@ -546,6 +551,12 @@ def singularise_input_dependencies(dep_idx_multi):
             trial_dep_idx.append(dep_idx_pathway_i)
         except IncompatibleWorkflow:
             continue
+
+    if not trial_dep_idx:
+        # All possible pathways are circular
+        msg = (f'Workflow tasks (all possible dependency pathways) are circularly '
+               f'dependent! `dep_idx_multi` is: {dep_idx_multi}.')
+        raise IncompatibleWorkflow(msg)
 
     # If multiple pathways, keep those that do not require reordering, if any exist:
     trial_dep_idx_srt = []
