@@ -10,6 +10,21 @@ from matflow.utils import zeropad
 
 class Parameters(object):
 
+    """
+    Attributes
+    ----------
+    _element : Element
+    _parameters : dict
+        Dict mapping the safe names of the parameters to their data indices within the
+        HDF5 element_idx group.
+    _name_map : dict
+        Dict mapping the non-safe names of the parameters to their safe names. A safe name
+        refers to a name that can be used as a variable name within Python. For example,
+        spaces and dots are removed from non-safe names to become safe names. The reason
+        for doing this is to allow the use of dot-notation to access element data/files.
+
+    """
+
     __PY_RESERVED = [
         'and',
         'as',
@@ -52,13 +67,15 @@ class Parameters(object):
         self._element = element
         self._parameters, self._name_map = self._normalise_params_dict(parameters)
 
-    def __getattr__(self, name):
-        if self._name_map[name] in self._parameters:
+    def __getattr__(self, safe_name):
+        if safe_name in self._parameters:
             wkflow = self._element.task.workflow
+            names_inv = {safe: non_safe for non_safe, safe in self._name_map.items()}
+            name = names_inv[safe_name]
             data_idx = self.get_data_idx(name)
             return wkflow.get_element_data(data_idx)
         else:
-            msg = f'{self.__class__.__name__!r} object has no attribute {name!r}.'
+            msg = f'{self.__class__.__name__!r} object has no attribute {safe_name!r}.'
             raise AttributeError(msg)
 
     def __setattr__(self, name, value):
@@ -80,9 +97,9 @@ class Parameters(object):
         normed_data_idx = {}
         name_map = {}
         for name, v in (parameters or {}).items():
-            name_normed = self._normalise_param_name(name, normed_data_idx.keys())
-            normed_data_idx.update({name_normed: v})
-            name_map.update({name: name_normed})
+            safe_name = self._normalise_param_name(name, normed_data_idx.keys())
+            normed_data_idx.update({safe_name: v})
+            name_map.update({name: safe_name})
 
         return normed_data_idx, name_map
 
@@ -94,34 +111,39 @@ class Parameters(object):
     def _normalise_param_name(param_name, existing_names):
         """Transform a string so that it is a valid Python variable name."""
         param_name_old = param_name
-        param_name = param_name.replace('.', '_dot_').replace(' ', '_space_')
+        safe_name = param_name.replace('.', '_dot_').replace(' ', '_space_')
         if (
-            re.match(r'\d', param_name) or
-            param_name in dir(Parameters) or
-            param_name in Parameters.__PY_RESERVED or
-            param_name in existing_names
+            re.match(r'\d', safe_name) or
+            safe_name in dir(Parameters) or
+            safe_name in Parameters.__PY_RESERVED or
+            safe_name in existing_names
         ):
-            param_name = 'param_' + param_name
+            safe_name = 'param_' + safe_name
 
-        if re.search(r'[^a-zA-Z0-9_]', param_name) or not param_name:
+        if re.search(r'[^a-zA-Z0-9_]', safe_name) or not safe_name:
             raise ValueError(f'Invalid parameter name: "{param_name_old}".')
 
-        return param_name
+        return safe_name
 
     def as_dict(self):
-        return self.get_parameters(original_names=True)
+        return self.get_parameters(safe_names=False)
 
-    def get_parameters(self, original_names=False):
-        if original_names:
-            name_inv = {v: k for k, v in self._name_map.items()}
-            return {name_inv[k]: v for k, v in self._parameters.items()}
+    def get_parameters(self, safe_names=True):
+        if not safe_names:
+            names_inv = {safe: non_safe for non_safe, safe in self._name_map.items()}
+            return {names_inv[safe_name]: v for safe_name, v in self._parameters.items()}
         return self._parameters
 
-    def get(self, name):
+    def get(self, name, safe_name=False):
+        if not safe_name:
+            name = self._name_map[name]
         return getattr(self, name)
 
-    def get_all(self):
-        return {k: self.get(k) for k in self._name_map.keys()}
+    def get_all(self, safe_names=False):
+        return {
+            k: self.get(k, safe_names)
+            for k in (self._parameters if safe_names else self._name_map).keys()
+        }
 
     def get_element(self):
         """Not a property to reduce chance of attribute collisions."""
@@ -131,9 +153,10 @@ class Parameters(object):
         """Not a property to reduce chance of attribute collisions."""
         return self._name_map
 
-    def get_data_idx(self, name):
-        """Name is original name"""
-        out = self._parameters[self._name_map[name]]
+    def get_data_idx(self, name, safe_name=False):
+        if not safe_name:
+            name = self._name_map[name]
+        out = self._parameters[name]
         if isinstance(out, list):
             out = tuple(out)
         return out
@@ -143,7 +166,7 @@ class Parameters(object):
         if name in self._name_map:
             raise ValueError(f'Parameter "{name}" already exists.')
 
-        name_normed = self._normalise_param_name(name, self._parameters.keys())
+        safe_name = self._normalise_param_name(name, self._parameters.keys())
         loaded_path = self._element.task.workflow.loaded_path
 
         with h5py.File(loaded_path, 'r+') as handle:
@@ -171,7 +194,7 @@ class Parameters(object):
             for k, v in attributes.items():
                 handle[path].attrs[k] = v
 
-        self._name_map.update({name: name_normed})
-        self._parameters.update({name_normed: data_idx})
+        self._name_map.update({name: safe_name})
+        self._parameters.update({safe_name: data_idx})
 
         return data_idx

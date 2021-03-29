@@ -5,7 +5,8 @@
 ### Fixed
 
 - Fix misleading error message when a task parameter specified as a file path does not actually exist as a file.
-- Fix bug where if all possible dependency pathways are circularly dependent, this is not caught by MatFlow.
+- Fix bug where if all possible dependency pathways are circularly dependent, this is not caught by MatFlow. Fix [#88](https://github.com/LightForm-group/matflow/issues/88).
+- Fix issue with accessing parameter data with dot-notation via their "safe names". Fix [#87](https://github.com/LightForm-group/matflow/issues/87).
 
 ### Added
 

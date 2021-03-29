@@ -60,22 +60,28 @@ class Element(object):
 
         return out
 
-    def get_input_data_idx(self, input_name):
-        return self.inputs.get_data_idx(input_name)
+    def get_input_data_idx(self, input_name, safe_name=False):
+        return self.inputs.get_data_idx(input_name, safe_name)
 
-    def get_output_data_idx(self, output_name):
-        return self.outputs.get_data_idx(output_name)
+    def get_output_data_idx(self, output_name, safe_name=False):
+        return self.outputs.get_data_idx(output_name, safe_name)
 
-    def get_file_data_idx(self, file_name):
-        return self.files.get_data_idx(file_name)
+    def get_file_data_idx(self, file_name, safe_name=False):
+        return self.files.get_data_idx(file_name, safe_name)
 
-    def get_input(self, input_name):
+    def get_input(self, input_name, safe_name=False):
+        if not safe_name:
+            input_name = self.inputs.get_name_map()[input_name]
         return getattr(self.inputs, input_name)
 
-    def get_output(self, output_name):
+    def get_output(self, output_name, safe_name=False):
+        if not safe_name:
+            output_name = self.outputs.get_name_map()[output_name]
         return getattr(self.outputs, output_name)
 
-    def get_file(self, file_name):
+    def get_file(self, file_name, safe_name=False):
+        if not safe_name:
+            file_name = self.files.get_name_map()[file_name]
         return getattr(self.files, file_name)
 
     @property
