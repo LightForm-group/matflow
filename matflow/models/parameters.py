@@ -112,6 +112,7 @@ class Parameters(object):
         """Transform a string so that it is a valid Python variable name."""
         param_name_old = param_name
         safe_name = param_name.replace('.', '_dot_').replace(' ', '_space_')
+        safe_name = safe_name.replace('-', '_')
         if (
             re.match(r'\d', safe_name) or
             safe_name in dir(Parameters) or

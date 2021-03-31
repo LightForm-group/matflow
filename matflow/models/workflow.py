@@ -555,6 +555,13 @@ class Workflow(object):
 
                     shutil.copyfile(file_path_full, dst_path)
 
+                    if schema_input['file'] and schema_input['save']:
+                        # Save file as string in workflow:
+                        with file_path_full.open('r') as handle:
+                            file_dat = handle.read()
+                        element = task.elements[elem_idx_i]
+                        element.add_file(file_path_full.name, value=file_dat)
+
     def prepare_iteration(self, iteration_idx):
 
         for elems_idx, task in zip(self.elements_idx, self.tasks):
@@ -586,11 +593,6 @@ class Workflow(object):
 
     def write_directories(self):
         """Generate task and element directories for the first iteration."""
-
-        if self.path.exists():
-            raise ValueError('Directories for this workflow already exist.')
-
-        self.path.mkdir(exist_ok=False)
 
         for elems_idx, task in zip(self.elements_idx, self.tasks):
 
@@ -1137,6 +1139,11 @@ class Workflow(object):
 
         """
 
+        # Generate base directory
+        if self.path.exists():
+            raise ValueError('Directories for this workflow already exist.')
+        self.path.mkdir(exist_ok=False)
+
         path = Path(path or self.default_file_path)
         if path.exists():
             msg = f'Workflow cannot be saved to a path that already exists: "{path}".'
@@ -1230,9 +1237,6 @@ class Workflow(object):
                 )
 
         self.loaded_path = path
-
-        # Write command line argument files into element dirs:
-        self.prepare_iteration(iteration_idx=0)
 
     @classmethod
     def load_HDF5_file(cls, path=None, full_path=False, check_integrity=True):

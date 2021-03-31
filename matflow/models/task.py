@@ -221,6 +221,7 @@ class TaskSchema(object):
             'default',
             'include_all_iterations',  # inputs from all iterations sent to the input map?
             'ignore_dependency_from',  # exclude tasks from parameter dependency search
+            'save',  # for file-path inputs, should the file be saved in the HDF5 file?
         ]
         req_inp_keys = ['name']
         allowed_inp_keys = req_inp_keys + allowed_inp_specifiers
@@ -238,6 +239,7 @@ class TaskSchema(object):
                 'file': False,
                 'include_all_iterations': False,
                 'ignore_dependency_from': [],
+                'save': False,
             }
             inp = get_specifier_dict(inp, name_key='name', defaults=inp_defs)
 

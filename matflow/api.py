@@ -56,8 +56,9 @@ def make_workflow(profile_path, directory=None, write_dirs=True):
     workflow.set_ids()
 
     if write_dirs:
-        workflow.write_directories()
         workflow.write_HDF5_file()
+        workflow.write_directories()
+        workflow.prepare_iteration(iteration_idx=0)
         workflow.dump_hpcflow_workflow_file('hpcflow_workflow.yml')
 
         # Copy profile to workflow directory:
