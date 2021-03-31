@@ -594,7 +594,7 @@ class Workflow(object):
     def write_directories(self):
         """Generate task and element directories for the first iteration."""
 
-        for elems_idx, task in zip(self.elements_idx, self.tasks):
+        for task in self.tasks:
 
             # Generate task directory:
             self.get_task_path(task.task_idx).mkdir()
