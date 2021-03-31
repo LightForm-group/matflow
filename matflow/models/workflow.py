@@ -462,7 +462,10 @@ class Workflow(object):
             raise ValueError(msg)
         task = self.tasks[task_idx]
         task_idx_fmt = self.get_task_idx_padded(task_idx, ret_zero_based=False)
-        task_path = self.path.joinpath(f'task_{task_idx_fmt}_{task.name}')
+        dir_name = f'task_{task_idx_fmt}_{task.name}'
+        if task.context != '':
+            dir_name += f'_{task.context}'
+        task_path = self.path.joinpath(dir_name)
         return task_path
 
     @requires_path_exists

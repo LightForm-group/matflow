@@ -583,8 +583,11 @@ class Task(object):
             f'name={self.name!r}, '
             f'method={self.method!r}, '
             f'software={self.software!r}'
-            f')'
         )
+        if self.context != '':
+            out += f', context={self.context!r}'
+        out += ')'
+
         return out
 
     def __str__(self):
