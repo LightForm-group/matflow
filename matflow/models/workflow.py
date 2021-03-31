@@ -248,7 +248,7 @@ class Workflow(object):
         if not iterate_dict:
             return iterate_dict
 
-        elif self.num_iterations is not 1:
+        elif self.num_iterations != 1:
             msg = "Specify either `iterate` (dict) or `num_iterations` (int)."
             raise ValueError(msg)
 
