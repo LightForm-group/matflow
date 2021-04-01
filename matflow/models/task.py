@@ -15,6 +15,8 @@ from matflow.utils import dump_to_yaml_string, get_specifier_dict
 from matflow.models.software import SoftwareInstance
 from matflow.models.element import Element
 
+DEFAULT_TASK_CONTEXT = ''
+
 
 class TaskSchema(object):
     """Class to represent the schema of a particular method/implementation of a task."""
@@ -584,7 +586,7 @@ class Task(object):
             f'method={self.method!r}, '
             f'software={self.software!r}'
         )
-        if self.context != '':
+        if self.context != DEFAULT_TASK_CONTEXT:
             out += f', context={self.context!r}'
         out += ')'
 

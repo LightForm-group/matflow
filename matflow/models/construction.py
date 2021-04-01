@@ -35,7 +35,7 @@ from matflow.errors import (
 )
 from matflow.utils import (tile, repeat, arange, extend_index_list, flatten_list,
                            to_sub_list, get_specifier_dict, move_element_forward)
-from matflow.models.task import Task, TaskSchema
+from matflow.models.task import Task, TaskSchema, TaskTuple, DEFAULT_TASK_CONTEXT
 from matflow.models.software import SoftwareInstance
 
 
@@ -367,7 +367,7 @@ def get_input_dependency(task_info_lst, input_dict, input_task_idx):
             param_context == upstream_context or (
                 (upstream_context == downstream_task_context) and (param_context is None)
             ) or (
-                upstream_context == ''
+                upstream_context == DEFAULT_TASK_CONTEXT
             )
         ):
             # A dependency may exist! The parameter as an output in an upstream task takes
@@ -432,7 +432,7 @@ def get_dependency_idx(task_info_lst):
               - The upstream and downstream task share the same context, and,
                 for any downstream task input parameter, the parameter context
                 is `None`.
-              - The upstream task context is default (i.e. '').
+              - The upstream task context is default (i.e. DEFAULT_TASK_CONTEXT).
 
     """
 
@@ -856,7 +856,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             raise TaskError(msg)
 
         elif ('context' not in task) and ('contexts' not in task):
-            task['contexts'] = ''
+            task['contexts'] = DEFAULT_TASK_CONTEXT
 
         elif 'context' in task:
             task['contexts'] = task.pop('context')
