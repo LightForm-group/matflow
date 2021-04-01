@@ -454,6 +454,7 @@ def get_dependency_idx(task_info_lst):
 
             input_name = input_dict['name']
             input_alias = input_dict['alias']
+            input_context = input_dict['context']
             is_locally_defined = input_name in task_info['local_inputs']['inputs']
             default_defined = input_name in task_info['local_inputs']['default_inputs']
             input_dependency = get_input_dependency(task_info_lst, input_dict, task_idx)
@@ -472,13 +473,16 @@ def get_dependency_idx(task_info_lst):
                 )
 
             else:
-                msg = (f'Task input "{input_name}" for task "{task_name}" with task '
-                       f'context "{task_context}" appears to be missing. A value must be '
-                       f'specified locally, or a default value must be provided in the '
-                       f'schema, or an additional task should be added to the workflow '
-                       f'that generates the parameter. If such a task already exists, '
-                       f'try reordering the tasks in the order in which would you expect '
-                       f'them to run.')
+                inp_cont_fmt = f' with context "{input_context}"' if input_context else ''
+                task_cont_fmt = f' with context "{task_context}"' if task_context else ''
+                msg = (
+                    f'Task input "{input_name}"{inp_cont_fmt} for task "{task_name}"'
+                    f'{task_cont_fmt} appears to be missing. A value must be specified '
+                    f'locally, or a default value must be provided in the schema, or an '
+                    f'additional task should be added to the workflow that generates the '
+                    f'parameter. If such a task already exists, try reordering the tasks '
+                    f'in the order in which would you expect them to run.'
+                )
                 raise TaskParameterError(msg)
 
             if add_input_dep:
