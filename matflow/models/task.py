@@ -614,7 +614,7 @@ class Task(object):
 
         self._workflow = workflow
         self._name = name
-        self._context = Task.make_safe_context(context)
+        self._context = context
         self._method = method
         self._software_instance = software_instance
         self._prepare_software_instance = prepare_software_instance

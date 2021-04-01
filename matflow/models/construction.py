@@ -930,6 +930,9 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             del task_copy['contexts']
             task_list.append(task_copy)
 
+    for task in task_list:
+        task['context'] = Task.make_safe_context(task['context'])
+
     return task_list
 
 
