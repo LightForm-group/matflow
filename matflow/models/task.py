@@ -6,6 +6,8 @@ Module containing the Task and TaskSchema classes.
 
 import copy
 import enum
+import keyword
+import re
 import secrets
 
 from matflow.models import CommandGroup
@@ -26,7 +28,7 @@ class TaskSchema(object):
                  archive_excludes=None):
         """Instantiate a TaskSchema."""
 
-        self.name = name
+        self.name = TaskSchema._make_safe_name(name, 'name')
         self.outputs = outputs
         self.method = method
         self.implementation = implementation
@@ -61,6 +63,21 @@ class TaskSchema(object):
     def as_dict(self):
         return to_hicklable(self)
 
+    @staticmethod
+    def _make_safe_name(name, name_type):
+        """Transform or reject name so that it is a valid Python variable name."""
+
+        name_old = name
+        safe_name = str(name).replace('.', '_dot_').replace(' ', '_').replace('-', '_')
+        if (
+            re.match(r'\d', safe_name) or           # starts with a digit
+            keyword.iskeyword(safe_name) or         # is a Python keyword
+            re.search(r'[^a-zA-Z0-9_]', safe_name)  # is not latin alphanumeric
+        ):
+            raise ValueError(f'Invalid task {name_type}: "{name_old}".')
+
+        return safe_name
+
     @classmethod
     def load_from_hierarchy(cls, schema_lst):
 
@@ -86,7 +103,9 @@ class TaskSchema(object):
         all_schema_dicts = {}
         for schema in schema_lst:
 
-            name = schema.get('name', 'MISSING NAME')
+            name = schema.get('name')
+            if not name:
+                raise TaskSchemaError(f'Task schema has no name!')
 
             bad_keys = set(schema.keys()) - set(ALLOWED)
             miss_keys = set(REQ) - set(schema.keys())
@@ -502,6 +521,46 @@ class TaskStatus(enum.Enum):
     complete = 3
 
 
+class TaskTuple(object):
+    """A tuple-like container for the task list, with __getattr__ for dot-notation access
+    by task unique-name.
+
+    """
+
+    def __init__(self, tasks):
+        self._task_tuple = tuple(tasks)
+
+    def __len__(self):
+        return len(self._task_tuple)
+
+    def __repr__(self):
+        return repr(self._task_tuple)
+
+    def __str__(self):
+        return str(self._task_tuple)
+
+    def __getitem__(self, key):
+        return self._task_tuple.__getitem__(key)
+
+    def __iter__(self):
+        return self._task_tuple.__iter__()
+
+    def __contains__(self, item):
+        return self._task_tuple.__contains__(item)
+
+    def __eq__(self, other):
+        return self._task_tuple == other
+
+    def __getattr__(self, task_unique_name):
+        for task in self._task_tuple:
+            if task.unique_name == task_unique_name:
+                return task
+        raise AttributeError
+
+    def __dir__(self):
+        return super().__dir__() + [i.unique_name for i in self._task_tuple]
+
+
 class Task(object):
     """
 
@@ -566,7 +625,6 @@ class Task(object):
         self._process_run_options = process_run_options or {}
         self._status = status or TaskStatus.pending
         self._stats = stats
-        self._context = context
         self._local_inputs = local_inputs
         self._output_map_options = output_map_options
         self._schema = schema
