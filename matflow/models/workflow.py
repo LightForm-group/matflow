@@ -33,7 +33,7 @@ from matflow.hicklable import to_hicklable
 from matflow.models.command import DEFAULT_FORMATTERS
 from matflow.models.construction import init_tasks, get_element_idx
 from matflow.models.software import SoftwareInstance
-from matflow.models.task import TaskStatus
+from matflow.models.task import TaskStatus, DEFAULT_TASK_CONTEXT
 from matflow.models.parameters import Parameters
 from matflow.utils import (
     parse_times,
@@ -170,6 +170,8 @@ class Workflow(object):
                 f'  {i.name}\n'
                 f'    Method: {i.method}\n'
                 f'    Software: {i.software}\n'
+            ) + (
+                f'    Context: {i.context}\n' if i.context != DEFAULT_TASK_CONTEXT else ''
             )
             for i in self.tasks
         ])
