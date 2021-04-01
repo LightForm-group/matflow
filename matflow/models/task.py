@@ -254,6 +254,8 @@ class TaskSchema(object):
                 # Add default alias:
                 inp['alias'] = inp['name']
 
+            inp['context'] = Task.make_safe_context(inp['context']) or None
+
             unknown_inp_keys = list(set(inp.keys()) - set(allowed_inp_keys))
             if unknown_inp_keys:
                 unknown_inp_keys_fmt = ', '.join([f'"{i}"' for i in unknown_inp_keys])
@@ -543,7 +545,7 @@ class Task(object):
     def __init__(self, workflow, name, method, software_instance,
                  prepare_software_instance, process_software_instance, task_idx,
                  run_options=None, prepare_run_options=None, process_run_options=None,
-                 status=None, stats=False, context='', local_inputs=None, schema=None,
+                 status=None, stats=False, context=None, local_inputs=None, schema=None,
                  resource_usage=None, base=None, sequences=None, repeats=None,
                  groups=None, nest=None, merge_priority=None, output_map_options=None,
                  command_pathway_idx=None):
@@ -553,6 +555,7 @@ class Task(object):
 
         self._workflow = workflow
         self._name = name
+        self._context = Task.make_safe_context(context)
         self._method = method
         self._software_instance = software_instance
         self._prepare_software_instance = prepare_software_instance
@@ -626,6 +629,19 @@ class Task(object):
 
     def generate_id(self):
         self.id = secrets.token_hex(10)
+
+    @staticmethod
+    def make_safe_context(context):
+        """Transform or reject context so that it is valid."""
+
+        context = context or DEFAULT_TASK_CONTEXT
+        context_old = context
+        safe_context = str(context).replace('.', '_dot_').replace(' ', '_')
+        safe_context = safe_context.replace('-', '_')
+        if re.search(r'[^a-zA-Z0-9_]', safe_context):  # is not latin alphanumeric
+            raise ValueError(f'Invalid task context: "{context_old}".')
+
+        return safe_context
 
     @property
     def workflow(self):
