@@ -647,6 +647,10 @@ class Task(object):
         return self._name
 
     @property
+    def unique_name(self):
+        return self.name + ('_' + self.context if self.context != DEFAULT_TASK_CONTEXT else '')
+
+    @property
     def name_friendly(self):
         """Capitalise and remove underscores"""
         name = '{}{}'.format(self.name[0].upper(), self.name[1:]).replace('_', ' ')
