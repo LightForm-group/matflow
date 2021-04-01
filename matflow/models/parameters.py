@@ -1,6 +1,7 @@
 """matflow.models.parameters.py"""
 
 import re
+import keyword
 
 import h5py
 import hickle
@@ -24,43 +25,6 @@ class Parameters(object):
         for doing this is to allow the use of dot-notation to access element data/files.
 
     """
-
-    __PY_RESERVED = [
-        'and',
-        'as',
-        'assert',
-        'break',
-        'class',
-        'continue',
-        'def',
-        'del',
-        'elif',
-        'else',
-        'except',
-        'False',
-        'finally',
-        'for',
-        'from',
-        'global',
-        'if',
-        'import',
-        'in',
-        'is',
-        'lambda',
-        'locals',
-        'None',
-        'nonlocal'
-        'not',
-        'or',
-        'pass',
-        'raise',
-        'return',
-        'True',
-        'try',
-        'while',
-        'with',
-        'yield',
-    ]
 
     def __init__(self, element, parameters):
 
@@ -111,12 +75,11 @@ class Parameters(object):
     def _normalise_param_name(param_name, existing_names):
         """Transform a string so that it is a valid Python variable name."""
         param_name_old = param_name
-        safe_name = param_name.replace('.', '_dot_').replace(' ', '_space_')
-        safe_name = safe_name.replace('-', '_')
+        safe_name = param_name.replace('.', '_dot_').replace(' ', '_').replace('-', '_')
         if (
             re.match(r'\d', safe_name) or
             safe_name in dir(Parameters) or
-            safe_name in Parameters.__PY_RESERVED or
+            keyword.iskeyword(safe_name) or
             safe_name in existing_names
         ):
             safe_name = 'param_' + safe_name
