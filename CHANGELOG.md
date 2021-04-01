@@ -12,6 +12,8 @@
 
 - Add new parameter key `ignore_dependency_from`, which is a list of task names. This allows us to exclude tasks when considering the dependencies of this parameter. Fix [#89](https://github.com/LightForm-group/matflow/issues/89).
 - Allow embedding file-path inputs (inputs that are text files) into the HDF5 file. Fix [#86](https://github.com/LightForm-group/matflow/issues/86).
+- Add `Task.unique_name` property which adds on the non-trivial `Task.context` to `Task.name`.
+- Tasks can be accessed from the task list via dot-notation. Fix [#90](https://github.com/LightForm-group/matflow/issues/90).
 
 ### Changed
 

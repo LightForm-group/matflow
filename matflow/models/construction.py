@@ -1634,4 +1634,6 @@ def init_tasks(workflow, task_lst, is_from_file, check_integrity=True):
 
         task_objs.append(task)
 
-    return task_objs, task_elements, dep_idx
+    task_tuple = TaskTuple(task_objs)
+
+    return task_tuple, task_elements, dep_idx
