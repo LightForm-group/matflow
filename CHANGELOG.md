@@ -14,6 +14,7 @@
 - Allow embedding file-path inputs (inputs that are text files) into the HDF5 file. Fix [#86](https://github.com/LightForm-group/matflow/issues/86).
 - Add `Task.unique_name` property which adds on the non-trivial `Task.context` to `Task.name`.
 - Tasks can be accessed from the task list via dot-notation. Fix [#90](https://github.com/LightForm-group/matflow/issues/90).
+- Add `Task.elements_idx` property to retrieve to correct `elements_idx` dict for that task.
 
 ### Changed
 
