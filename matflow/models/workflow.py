@@ -435,7 +435,7 @@ class Workflow(object):
 
             # Element data are zero padded and include name of parameter for convenience,
             # so map their integer index to the actual group names:
-            idx_map = {int(re.search('(\d+)', i).group()): i for i in handle[path]}
+            idx_map = {int(re.search(r'(\d+)', i).group()): i for i in handle[path]}
 
             out = []
             for i in idx:
