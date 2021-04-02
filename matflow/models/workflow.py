@@ -95,12 +95,13 @@ class Workflow(object):
         '_num_iterations',
         '_iterate',
         '_iterate_run_options',
+        '_import_list',
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extends=None, archive=None,
                  archive_excludes=None, figures=None, metadata=None, num_iterations=None,
-                 iterate=None, iterate_run_options=None, check_integrity=True,
-                 profile=None, __is_from_file=False):
+                 iterate=None, iterate_run_options=None, import_list=None,
+                 check_integrity=True, profile=None, __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
@@ -118,8 +119,13 @@ class Workflow(object):
                          ] if figures else []
         self._metadata = metadata or {}
 
-        tasks, task_elements, dep_idx = init_tasks(self, tasks, self.is_from_file,
-                                                   check_integrity)
+        self._import_list = self._validate_import_list(import_list)
+        tasks, task_elements, dep_idx = init_tasks(
+            self,
+            tasks,
+            self.is_from_file,
+            check_integrity,
+        )
         self._tasks = tasks
         self._dependency_idx = dep_idx
 
@@ -137,7 +143,10 @@ class Workflow(object):
             } for i in tasks
         ]
         elements_idx = get_element_idx(
-            task_lst, dep_idx, self.num_iterations, self.iterate
+            task_lst,
+            dep_idx,
+            self.num_iterations,
+            self.iterate,
         )
 
         for task in self.tasks:
@@ -244,6 +253,68 @@ class Workflow(object):
                 # Update history list attributes to maintain /workflow_obj loadability
                 for k, v in attributes.items():
                     handle[path].attrs[k] = v
+
+    def _validate_import_list(self, import_list):
+
+        if not import_list:
+            return import_list
+
+        if not isinstance(import_list, (list, tuple)):
+            raise ValueError(f'`import_list` must be a list or tuple.')
+
+        req_keys = {'parameter', 'from'}
+        good_keys = req_keys | {'as', 'context'}
+        from_req_keys = {'workflow'}
+        from_good_keys = from_req_keys | {'context', 'iteration', 'elements'}
+
+        for idx, import_item in enumerate(import_list):
+
+            if not isinstance(import_item, dict):
+                msg = f'Each item in `import_list` must be a dict, but item {idx} is not.'
+                raise ValueError(msg)
+
+            import_item_keys = set(import_item)
+            miss_keys = req_keys - import_item_keys
+            bad_keys = import_item_keys - good_keys
+            msg = (f'Each items in `import_list` must be a dict with particular keys. '
+                   f'For item {idx}, ')
+            if miss_keys:
+                miss_keys_fmt = ', '.join([f'"{i}"' for i in miss_keys])
+                raise ValueError(msg + f'missing keys are: {miss_keys_fmt}.')
+            if bad_keys:
+                bad_keys_fmt = ', '.join([f'"{i}"' for i in bad_keys])
+                raise ValueError(msg + f'unknown keys are: {bad_keys_fmt}.')
+
+            if not import_item.get('as'):
+                import_item['as'] = import_item['parameter']  # set default import alias
+
+            if not isinstance(import_item['from'], dict):
+                msg = (f'The `from` option of import item {idx} of `import_list` must be '
+                       f'a dict, but it is not.')
+                raise ValueError(msg)
+
+            from_item_keys = set(import_item['from'])
+            from_miss_keys = from_req_keys - from_item_keys
+            from_bad_keys = from_item_keys - from_good_keys
+            msg = (f'The `from` option of import item {idx} of `import_list` must be '
+                   f'a dict with particular keys. ')
+            if from_miss_keys:
+                from_miss_keys_fmt = ', '.join([f'"{i}"' for i in from_miss_keys])
+                raise ValueError(msg + f'Missing keys are: {from_miss_keys_fmt}.')
+            if from_bad_keys:
+                from_bad_keys_fmt = ', '.join([f'"{i}"' for i in from_bad_keys])
+                raise ValueError(msg + f'Unknown keys are: {from_bad_keys_fmt}.')
+
+            # Check workflow is a file:
+            workflow_path = Path(import_item['from']['workflow']).resolve()
+            if not workflow_path.is_file():
+                msg = (f'The workflow path specified in import item {idx} of '
+                       f'`import_list` is not a file: "{workflow_path}".')
+                raise ValueError(msg)
+
+            import_item['from']['workflow'] = str(workflow_path)
+
+        return import_list
 
     def _validate_iterate(self, iterate_dict, is_from_file):
 
@@ -421,6 +492,10 @@ class Workflow(object):
     @property
     def HDF5_path(self):
         return '/workflow_obj/data'
+
+    @property
+    def import_list(self):
+        return self._import_list
 
     @functools.lru_cache()
     def get_element_data(self, idx):
