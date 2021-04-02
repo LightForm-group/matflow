@@ -19,6 +19,7 @@
 ### Changed
 
 - Non-trivial task contexts are now part of the task directory name to help distinguish task directories where multiple contexts are used. Fix [#50](https://github.com/LightForm-group/matflow/issues/50).
+- Add `context` argument to `Workflow.get_input_tasks` and `Workflow.get_output_tasks`.
 
 ## [0.2.17] - 2021.02.15
 

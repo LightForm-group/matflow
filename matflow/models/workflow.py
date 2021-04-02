@@ -2094,23 +2094,53 @@ class Workflow(object):
                 tasks_info.append(task_dict)
         return tasks_info
 
-    def get_input_tasks(self, parameter_name):
-        'Return task indices of tasks in which a given parameter is an input.'
+    def get_input_tasks(self, parameter_name, context=None):
+        """Return task indices of tasks in which a given parameter is an input.
+
+        Parameters
+        ----------
+        parameter_name : str
+            Name of the parameter to locate.
+        context : str, optional
+            If specified, limit the search to only tasks with the given context.
+
+        Returns
+        -------
+        input_task_idx : list of int
+            List of task indices in which the specified parameter features as an input.
+
+        """
 
         input_task_idx = []
         for task in self.tasks:
             if parameter_name in task.schema.input_names:
-                input_task_idx.append(task.task_idx)
+                if (context is not None and task.context == context) or context is None:
+                    input_task_idx.append(task.task_idx)
 
         return input_task_idx
 
-    def get_output_tasks(self, parameter_name):
-        'Return task indices of tasks in which a given parameter is an output.'
+    def get_output_tasks(self, parameter_name, context=None):
+        """Return task indices of tasks in which a given parameter is an output.
+
+        Parameters
+        ----------
+        parameter_name : str
+            Name of the parameter to locate.
+        context : str, optional
+            If specified, limit the search to only tasks with the given context.
+
+        Returns
+        -------
+        output_task_idx : list of int
+            List of task indices in which the specified parameter features as an output.
+
+        """
 
         output_task_idx = []
         for task in self.tasks:
             if parameter_name in task.schema.outputs:
-                output_task_idx.append(task.task_idx)
+                if (context is not None and task.context == context) or context is None:
+                    output_task_idx.append(task.task_idx)
 
         return output_task_idx
 
