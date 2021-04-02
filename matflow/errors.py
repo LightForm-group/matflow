@@ -85,3 +85,7 @@ class CommandError(Exception):
 
 class WorkflowIterationError(Exception):
     """For issues with resolving requested iterations."""
+
+
+class ParameterImportError(Exception):
+    """For issues with importing parameters from pre-existing workflows."""
