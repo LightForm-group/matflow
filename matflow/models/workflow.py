@@ -119,7 +119,7 @@ class Workflow(object):
                          ] if figures else []
         self._metadata = metadata or {}
 
-        self._import_list = self._validate_import_list(import_list)
+        self._import_list = self._validate_import_list(import_list, self.is_from_file)
         tasks, task_elements, dep_idx = init_tasks(
             self,
             tasks,
@@ -254,7 +254,7 @@ class Workflow(object):
                 for k, v in attributes.items():
                     handle[path].attrs[k] = v
 
-    def _validate_import_list(self, import_list):
+    def _validate_import_list(self, import_list, is_from_file):
 
         if not import_list:
             return import_list
@@ -305,14 +305,15 @@ class Workflow(object):
                 from_bad_keys_fmt = ', '.join([f'"{i}"' for i in from_bad_keys])
                 raise ValueError(msg + f'Unknown keys are: {from_bad_keys_fmt}.')
 
-            # Check workflow is a file:
-            workflow_path = Path(import_item['from']['workflow']).resolve()
-            if not workflow_path.is_file():
-                msg = (f'The workflow path specified in import item {idx} of '
-                       f'`import_list` is not a file: "{workflow_path}".')
-                raise ValueError(msg)
+            if not is_from_file:
+                # Check workflow is a file:
+                workflow_path = Path(import_item['from']['workflow']).resolve()
+                if not workflow_path.is_file():
+                    msg = (f'The workflow path specified in import item {idx} of '
+                           f'`import_list` is not a file: "{workflow_path}".')
+                    raise ValueError(msg)
 
-            import_item['from']['workflow'] = str(workflow_path)
+                import_item['from']['workflow'] = str(workflow_path)
 
         return import_list
 
