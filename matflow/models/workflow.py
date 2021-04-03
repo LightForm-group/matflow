@@ -28,6 +28,7 @@ from matflow.errors import (
     TaskElementExecutionError,
     UnexpectedSourceMapReturnError,
     WorkflowIterationError,
+    ParameterImportError,
 )
 from matflow.hicklable import to_hicklable
 from matflow.models.command import DEFAULT_FORMATTERS
@@ -96,12 +97,14 @@ class Workflow(object):
         '_iterate',
         '_iterate_run_options',
         '_import_list',
+        '_imported_parameters',
     ]
 
     def __init__(self, name, tasks, stage_directory=None, extends=None, archive=None,
                  archive_excludes=None, figures=None, metadata=None, num_iterations=None,
                  iterate=None, iterate_run_options=None, import_list=None,
-                 check_integrity=True, profile=None, __is_from_file=False):
+                 imported_parameters=None, check_integrity=True, profile=None,
+                 __is_from_file=False):
 
         self._id = None             # Assigned once by set_ids()
         self._human_id = None       # Assigned once by set_ids()
@@ -120,6 +123,7 @@ class Workflow(object):
         self._metadata = metadata or {}
 
         self._import_list = self._validate_import_list(import_list, self.is_from_file)
+        self._imported_parameters = imported_parameters or {}
         tasks, task_elements, dep_idx = init_tasks(
             self,
             tasks,
@@ -133,7 +137,8 @@ class Workflow(object):
         self._iterate = self._validate_iterate(iterate, self.is_from_file)
         self._iterate_run_options = iterate_run_options or {}
 
-        # Find element indices that determine the elements from which task inputs are drawn:
+        # Find element indices that determine the elements from which task inputs are
+        # drawn:
         task_lst = [
             {
                 'task_idx': i.task_idx,
@@ -160,9 +165,25 @@ class Workflow(object):
         self._elements_idx = elements_idx
 
         if not self.is_from_file:
+
             self._check_archive_connection()
             self._history = []
             self._append_history(WorkflowAction.generate)
+
+            # Import parameters:
+            if self.import_list:
+                for import_item in self.import_list:
+                    imported_data = self.import_parameter(
+                        parameter_name=import_item['parameter'],
+                        workflow_path=import_item['from']['workflow'],
+                        context=import_item['from'].get('context'),
+                        iteration_idx=import_item['from'].get('iteration'),
+                        elements_idx=import_item['from'].get('elements'),
+                        new_context=import_item.get('context'),
+                        new_parameter_name=import_item.get('as'),
+                    )
+                    param_name = imported_data.pop('parameter_name')
+                    self._imported_parameters.update({param_name: imported_data})
 
     def __repr__(self):
         out = (
@@ -257,7 +278,7 @@ class Workflow(object):
     def _validate_import_list(self, import_list, is_from_file):
 
         if not import_list:
-            return import_list
+            return ()
 
         if not isinstance(import_list, (list, tuple)):
             raise ValueError(f'`import_list` must be a list or tuple.')
@@ -315,7 +336,7 @@ class Workflow(object):
 
                 import_item['from']['workflow'] = str(workflow_path)
 
-        return import_list
+        return tuple(import_list)
 
     def _validate_iterate(self, iterate_dict, is_from_file):
 
@@ -497,6 +518,129 @@ class Workflow(object):
     @property
     def import_list(self):
         return self._import_list
+
+    @property
+    def imported_parameters(self):
+        return self._imported_parameters
+
+    def import_parameter(self, parameter_name, workflow_path, context=None, task_idx=None,
+                         iteration_idx=None, elements_idx=None, new_context=None,
+                         new_parameter_name=None):
+        """
+        Import an output parameter from another workflow.
+
+        Parameters
+        ----------
+        parameter_name : str
+            Name of parameter to import.
+        workflow_path : str or Path
+            Full path to the workflow HDF5 file from which the parameter should be
+            imported.
+        context : str, optional
+            The task context from which the parameter should be imported. If not
+            specified, the default context will be used.
+        task_idx : int, optional
+            In the case of a workflow with parameter-modifying tasks, multiple tasks with
+            the same context may output the same parameter. The index of the specific task
+            from which the parameter should be imported can be specified here.
+        iteration_idx : int, optional
+            For parmaters that have been output from tasks that have multiple iterations,
+            a specific iteration index must be chosen, from which the parameter will be
+            imported. If not specified, the final iteration (index -1) will be used.
+        elements_idx : (list or tuple) of int, optional
+            The indices of the elements from which to import the value of this parameter.
+            Note that these should be specified relative to the specified iteration. So
+            for a task with four elements per iteration and N iterations, the allowable
+            values of `elements_idx` would be 0-3.
+
+        Returns
+        -------
+        imported_data_dict : dict
+
+        """
+
+        if not new_parameter_name:
+            new_parameter_name = parameter_name
+
+        imp_workflow = Workflow.load_HDF5_file(workflow_path, full_path=True)
+        output_task_idx = imp_workflow.get_output_tasks(parameter_name, context=context)
+        context_msg = f' with context "{context}"' if context is not None else ''
+        if not output_task_idx:
+            msg = (f'The parameter "{parameter_name}"{context_msg} cannot be found as an '
+                   f'output in any of the tasks in the specified workflow: '
+                   f'{workflow_path}.')
+            raise ParameterImportError(msg)
+
+        elif len(output_task_idx) > 1:
+            # TODO: need to also consider param-modifying tasks, hence `task` argument to
+            # narrow it down.
+            if context is not None:
+                multi_tasks_fmt = ', '.join(
+                    [f'"{task.name}" (index: {task.task_idx})'
+                     for task in imp_workflow.tasks
+                     if task.task_idx in output_task_idx]
+                )
+                msg = (f'The parameter "{parameter_name}" exists as an output for '
+                       f'multiple tasks with context "{context}": {multi_tasks_fmt}. '
+                       f'Specify the index of the task from which you wish to import '
+                       f'this parameter.')
+                raise ParameterImportError(msg)
+
+            else:
+                multi_contexts_fmt = ', '.join(
+                    [f'"{task.context}"' for task in imp_workflow.tasks
+                     if task.task_idx in output_task_idx]
+                )
+                msg = (f'The parameter "{parameter_name}" exists as an output for tasks '
+                       f'with multiple contexts: {multi_contexts_fmt}. Specify from '
+                       f'which context you wish to import this parameter.')
+                raise ParameterImportError(msg)
+
+        imp_task = imp_workflow.tasks[output_task_idx[0]]
+
+        # Set a default iteration index (final iteration):
+        final_iter_idx = max(imp_task.elements_idx['iteration_idx'])
+        if iteration_idx is None:
+            iteration_idx = final_iter_idx
+        elif iteration_idx < 0:
+            iteration_idx += imp_task.elements_idx['num_iterations']
+
+        # Get element indices within the specified iteration:
+        num_elems_per_iter = imp_task.elements_idx['num_elements_per_iteration']
+        if elements_idx:
+            if not isinstance(elements_idx, (list, tuple)):
+                msg = (f'The `elements_idx` option for importing parameter '
+                       f'"{parameter_name}" must be a list of element indices.')
+                raise ParameterImportError(msg)
+            in_range = all([i in range(num_elems_per_iter) for i in elements_idx])
+            if not in_range:
+                msg = (f'The `elements_idx` option for importing parameter '
+                       f'"{parameter_name}" must be a list of element indices. The '
+                       f'allowable indices are: 0 to {num_elems_per_iter - 1} '
+                       f'(inclusive).')
+        else:
+            elements_idx = range(num_elems_per_iter)  # all elements in iteration
+
+        # Get Element objects:
+        abs_elements_idx = [i + (num_elems_per_iter * iteration_idx)
+                            for i in elements_idx]
+        element_objs = [i for i in imp_task.elements if i.element_idx in abs_elements_idx]
+
+        imported_data_dict = {
+            'parameter_name': new_parameter_name,
+            'original_name': parameter_name,
+            'context': new_context,
+            'groups': imp_task.elements_idx['groups'],
+            'data': [],             # populated below, deleted on self.write_HDF5_file
+            'data_idx': [],         # populated in self.write_HDF5_file
+            'iteration_idx': [],    # populated below
+        }
+        for element in element_objs:
+            data = element.get_output(parameter_name)
+            imported_data_dict['data'].append(data)
+            imported_data_dict['iteration_idx'].append(iteration_idx)
+
+        return imported_data_dict
 
     @functools.lru_cache()
     def get_element_data(self, idx):
@@ -1243,6 +1387,13 @@ class Workflow(object):
                     'vals_data_idx': [all_data_idx[i] for i in vals_dict['vals_idx']]
                 })
 
+        # Process imported data:
+        for param_name, imp_data in self.imported_parameters.items():
+            for data_i in imp_data['data']:
+                data_idx = len(element_data)
+                element_data.update({(data_idx, param_name): imp_data.pop('data')})
+                imp_data['data_idx'].append(data_idx)
+
         workflow_as_dict = self.as_dict()
         obj_json = to_hicklable(workflow_as_dict)
 
@@ -1392,6 +1543,8 @@ class Workflow(object):
             'metadata',
             'num_iterations',
             'iterate',
+            'import_list',
+            'imported_parameters',
         ]
         for key in WARN_ON_MISSING:
             if key not in obj_json:
