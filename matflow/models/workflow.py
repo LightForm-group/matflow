@@ -1107,12 +1107,6 @@ class Workflow(object):
             config_dir=Config.get('hpcflow_config_dir'),
         )
 
-    def get_extended_workflows(self):
-        if self.extend_paths:
-            return [Workflow.load(i, full_path=True) for i in self.extend_paths]
-        else:
-            return None
-
     def as_dict(self):
         """Return attributes dict with preceding underscores removed."""
         out = {k.lstrip('_'): getattr(self, k) for k in self.__slots__}
