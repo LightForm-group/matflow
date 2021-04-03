@@ -555,7 +555,10 @@ class TaskTuple(object):
         for task in self._task_tuple:
             if task.unique_name == task_unique_name:
                 return task
-        raise AttributeError
+        task_list_fmt = ', '.join([f'"{i.unique_name}"' for i in self._task_tuple])
+        msg = (f'Task "{task_unique_name}" does not exist. Available tasks are: '
+               f'{task_list_fmt}.')
+        raise AttributeError(msg)
 
     def __dir__(self):
         return super().__dir__() + [i.unique_name for i in self._task_tuple]
