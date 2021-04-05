@@ -333,9 +333,14 @@ class Workflow(object):
                 # Check workflow is a file:
                 workflow_path = Path(import_item['from']['workflow']).resolve()
                 if not workflow_path.is_file():
-                    msg = (f'The workflow path specified in import item {idx} of '
-                           f'`import_list` is not a file: "{workflow_path}".')
-                    raise ValueError(msg)
+                    trial_workflow_path = workflow_path / 'workflow.hdf5'
+                    if not trial_workflow_path.is_file():
+                        msg = (f'The workflow path specified in import item {idx} of '
+                               f'`import_list` is not a file (nor is this path joined '
+                               f'with "workflow.hdf5"): "{workflow_path}".')
+                        raise ValueError(msg)
+                    else:
+                        workflow_path = trial_workflow_path
 
                 import_item['from']['workflow'] = str(workflow_path)
 
