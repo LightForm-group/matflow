@@ -124,9 +124,27 @@ class Workflow(object):
 
         self._import_list = self._validate_import_list(import_list, self.is_from_file)
         self._imported_parameters = imported_parameters or {}
+
+        if not self.is_from_file and self.import_list:
+            for import_item in self.import_list:
+                imported_data = self.import_parameter(
+                    parameter_name=import_item['parameter'],
+                    workflow_path=import_item['from']['workflow'],
+                    context=import_item['from'].get('context'),
+                    iteration_idx=import_item['from'].get('iteration'),
+                    elements_idx=import_item['from'].get('elements'),
+                    new_context=import_item.get('context'),
+                    new_parameter_name=import_item.get('as'),
+                )
+                param_name = imported_data.pop('parameter_name')
+                self._imported_parameters.update({
+                    (param_name, imported_data['context']): imported_data
+                })
+
         tasks, task_elements, dep_idx = init_tasks(
             self,
             tasks,
+            self.imported_parameters,
             self.is_from_file,
             check_integrity,
         )
@@ -152,6 +170,7 @@ class Workflow(object):
             dep_idx,
             self.num_iterations,
             self.iterate,
+            self.imported_parameters,
         )
 
         for task in self.tasks:
@@ -165,25 +184,9 @@ class Workflow(object):
         self._elements_idx = elements_idx
 
         if not self.is_from_file:
-
             self._check_archive_connection()
             self._history = []
             self._append_history(WorkflowAction.generate)
-
-            # Import parameters:
-            if self.import_list:
-                for import_item in self.import_list:
-                    imported_data = self.import_parameter(
-                        parameter_name=import_item['parameter'],
-                        workflow_path=import_item['from']['workflow'],
-                        context=import_item['from'].get('context'),
-                        iteration_idx=import_item['from'].get('iteration'),
-                        elements_idx=import_item['from'].get('elements'),
-                        new_context=import_item.get('context'),
-                        new_parameter_name=import_item.get('as'),
-                    )
-                    param_name = imported_data.pop('parameter_name')
-                    self._imported_parameters.update({param_name: imported_data})
 
     def __repr__(self):
         out = (
@@ -561,6 +564,9 @@ class Workflow(object):
 
         if not new_parameter_name:
             new_parameter_name = parameter_name
+
+        if not new_context:
+            new_context = context or DEFAULT_TASK_CONTEXT
 
         imp_workflow = Workflow.load_HDF5_file(workflow_path, full_path=True)
         output_task_idx = imp_workflow.get_output_tasks(parameter_name, context=context)
@@ -1388,11 +1394,12 @@ class Workflow(object):
                 })
 
         # Process imported data:
-        for param_name, imp_data in self.imported_parameters.items():
+        for (param_name, param_context), imp_data in self.imported_parameters.items():
             for data_i in imp_data['data']:
                 data_idx = len(element_data)
-                element_data.update({(data_idx, param_name): imp_data.pop('data')})
+                element_data.update({(data_idx, param_name): data_i})
                 imp_data['data_idx'].append(data_idx)
+            del imp_data['data']
 
         workflow_as_dict = self.as_dict()
         obj_json = to_hicklable(workflow_as_dict)
@@ -1591,19 +1598,26 @@ class Workflow(object):
         element = task.elements[element_idx]
 
         # Populate element inputs:
-        for input_alias, inputs_idx in self.elements_idx[task_idx]['inputs'].items():
+        for input_alias, inputs_idx in task.elements_idx['inputs'].items():
 
             ins_task_idx = inputs_idx.get('task_idx')
             input_name = [i['name'] for i in task.schema.inputs
                           if i['alias'] == input_alias][0]
 
-            if ins_task_idx[element_idx] is not None:
-                # Input values sourced from previous task outputs:
+            if inputs_idx['element_idx'][element_idx] is not None:
 
                 data_idx = []
-                for i in inputs_idx['element_idx'][element_idx]:
-                    src_element = self.tasks[ins_task_idx[element_idx]].elements[i]
-                    param_data_idx = src_element.get_parameter_data_idx(input_name)
+                imp_key = inputs_idx['import_key'][element_idx]
+                for src_elem_idx in inputs_idx['element_idx'][element_idx]:
+                    if imp_key:
+                        # Input values sourced from imported parameter:
+                        imp_params = self.imported_parameters[imp_key]
+                        param_data_idx = imp_params['data_idx'][src_elem_idx]
+                    else:
+                        # Input values sourced from previous task outputs:
+                        src_all_elems = self.tasks[ins_task_idx[element_idx]].elements
+                        src_element = src_all_elems[src_elem_idx]
+                        param_data_idx = src_element.get_parameter_data_idx(input_name)
                     data_idx.append(param_data_idx)
 
                 if inputs_idx['group'][element_idx] == 'default':
