@@ -22,6 +22,8 @@ def parse_workflow_profile(profile_path):
         'metadata',
         'num_iterations',
         'iterate',
+        'import',
+        'import_list',  # equivalent to 'import'; provides a Python-code-safe variant.
     ]
 
     miss_keys = list(set(req_keys) - set(profile.keys()))
@@ -33,6 +35,10 @@ def parse_workflow_profile(profile_path):
     if bad_keys:
         bad_keys_fmt = ', '.join([f'"{i}"' for i in bad_keys])
         raise ProfileError(f'Unknown keys in profile: {bad_keys_fmt}.')
+
+    if 'import' in profile and 'import_list' in profile:
+        raise ProfileError(f'Specify exactly one of `import` and `import_list`. '
+                           f'These options are functionally equivalent.')
 
     for i in task_globals:
         if i in profile:
@@ -51,6 +57,7 @@ def parse_workflow_profile(profile_path):
         'extends': profile.get('extends'),
         'archive': profile.get('archive'),
         'archive_excludes': profile.get('archive_excludes'),
+        'import_list': profile.get('import') or profile.get('import_list'),
     }
 
     return workflow_dict

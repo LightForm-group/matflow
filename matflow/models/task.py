@@ -555,7 +555,10 @@ class TaskTuple(object):
         for task in self._task_tuple:
             if task.unique_name == task_unique_name:
                 return task
-        raise AttributeError
+        task_list_fmt = ', '.join([f'"{i.unique_name}"' for i in self._task_tuple])
+        msg = (f'Task "{task_unique_name}" does not exist. Available tasks are: '
+               f'{task_list_fmt}.')
+        raise AttributeError(msg)
 
     def __dir__(self):
         return super().__dir__() + [i.unique_name for i in self._task_tuple]
@@ -930,6 +933,10 @@ class Task(object):
         """Get the HDF5 path to this task."""
         return self.workflow.HDF5_path + f'/\'tasks\'/data/data_{self.task_idx}'
 
+    @property
+    def elements_idx(self):
+        return self.workflow.elements_idx[self.task_idx]
+
     def get_elements_from_iteration(self, iteration_idx):
         """Get a list of Element objects corresponding to a given iteration index.
 
@@ -943,8 +950,7 @@ class Task(object):
 
         """
 
-        elems_idx = self.workflow.elements_idx[self.task_idx]
-        all_elems_iter_idx = elems_idx['iteration_idx']
+        all_elems_iter_idx = self.elements_idx['iteration_idx']
         max_iter_idx = max(all_elems_iter_idx)
 
         iteration_idx_original = iteration_idx

@@ -14,10 +14,14 @@
 - Allow embedding file-path inputs (inputs that are text files) into the HDF5 file. Fix [#86](https://github.com/LightForm-group/matflow/issues/86).
 - Add `Task.unique_name` property which adds on the non-trivial `Task.context` to `Task.name`.
 - Tasks can be accessed from the task list via dot-notation. Fix [#90](https://github.com/LightForm-group/matflow/issues/90).
+- Add `Task.elements_idx` property to retrieve to correct `elements_idx` dict for that task.
+- Add new exception type: `ParameterImportError`.
+- Add ability to import parameters from existing workflows. Fix [#30](https://github.com/LightForm-group/matflow/issues/30)
 
 ### Changed
 
 - Non-trivial task contexts are now part of the task directory name to help distinguish task directories where multiple contexts are used. Fix [#50](https://github.com/LightForm-group/matflow/issues/50).
+- Add `context` argument to `Workflow.get_input_tasks` and `Workflow.get_output_tasks`.
 
 ## [0.2.17] - 2021.02.15
 
