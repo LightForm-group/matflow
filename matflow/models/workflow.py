@@ -647,7 +647,13 @@ class Workflow(object):
             'iteration_idx': [],    # populated below
         }
         for element in element_objs:
-            data = element.get_output(parameter_name)
+            try:
+                data = element.get_output(parameter_name)
+            except (KeyError, AttributeError):
+                msg = (f'The output parameter "{parameter_name}" from element '
+                       f'{element.element_idx} of task "{imp_task.unique_name}" could '
+                       f'not be found in the workflow at "{workflow_path}".')
+                raise ParameterImportError(msg)
             imported_data_dict['data'].append(data)
             imported_data_dict['iteration_idx'].append(iteration_idx)
 
