@@ -507,8 +507,9 @@ def get_dependency_idx(task_info_lst, imported_parameters):
                     f'locally, a default value must be provided in the schema, an '
                     f'additional task should be added to the workflow that generates the '
                     f'parameter, or the parameter must be imported from an existing '
-                    f'workflow. If a suitable task already exists, try reordering the '
-                    f'tasks in the order in which would you expect them to run.'
+                    f'workflow (with the correct context set). If a suitable task already'
+                    f' exists, try reordering the tasks in the order in which would you '
+                    f'expect them to run.'
                 )
                 raise TaskParameterError(msg)
 

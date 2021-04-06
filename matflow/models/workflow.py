@@ -34,7 +34,7 @@ from matflow.hicklable import to_hicklable
 from matflow.models.command import DEFAULT_FORMATTERS
 from matflow.models.construction import init_tasks, get_element_idx
 from matflow.models.software import SoftwareInstance
-from matflow.models.task import TaskStatus, DEFAULT_TASK_CONTEXT
+from matflow.models.task import TaskStatus, DEFAULT_TASK_CONTEXT, Task
 from matflow.models.parameters import Parameters
 from matflow.utils import (
     parse_times,
@@ -318,6 +318,10 @@ class Workflow(object):
                        f'a dict, but it is not.')
                 raise ValueError(msg)
 
+            new_context = import_item.get('context')
+            if new_context:
+                import_item['context'] = Task.make_safe_context(new_context)
+
             from_item_keys = set(import_item['from'])
             from_miss_keys = from_req_keys - from_item_keys
             from_bad_keys = from_item_keys - from_good_keys
@@ -329,6 +333,10 @@ class Workflow(object):
             if from_bad_keys:
                 from_bad_keys_fmt = ', '.join([f'"{i}"' for i in from_bad_keys])
                 raise ValueError(msg + f'Unknown keys are: {from_bad_keys_fmt}.')
+
+            from_context = import_item['from'].get('context')
+            if from_context:
+                import_item['from']['context'] = Task.make_safe_context(from_context)
 
             if not is_from_file:
                 # Check workflow is a file:
@@ -571,7 +579,7 @@ class Workflow(object):
         if not new_parameter_name:
             new_parameter_name = parameter_name
 
-        if not new_context:
+        if new_context is None:
             new_context = context or DEFAULT_TASK_CONTEXT
 
         imp_workflow = Workflow.load_HDF5_file(workflow_path, full_path=True)
