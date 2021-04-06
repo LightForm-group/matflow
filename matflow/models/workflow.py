@@ -637,15 +637,21 @@ class Workflow(object):
                             for i in elements_idx]
         element_objs = [i for i in imp_task.elements if i.element_idx in abs_elements_idx]
 
+        new_groups = self.filter_imported_parameter_groups(
+            parameter_name,
+            imp_task.elements_idx['groups'],
+            elements_idx,
+        )
         imported_data_dict = {
             'parameter_name': new_parameter_name,
             'original_name': parameter_name,
             'context': new_context,
-            'groups': imp_task.elements_idx['groups'],
+            'groups': new_groups,
             'data': [],             # populated below, deleted on self.write_HDF5_file
             'data_idx': [],         # populated in self.write_HDF5_file
             'iteration_idx': [],    # populated below
         }
+
         for element in element_objs:
             try:
                 data = element.get_output(parameter_name)
@@ -658,6 +664,67 @@ class Workflow(object):
             imported_data_dict['iteration_idx'].append(iteration_idx)
 
         return imported_data_dict
+
+    @staticmethod
+    def filter_imported_parameter_groups(parameter_name, original_groups, elements_idx):
+        """Filter groups of imported paramaters according to the requested subset of
+        elements to include in the importation."""
+
+        new_groups = copy.deepcopy(original_groups)
+        modifiable_dat_keys = [
+            'group_idx_per_iteration',
+            'group_element_idx_per_iteration',
+            'num_groups_per_iteration',
+            'group_size_per_iteration',
+            'num_groups',
+        ]
+        for group_name, group_dat in new_groups.items():
+
+            group_dat['pre_import'] = {}
+            # Copy original keys to a separate dict:
+            for key in modifiable_dat_keys:
+                group_dat['pre_import'].update({key: copy.deepcopy(group_dat[key])})
+
+            # Remove elements not in elements_idx:
+            new_group_idx = [
+                i for idx, i in enumerate(group_dat['group_idx_per_iteration'])
+                if idx in elements_idx
+            ]
+
+            # Remap group indices consecutively starting from zero:
+            _, new_group_idx = np.unique(new_group_idx, return_inverse=True)
+
+            # Get the the inverse to update `group_element_idx_per_iteration`:
+            new_group_elem_idx = [
+                list(np.where(np.array(new_group_idx) == i)[0])
+                for i in range(max(new_group_idx) + 1)
+            ]
+
+            # Check for ragged group sizes:
+            uniq_group_sizes = set([len(i) for i in new_group_elem_idx])
+            if len(uniq_group_sizes) > 1:
+                grp_nm_fmt = group_name.split('user_group_')[1]
+                msg = (
+                    f'The requested subset of elements to import for parameter '
+                    f'"{parameter_name}" ({list(elements_idx)}) has resulted in a ragged '
+                    f'group "{grp_nm_fmt}", where not all "{grp_nm_fmt}" groups have the '
+                    f'same size. Distinct group sizes are: {list(uniq_group_sizes)}. '
+                    f'Original group size was: '
+                    f'{group_dat["pre_import"]["group_size_per_iteration"]}. The element '
+                    f'subset must be selected such that ragged group sizes are not '
+                    f'created.'
+                )
+                raise ParameterImportError(msg)
+
+            group_dat['group_idx_per_iteration'] = list(new_group_idx)
+            group_dat['group_element_idx_per_iteration'] = list(new_group_elem_idx)
+            group_dat['num_groups_per_iteration'] = len(new_group_elem_idx)
+            group_dat['group_size_per_iteration'] = len(new_group_elem_idx[0])
+
+            # Only a single iteration can be imported:
+            group_dat['num_groups'] = group_dat['num_groups_per_iteration']
+
+        return new_groups
 
     @functools.lru_cache()
     def get_element_data(self, idx):
