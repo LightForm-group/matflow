@@ -1185,6 +1185,7 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate, imported_paramet
         # local inputs dict:
         loc_in = downstream_task['local_inputs']
         schema = downstream_task['schema']
+        down_context = downstream_task['context']
 
         if not upstream_tasks and not dep_idx[idx]['has_imports']:
             # This task does not depend on any other tasks or imports.
@@ -1256,7 +1257,45 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate, imported_paramet
 
                 in_group = input_groups[input_alias]
                 if in_group['group_name'] != 'default':
-                    consumed_groups.append('user_group_' + in_group['group_name'])
+                    group_name_i = in_group['group_name']
+                    consumed_groups.append('user_group_' + group_name_i)
+
+                    if in_group['import_key']:
+                        # Warn on modified imported group size/number
+                        import_msg = (
+                            f'The group "{group_name_i}" originates from an '
+                            f'imported parameter, for which an element subset was '
+                            f'specified. '
+                        )
+                        task_cont_fmt = (f' with context "{down_context}"'
+                                         if down_context else '')
+                        import_msg_post = (
+                            f' Depending on how the group is used, this may or may not '
+                            f'adversely affect the task "{downstream_task["name"]}"'
+                            f'{task_cont_fmt} in which the group is used!'
+                        )
+                        if (
+                            in_group['pre_import']['group_size_per_iteration'] !=
+                            in_group['group_size_per_iteration']
+                        ):
+                            msg = import_msg + (
+                                f'This subset resulted in the group size (i.e. number of '
+                                f'elements in each "{group_name_i}" group) changing from '
+                                f'{in_group["pre_import"]["group_size_per_iteration"]} '
+                                f'to {in_group["group_size_per_iteration"]}.'
+                            ) + import_msg_post
+                            warn(msg)
+                        if (
+                            in_group['pre_import']['num_groups_per_iteration'] !=
+                            in_group['num_groups_per_iteration']
+                        ):
+                            msg = import_msg + (
+                                f'This subset resulted in the number of '
+                                f'"{group_name_i}" groups changing from '
+                                f'{in_group["pre_import"]["num_groups_per_iteration"]} '
+                                f'to {in_group["num_groups_per_iteration"]}.'
+                            ) + import_msg_post
+                            warn(msg)
 
                 incoming_size = in_group['num_groups_per_iteration']
                 group_size = in_group['group_size_per_iteration']

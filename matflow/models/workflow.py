@@ -163,6 +163,7 @@ class Workflow(object):
                 'local_inputs': i.local_inputs,
                 'name': i.name,
                 'schema': i.schema,
+                'context': i.context,
             } for i in tasks
         ]
         elements_idx = get_element_idx(
