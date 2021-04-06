@@ -1526,12 +1526,14 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate, imported_paramet
 
                     iter_current_task = [task_dep] * elems_per_iter
                     iter_current_loc = [None] * elems_per_iter
+                    iter_import_key = [None] * elems_per_iter
 
                     add_elements = {
                         'local_input_idx': iter_current_loc,
                         'task_idx': iter_current_task,
                         'element_idx': iter_current_elems_idx,
                         'group': iter_current_group,
+                        'import_key': iter_import_key,
                     }
                     # print(f'\t\t\tAdditional elements are: {add_elements}')
 
@@ -1569,12 +1571,14 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate, imported_paramet
                         iter_current_group = [inputs_idx['group'][0]] * elems_per_iter
                         iter_current_task = [inputs_idx['task_idx'][0]] * elems_per_iter
                         iter_current_loc = [None] * elems_per_iter
+                        iter_import_key = [inputs_idx['import_key'][0]] * elems_per_iter
 
                         add_elements = {
                             'local_input_idx': iter_current_loc,
                             'task_idx': iter_current_task,
                             'element_idx': iter_current_elems_idx,
                             'group': iter_current_group,
+                            'import_key': iter_import_key,
                         }
 
                         # print(f'\t\t\tFound non-local inputs: additional elements '
