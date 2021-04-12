@@ -1542,8 +1542,11 @@ def get_element_idx(task_lst, dep_idx, num_iterations, iterate, imported_paramet
                     # New elements should derive from tasks of the most recent iteration:
                     # print(f'\t\t\tElements should derive from the '
                     #       f'most recent iteration.')
-                    if inputs_idx['local_input_idx'][0] is not None:
-                        # Tile local inputs for new iteration:
+                    if (
+                        inputs_idx['local_input_idx'][0] is not None or
+                        inputs_idx['import_key'][0] is not None
+                    ):
+                        # Tile local inputs or imports for new iteration:
                         add_elements = {k: [inputs_idx[k][i] for i in iter_zero_idx]
                                         for k in inputs_idx}
                         # print(f'\t\t\tFound local inputs: additional elements '
