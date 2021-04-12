@@ -1,13 +1,13 @@
 # Change Log
 
-## [0.2.19] - 2021.04.xx
+## [0.2.19] - 2021.04.12 (April 2021 - Fix 1)
 
 ### Fixed
 
 - Fix type problem when input schema keys are specified "inline" in the task schema (e.g. as `CRC_file_path[file=True,save=False]`), in which the keys remain as type `str`, when they should be `bool`.
 - Fix problem when an imported parameter is used in a task that is iterated.
 
-## [0.2.18] - 2021.04.10
+## [0.2.18] - 2021.04.10 (April 2021)
 
 ### Fixed
 
