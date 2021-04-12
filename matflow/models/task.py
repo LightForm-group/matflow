@@ -262,7 +262,17 @@ class TaskSchema(object):
                 'ignore_dependency_from': [],
                 'save': False,
             }
-            inp = get_specifier_dict(inp, name_key='name', defaults=inp_defs)
+            cast_types = {
+                'save': bool,
+                'file': bool,
+                'include_all_iterations': bool,
+            }
+            inp = get_specifier_dict(
+                inp,
+                name_key='name',
+                defaults=inp_defs,
+                cast_types=cast_types,
+            )
 
             for r in req_inp_keys:
                 if r not in inp:

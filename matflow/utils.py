@@ -267,7 +267,7 @@ def dump_to_yaml_string(data):
 
 
 def get_specifier_dict(key, name_key=None, base_key=None, defaults=None,
-                       list_specifiers=None):
+                       list_specifiers=None, cast_types=None):
     """Resolve a string key with additional specifiers using square-brackets into a dict.
 
     Parameters
@@ -278,6 +278,8 @@ def get_specifier_dict(key, name_key=None, base_key=None, defaults=None,
     defaults : dict
     list_specifiers : list of str
         Any specifier in this list will be added to the returned dict as a list element.
+    cast_types : dict
+        Dict of (key: type) to cast those keys' values to.
 
     Returns
     -------
@@ -301,6 +303,7 @@ def get_specifier_dict(key, name_key=None, base_key=None, defaults=None,
     """
 
     list_specifiers = list_specifiers or []
+    cast_types = cast_types or {}
     out = {}
 
     if isinstance(key, str):
@@ -353,6 +356,10 @@ def get_specifier_dict(key, name_key=None, base_key=None, defaults=None,
     for k, v in (defaults or {}).items():
         if k not in out:
             out[k] = copy.deepcopy(v)
+
+    for key, cast_type in cast_types.items():
+        if key in out:
+            out[key] = cast_type(out[key])
 
     return out
 

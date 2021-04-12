@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.19] - 2021.04.xx
+
+### Fixed
+
+- Fix type problem when input schema keys are specified "inline" in the task schema (e.g. as `CRC_file_path[file=True,save=False]`), in which the keys remain as type `str`, when they should be `bool`.
+
 ## [0.2.18] - 2021.04.10
 
 ### Fixed
