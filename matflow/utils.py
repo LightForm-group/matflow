@@ -359,7 +359,11 @@ def get_specifier_dict(key, name_key=None, base_key=None, defaults=None,
 
     for key, cast_type in cast_types.items():
         if key in out:
-            out[key] = cast_type(out[key])
+            if cast_type is bool:
+                new_val = cast_bool(out[key])
+            else:
+                new_val = cast_type(out[key])
+            out[key] = new_val
 
     return out
 
@@ -480,3 +484,14 @@ def move_element_forward(lst, index, position, return_map=True):
         return out, idx_map
     else:
         return out
+
+
+def cast_bool(bool_str):
+    if isinstance(bool_str, bool):
+        return bool_str
+    elif bool_str.lower() == 'true':
+        return True
+    elif bool_str.lower() == 'false':
+        return False
+    else:
+        raise ValueError(f'"{bool_str}" cannot be cast to True or False.')
