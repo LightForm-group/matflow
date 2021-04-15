@@ -18,7 +18,12 @@ def load_extensions():
 
             print(f'  "{entry_point.name}"...', end='', flush=True)
 
-            loaded = entry_point.load()
+            try:
+                loaded = entry_point.load()
+            except (ImportError, SyntaxError) as ex:
+                print(f'Failed: {ex!r}', flush=True)
+                continue
+
             unload = False
 
             if not hasattr(loaded, 'SOFTWARE'):

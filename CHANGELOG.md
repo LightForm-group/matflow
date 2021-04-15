@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.20] - 2021.xx.xx
+
+### Fixed
+
+- Catch `ImportError` and `SyntaxError` when trying to load extensions.
+
 ## [0.2.19] - 2021.04.12 (April 2021 - Fix 1)
 
 ### Fixed
