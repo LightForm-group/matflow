@@ -612,6 +612,7 @@ class Task(object):
         '_workflow',
         '_elements',
         '_command_pathway_idx',
+        '_cleanup',
     ]
 
     def __init__(self, workflow, name, method, software_instance,
@@ -620,7 +621,7 @@ class Task(object):
                  status=None, stats=False, context=None, local_inputs=None, schema=None,
                  resource_usage=None, base=None, sequences=None, repeats=None,
                  groups=None, nest=None, merge_priority=None, output_map_options=None,
-                 command_pathway_idx=None):
+                 command_pathway_idx=None, cleanup=None):
 
         self._id = None         # Generated once by generate_id()
         self._elements = None   # Assigned in init_elements()
@@ -643,6 +644,7 @@ class Task(object):
         self._schema = schema
         self._resource_usage = resource_usage
         self._command_pathway_idx = command_pathway_idx
+        self._cleanup = cleanup
 
         # Saved for completeness, and to allow regeneration of `local_inputs`:
         self._base = base
@@ -877,6 +879,10 @@ class Task(object):
     @property
     def command_pathway_idx(self):
         return self._command_pathway_idx
+
+    @property
+    def cleanup(self):
+        return self._cleanup
 
     def get_formatted_commands(self):
         fmt_commands, input_vars = self.schema.command_group.get_formatted_commands(

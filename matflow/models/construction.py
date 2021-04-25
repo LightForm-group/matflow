@@ -826,8 +826,12 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'output_map_options',
             'command_pathway_idx',
         ]
-        good_keys = req_keys
-        def_keys = {}
+        good_keys = req_keys + ['cleanup']
+        # `cleanup` is optional to allow importing from workflow generated prior to this
+        # update.
+        def_keys = {
+            'cleanup': None,
+        }
     else:
         req_keys = ['name', 'software', 'method']
         good_keys = [
@@ -843,6 +847,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'nest',
             'merge_priority',
             'output_map_options',
+            'cleanup',
         ] + req_keys
 
         def_keys = {
@@ -855,6 +860,7 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
             'merge_priority': None,
             'nest': True,
             'output_map_options': {},
+            'cleanup': None,
         }
 
     miss_keys = list(set(req_keys) - set(task.keys()))

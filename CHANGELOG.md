@@ -2,6 +2,9 @@
 
 ## [0.2.20] - 2021.xx.xx
 
+### Added
+- Add `Task.cleanup` attribute that can be used to optionally specify a list of glob patterns, representing file names to remove at the end of `Workflow.process_task_element`. Useful for removing very large simulation outputs that are not required after MatFlow has extracted the requested data.
+
 ### Fixed
 
 - Catch `ImportError` and `SyntaxError` when trying to load extensions.
