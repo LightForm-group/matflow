@@ -162,3 +162,23 @@ class Parameters(object):
         self._parameters.update({safe_name: data_idx})
 
         return data_idx
+
+
+class Files(Parameters):
+
+    def get_lines(self, file_name, lines_slice=(1, 10), safe_name=False):
+
+        if not safe_name:
+            file_name = self.get_name_map()[file_name]
+
+        if not isinstance(lines_slice, slice):
+            if isinstance(lines_slice, int):
+                lines_slice = (lines_slice,)
+            lines_slice = slice(*lines_slice)
+
+        return getattr(self, file_name).split('\n')[lines_slice]
+
+    def print_lines(self, file_name, lines_slice=(1, 10), safe_name=False):
+
+        lns = self.get_lines(file_name, lines_slice, safe_name)
+        print('\n'.join(lns))

@@ -2,7 +2,7 @@
 
 import copy
 
-from matflow.models.parameters import Parameters
+from matflow.models.parameters import Parameters, Files
 
 
 class Element(object):
@@ -23,7 +23,7 @@ class Element(object):
 
         self._inputs = Parameters(self, inputs_data_idx)
         self._outputs = Parameters(self, outputs_data_idx)
-        self._files = Parameters(self, files_data_idx)
+        self._files = Files(self, files_data_idx)
 
     def __repr__(self):
         out = (
@@ -83,6 +83,12 @@ class Element(object):
         if not safe_name:
             file_name = self.files.get_name_map()[file_name]
         return getattr(self.files, file_name)
+
+    def get_file_lines(self, file_name, lines_slice=(10,), safe_name=False):
+        return self.files.get_lines(file_name, lines_slice, safe_name)
+
+    def print_file_lines(self, file_name, lines_slice=(10,), safe_name=False):
+        self.files.print_lines(file_name, lines_slice, safe_name)
 
     @property
     def inputs(self):

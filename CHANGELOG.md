@@ -4,6 +4,7 @@
 
 ### Added
 - Add `Task.cleanup` attribute that can be used to optionally specify a list of glob patterns, representing file names to remove at the end of `Workflow.process_task_element`. Useful for removing very large simulation outputs that are not required after MatFlow has extracted the requested data.
+- Add methods `Element` object: `get_file_lines` and `print_file_lines`, which take a file name and a slice of lines to get or print.
 
 ### Fixed
 
