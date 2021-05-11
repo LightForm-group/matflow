@@ -10,10 +10,12 @@
 ### Changed
 
 - Change directory to element directory for invoking input/output/function mapper functions.
+- Allow specifying the `task_idx` directly when importing parameters. This overrides any specified `context`.
 
 ### Fixed
 
 - Catch `ImportError` and `SyntaxError` when trying to load extensions.
+- Import from the highest task index when importing a parameter that has been through a parameter-modifying task - fix [#103](https://github.com/LightForm-group/matflow/issues/103)
 
 ## [0.2.19] - 2021.04.12 (April 2021 - Fix 1)
 

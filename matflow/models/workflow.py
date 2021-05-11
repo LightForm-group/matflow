@@ -132,6 +132,7 @@ class Workflow(object):
                     parameter_name=import_item['parameter'],
                     workflow_path=import_item['from']['workflow'],
                     context=import_item['from'].get('context'),
+                    task_idx=import_item['from'].get('task_idx'),
                     iteration_idx=import_item['from'].get('iteration'),
                     elements_idx=import_item['from'].get('elements'),
                     new_context=import_item.get('context'),
@@ -291,7 +292,7 @@ class Workflow(object):
         req_keys = {'parameter', 'from'}
         good_keys = req_keys | {'as', 'context'}
         from_req_keys = {'workflow'}
-        from_good_keys = from_req_keys | {'context', 'iteration', 'elements'}
+        from_good_keys = from_req_keys | {'context', 'iteration', 'elements', 'task_idx'}
 
         for idx, import_item in enumerate(import_list):
 
@@ -560,7 +561,8 @@ class Workflow(object):
         task_idx : int, optional
             In the case of a workflow with parameter-modifying tasks, multiple tasks with
             the same context may output the same parameter. The index of the specific task
-            from which the parameter should be imported can be specified here.
+            from which the parameter should be imported can be specified here. If this is
+            given, the `context` argument will be ignored.
         iteration_idx : int, optional
             For parmaters that have been output from tasks that have multiple iterations,
             a specific iteration index must be chosen, from which the parameter will be
@@ -570,6 +572,10 @@ class Workflow(object):
             Note that these should be specified relative to the specified iteration. So
             for a task with four elements per iteration and N iterations, the allowable
             values of `elements_idx` would be 0-3.
+        new_context : str, optional
+            The new context to use for the imported parameter.
+        new_parameter_name : str, optional
+            The new name to use for the imported parameter.
 
         Returns
         -------
@@ -584,40 +590,65 @@ class Workflow(object):
             new_context = context or DEFAULT_TASK_CONTEXT
 
         imp_workflow = Workflow.load_HDF5_file(workflow_path, full_path=True)
-        output_task_idx = imp_workflow.get_output_tasks(parameter_name, context=context)
-        context_msg = f' with context "{context}"' if context is not None else ''
-        if not output_task_idx:
-            msg = (f'The parameter "{parameter_name}"{context_msg} cannot be found as an '
-                   f'output in any of the tasks in the specified workflow: '
-                   f'{workflow_path}.')
-            raise ParameterImportError(msg)
 
-        elif len(output_task_idx) > 1:
-            # TODO: need to also consider param-modifying tasks, hence `task` argument to
-            # narrow it down.
-            if context is not None:
-                multi_tasks_fmt = ', '.join(
-                    [f'"{task.name}" (index: {task.task_idx})'
-                     for task in imp_workflow.tasks
-                     if task.task_idx in output_task_idx]
-                )
-                msg = (f'The parameter "{parameter_name}" exists as an output for '
-                       f'multiple tasks with context "{context}": {multi_tasks_fmt}. '
-                       f'Specify the index of the task from which you wish to import '
-                       f'this parameter.')
+        if task_idx is not None:
+            # It given directly, `task_idx` overides specified context:
+
+            if task_idx in imp_workflow.get_output_tasks(parameter_name):
+                import_task_idx = task_idx
+
+            elif task_idx not in range(len(imp_workflow.tasks)):
+                msg = (f'The parameter "{parameter_name}" cannot be imported from task '
+                       f'index {task_idx} because no such task exists.')
                 raise ParameterImportError(msg)
 
             else:
-                multi_contexts_fmt = ', '.join(
-                    [f'"{task.context}"' for task in imp_workflow.tasks
-                     if task.task_idx in output_task_idx]
+                ctx = imp_workflow.tasks[task_idx].context
+                context_msg = (f' and context "{ctx}"'
+                               if ctx is not DEFAULT_TASK_CONTEXT else '')
+                msg = (
+                    f'The parameter "{parameter_name}" cannot be imported from task '
+                    f'index {task_idx} with name "{imp_workflow.tasks[task_idx].name}"'
+                    f'{context_msg}, since this task does not output this parameter.'
                 )
-                msg = (f'The parameter "{parameter_name}" exists as an output for tasks '
-                       f'with multiple contexts: {multi_contexts_fmt}. Specify from '
-                       f'which context you wish to import this parameter.')
                 raise ParameterImportError(msg)
 
-        imp_task = imp_workflow.tasks[output_task_idx[0]]
+        else:
+            # Use context to get the correct task:
+            output_task_idx = imp_workflow.get_output_tasks(parameter_name, context)
+
+            if not output_task_idx:
+                context_msg = f' with context "{context}"' if context is not None else ''
+                msg = (
+                    f'The parameter "{parameter_name}"{context_msg} cannot be found as an'
+                    f' output in any of the tasks in the specified workflow: '
+                    f'{workflow_path}.'
+                )
+                raise ParameterImportError(msg)
+
+            elif len(output_task_idx) == 1:
+                import_task_idx = output_task_idx[0]
+
+            else:
+                # Could be due to multiple contexts (and context not specified) and/or
+                # parameter-modifying task(s) (and task_idx not specified)
+
+                all_contexts = [i.context for i in imp_workflow.tasks
+                                if i.task_idx in output_task_idx]
+                is_multi_context = len(set(all_contexts)) > 1
+                if is_multi_context:
+                    multi_contexts_fmt = ', '.join([f'"{i}"' for i in all_contexts])
+                    msg = (
+                        f'The parameter "{parameter_name}" exists as an output for tasks '
+                        f'with multiple contexts: {multi_contexts_fmt}. Specify from '
+                        f'which context you wish to import this parameter.'
+                    )
+                    raise ParameterImportError(msg)
+                else:
+                    # Use the task with the highest task_idx:
+                    import_task_idx = max(output_task_idx)
+
+        imp_task = imp_workflow.tasks[import_task_idx]
 
         # Set a default iteration index (final iteration):
         final_iter_idx = max(imp_task.elements_idx['iteration_idx'])
