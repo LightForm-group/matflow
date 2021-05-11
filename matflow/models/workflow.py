@@ -43,6 +43,7 @@ from matflow.utils import (
     get_nested_item,
     nested_dict_arrays_to_list,
     index,
+    working_directory,
 )
 
 
@@ -1758,7 +1759,8 @@ class Workflow(object):
 
             # Run input map to generate required input files:
             func = in_map_lookup[in_map['file']]
-            func(path=file_path, **in_map_inputs)
+            with working_directory(task_elem_path):
+                func(path=file_path, **in_map_inputs)
 
             if in_map.get('save', False) and file_path.is_file():
                 # Save generated file as string in workflow:
@@ -1897,12 +1899,14 @@ class Workflow(object):
 
         task = self.tasks[task_idx]
         element = task.elements[element_idx]
+        task_elem_path = self.get_element_path(task.task_idx, element_idx)
         schema_id = (task.name, task.method, task.software)
         func = Config.get('func_maps')[schema_id]
         inputs = element.inputs.get_all()
 
         try:
-            outputs = func(**inputs) or {}
+            with working_directory(task_elem_path):
+                outputs = func(**inputs) or {}
         except Exception as err:
             msg = (f'Task function "{func.__name__}" from module "{func.__module__}" '
                    f'in extension "{func.__module__.split(".")[0]}" has failed with '
@@ -2002,7 +2006,8 @@ class Workflow(object):
                             if k in [i['name'] for i in out_map['options']]}
 
             # Run output map:
-            output = func(*file_paths, **out_map_opts)
+            with working_directory(task_elem_path):
+                output = func(*file_paths, **out_map_opts)
 
             if is_array:
                 outputs_to_update.update({out_map['output']: output})

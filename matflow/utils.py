@@ -1,5 +1,6 @@
 """`matflow.utils.py`"""
 
+import os
 import sys
 import io
 import collections
@@ -10,7 +11,7 @@ import numpy as np
 import random
 import re
 import time
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -495,3 +496,14 @@ def cast_bool(bool_str):
         return False
     else:
         raise ValueError(f'"{bool_str}" cannot be cast to True or False.')
+
+
+@contextmanager
+def working_directory(path):
+    """Change to a working directory and return to previous working directory on exit."""
+    prev_cwd = Path.cwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(prev_cwd)
