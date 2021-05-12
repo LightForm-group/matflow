@@ -1,21 +1,21 @@
 # Change Log
 
-## [0.2.20] - 2021.xx.xx
+## [0.2.20] - 2021.05.12
 
 ### Added
 
 - Add `Task.cleanup` attribute that can be used to optionally specify a list of glob patterns, representing file names to remove at the end of `Workflow.process_task_element`. Useful for removing very large simulation outputs that are not required after MatFlow has extracted the requested data.
-- Add methods `Element` object: `get_file_lines` and `print_file_lines`, which take a file name and a slice of lines to get or print.
+- Add methods to `Element` object: `get_file_lines` and `print_file_lines`, which take a file name and a slice of lines to get or print.
 
 ### Changed
 
-- Change directory to element directory for invoking input/output/function mapper functions.
+- Change working directory to element directory for invoking input/output/function mapper functions. This is required in some cases where a tool or script does not accept a file path as an argument.
 - Allow specifying the `task_idx` directly when importing parameters. This overrides any specified `context`.
 
 ### Fixed
 
 - Catch `ImportError` and `SyntaxError` when trying to load extensions.
-- Import from the highest task index when importing a parameter that has been through a parameter-modifying task - fix [#103](https://github.com/LightForm-group/matflow/issues/103)
+- Import from the highest task index when importing a parameter that has been through a parameter-modifying task - fix [#103](https://github.com/LightForm-group/matflow/issues/103). The can be overrode by specifying a `task_idx` directly.
 
 ## [0.2.19] - 2021.04.12 (April 2021 - Fix 1)
 
