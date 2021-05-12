@@ -592,7 +592,7 @@ class Workflow(object):
         imp_workflow = Workflow.load_HDF5_file(workflow_path, full_path=True)
 
         if task_idx is not None:
-            # It given directly, `task_idx` overides specified context:
+            # If given directly, `task_idx` overrides specified context:
 
             if task_idx in imp_workflow.get_output_tasks(parameter_name):
                 import_task_idx = task_idx
