@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.21] - 2021.xx.xx
+
+### Added
+
+- Allow passing all iterations of an input parameter to a function mapper. Fix [#104](https://github.com/LightForm-group/matflow/issues/104).
+
 ## [0.2.20] - 2021.05.12
 
 ### Added

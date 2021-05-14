@@ -1933,11 +1933,30 @@ class Workflow(object):
         task_elem_path = self.get_element_path(task.task_idx, element_idx)
         schema_id = (task.name, task.method, task.software)
         func = Config.get('func_maps')[schema_id]
-        inputs = element.inputs.get_all()
+
+        all_inputs = {}
+        for input_dict in task.schema.inputs:
+            alias = input_dict['alias']
+            if input_dict.get('include_all_iterations'):
+                # Collate elements from all iterations. Need to get all elements at
+                # the same relative position within the iteration as this one:
+                all_iter_elems = self.get_elements_from_all_iterations(
+                    task_idx,
+                    element_idx,
+                    up_to_current=True,
+                )
+                all_inputs.update({
+                    alias: {
+                        f'iteration_{iter_idx}': elem.get_input(alias)
+                        for iter_idx, elem in enumerate(all_iter_elems)
+                    }
+                })
+            else:
+                all_inputs.update({alias: element.get_input(alias)})
 
         try:
             with working_directory(task_elem_path):
-                outputs = func(**inputs) or {}
+                outputs = func(**all_inputs) or {}
         except Exception as err:
             msg = (f'Task function "{func.__name__}" from module "{func.__module__}" '
                    f'in extension "{func.__module__.split(".")[0]}" has failed with '
