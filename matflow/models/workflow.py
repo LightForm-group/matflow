@@ -1535,7 +1535,12 @@ class Workflow(object):
 
             # Copy element parameter indices HDF5 attributes so they can still be loaded
             # as part of the whole workflow dict, after dumping individually:
-            PARAM_IDX_NAMES = ['files_data_idx', 'inputs_data_idx', 'outputs_data_idx']
+            PARAM_IDX_NAMES = [
+                'files_data_idx',
+                'inputs_data_idx',
+                'outputs_data_idx',
+                'resource_usage',
+            ]
             elem_param_idx_attrs = {}
             for task in self.tasks:
                 elem_param_idx_attrs.update({task.task_idx: {}})
@@ -1554,7 +1559,7 @@ class Workflow(object):
                     for i in PARAM_IDX_NAMES:
                         elem_param_idx_path = elem.HDF5_path + f"/'{i}'"
                         hickle.dump(
-                            py_obj=elem_dict['files_data_idx'],
+                            py_obj=elem_dict[i],
                             file_obj=handle,
                             path=elem_param_idx_path,
                         )
@@ -2007,6 +2012,8 @@ class Workflow(object):
         for i in hf_sub_stats['command_group_submissions']:
             if i['name'] == job_name:
                 resource_usage = i['tasks'][element_idx]
+                if not is_array:
+                    element.add_resource_usage(resource_usage)
                 break
 
         if task.schema.is_func:
@@ -2083,7 +2090,11 @@ class Workflow(object):
 
         if is_array:
             temp_path = self._get_element_temp_array_process_path(task_idx, element_idx)
-            dat = {'outputs': outputs_to_update, 'files': files_to_update}
+            dat = {
+                'outputs': outputs_to_update,
+                'files': files_to_update,
+                'resource_usage': resource_usage,
+            }
             hickle.dump(dat, temp_path)
 
         if task.cleanup:
@@ -2142,6 +2153,8 @@ class Workflow(object):
 
                 for file_name, file_dat in dat['files'].items():
                     element.add_file(file_name, value=file_dat)
+
+                element.add_resource_usage(dat['resource_usage'])
 
                 temp_path.unlink()
 

@@ -6,6 +6,10 @@
 
 - Allow passing all iterations of an input parameter to a function mapper. Fix [#104](https://github.com/LightForm-group/matflow/issues/104).
 
+### Fixed
+
+- Save element resource usage (e.g. run time). Fix [#97](https://github.com/LightForm-group/matflow/issues/97).
+
 ## [0.2.20] - 2021.05.12
 
 ### Added

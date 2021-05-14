@@ -2,6 +2,9 @@
 
 import copy
 
+import hickle
+import h5py
+
 from matflow.models.parameters import Parameters, Files
 
 
@@ -13,13 +16,15 @@ class Element(object):
         '_inputs',
         '_outputs',
         '_files',
+        '_resource_usage',
     ]
 
     def __init__(self, task, element_idx, inputs_data_idx=None, outputs_data_idx=None,
-                 files_data_idx=None):
+                 files_data_idx=None, resource_usage=None):
 
         self._task = task
         self._element_idx = element_idx
+        self._resource_usage = resource_usage
 
         self._inputs = Parameters(self, inputs_data_idx)
         self._outputs = Parameters(self, outputs_data_idx)
@@ -42,6 +47,10 @@ class Element(object):
     @property
     def element_idx(self):
         return self._element_idx
+
+    @property
+    def resource_usage(self):
+        return self._resource_usage
 
     def as_dict(self):
         """Return attributes dict with preceding underscores removed."""
@@ -114,6 +123,22 @@ class Element(object):
 
     def add_file(self, file_name, value=None, data_idx=None):
         return self.files.add_parameter(file_name, 'files', value, data_idx)
+
+    def add_resource_usage(self, resource_usage):
+
+        with h5py.File(self.task.workflow.loaded_path, 'r+') as handle:
+
+            # Load and save attributes of parameter index dict:
+            path = self.HDF5_path + "/'resource_usage'"
+            attributes = dict(handle[path].attrs)
+            del handle[path]
+
+            # Dump resource usage:
+            hickle.dump(resource_usage, handle, path=path)
+
+            # Update dict attributes to maintain /workflow_obj loadability
+            for k, v in attributes.items():
+                handle[path].attrs[k] = v
 
     def get_element_dependencies(self, recurse=False):
         """Get the task/element indices of elements that a given element depends on.
