@@ -4,7 +4,8 @@
 
 ### Added
 
-- Allow passing all iterations of an input parameter to a function mapper. Fix [#104](https://github.com/LightForm-group/matflow/issues/104).
+- Allow passing a subset of the task input parameters to the output mapper function. Resolve [#102](https://github.com/LightForm-group/matflow/issues/102).
+- Allow passing all iterations of an input parameter to a function mapper. Resolve [#104](https://github.com/LightForm-group/matflow/issues/104).
 
 ### Fixed
 

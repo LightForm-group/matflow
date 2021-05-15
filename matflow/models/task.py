@@ -319,12 +319,12 @@ class TaskSchema(object):
         for out_map_idx, out_map in enumerate(self.output_map):
 
             req_keys = ['files', 'output']
-            allowed_keys = set(req_keys + ['options'])
+            allowed_keys = set(req_keys + ['options', 'inputs'])
             miss_keys = list(set(req_keys) - set(out_map.keys()))
             bad_keys = list(set(out_map.keys()) - allowed_keys)
 
             msg = (f'Output maps must map a list of `files` into an `output` (with '
-                   f'optional `options`). ')
+                   f'optional `options` and `inputs`). ')
             if miss_keys:
                 miss_keys_fmt = ', '.join(['"{}"'.format(i) for i in miss_keys])
                 raise TaskSchemaError(err + msg + f'Missing keys are: {miss_keys_fmt}.')
@@ -390,12 +390,52 @@ class TaskSchema(object):
 
                 self.output_map[out_map_idx]['options'][out_map_opt_idx] = opts
 
+            # Inputs may be specified to be passed to the output map function, check:
+            out_map_ins = out_map.get('inputs', [])
+            if out_map_ins:
+                if not isinstance(out_map_ins, list):
+                    msg = (
+                        f'If specified, output map inputs should be a list, but the '
+                        f'following was specified: {out_map_ins}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+            for out_map_inp_idx, out_map_inp_i in enumerate(out_map_ins):
+
+                om_in_i = get_specifier_dict(out_map_inp_i, name_key='name')
+                req_om_ins_keys = ['name']
+                allowed_om_ins_keys = req_om_ins_keys
+                bad_om_ins_keys = list(set(om_in_i.keys()) - set(allowed_om_ins_keys))
+                miss_om_ins_keys = list(set(req_om_ins_keys) - set(om_in_i.keys()))
+
+                if bad_om_ins_keys:
+                    bad_om_ins_keys_fmt = ', '.join([f'"{i}"' for i in bad_om_ins_keys])
+                    msg = (
+                        f'Unknown output map input keys for output map index '
+                        f'{out_map_idx} and output map input index {out_map_inp_idx}: '
+                        f'{bad_om_ins_keys_fmt}. Allowed keys are: {allowed_om_ins_keys}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+
+                if miss_om_ins_keys:
+                    miss_om_ins_keys_fmt = ', '.join([f'"{i}"' for i in miss_om_ins_keys])
+                    msg = (
+                        f'Missing output map input keys for output map index '
+                        f'{out_map_idx} and output map input index {out_map_inp_idx}: '
+                        f'{miss_om_ins_keys_fmt}.'
+                    )
+                    raise TaskSchemaError(err + msg)
+
+                self.output_map[out_map_idx]['inputs'][out_map_inp_idx] = om_in_i
+
         # Check inputs/outputs named in input/output_maps are in inputs/outputs lists:
         input_map_ins = [j for i in self.input_map for j in i['inputs']]
         unknown_map_inputs = set(input_map_ins) - set(self.input_aliases)
 
         output_map_outs = [i['output'] for i in self.output_map]
         unknown_map_outputs = set(output_map_outs) - set(self.outputs)
+
+        output_map_ins = [j['name'] for i in self.output_map for j in i.get('inputs', [])]
+        unknown_out_map_inputs = set(output_map_ins) - set(self.input_aliases)
 
         if unknown_map_inputs:
             bad_ins_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_inputs])
@@ -407,6 +447,14 @@ class TaskSchema(object):
             bad_outs_map_fmt = ', '.join(['"{}"'.format(i) for i in unknown_map_outputs])
             msg = (f'Output map outputs {bad_outs_map_fmt} not known by the schema with '
                    f'outputs: {self.outputs}.')
+            raise TaskSchemaError(err + msg)
+
+        if unknown_out_map_inputs:
+            bad_outs_map_ins_fmt = ', '.join(
+                ['"{}"'.format(i) for i in unknown_out_map_inputs]
+            )
+            msg = (f'Output map inputs {bad_outs_map_ins_fmt} not known by the schema '
+                   f'with inputs: {self.input_aliases}.')
             raise TaskSchemaError(err + msg)
 
     def check_surplus_inputs(self, inputs):

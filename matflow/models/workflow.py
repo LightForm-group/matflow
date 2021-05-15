@@ -2062,9 +2062,15 @@ class Workflow(object):
             out_map_opts = {k: v for k, v in task.output_map_options.items()
                             if k in [i['name'] for i in out_map['options']]}
 
+            # Get any input parameters to be passed to the out_map function:
+            out_map_ins = {
+                inp_dict['name']: element.get_input(inp_dict['name'])
+                for inp_dict in out_map.get('inputs')
+            }
+
             # Run output map:
             with working_directory(task_elem_path):
-                output = func(*file_paths, **out_map_opts)
+                output = func(*file_paths, **out_map_ins, **out_map_opts)
 
             if is_array:
                 outputs_to_update.update({out_map['output']: output})

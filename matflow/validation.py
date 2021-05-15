@@ -43,7 +43,7 @@ def validate_input_mapper_func(func, task_inputs):
         raise TypeError(msg)
 
 
-def validate_output_mapper_func(func, num_file_paths, option_names):
+def validate_output_mapper_func(func, num_file_paths, option_names, input_names):
     """Using `inspect`, validate an output mapper callable from a Matflow extension.
 
     Parameters
@@ -53,45 +53,48 @@ def validate_output_mapper_func(func, num_file_paths, option_names):
         Number of output files specified in the schema's output map.
     option_names : list of str
         List of the names of output map options.
+    input_names : list of str
+        List of the names of output map inputs.
 
     Notes
     -----
     Checks performed on `func`:
       - After the first `num_file_paths` arguments, check the remaining arguments names
-        coincide exactly with `option_names`.
+        coincide exactly with `option_names` + `inputs`.
 
     """
 
     func_params = inspect.signature(func).parameters
 
     # Check num args first
-    exp_num_params = num_file_paths + len(option_names)
+    exp_num_params = num_file_paths + len(option_names) + len(input_names)
     if len(func_params) != exp_num_params:
         msg = (
             f'The output mapper function "{func.__name__}" does not have the expected '
             f'number of arguments: found {len(func_params)} but expected '
             f'{exp_num_params} ({num_file_paths} file path(s) + {len(option_names)} '
-            f'options parameters).'
+            f'options parameters + {len(input_names)} inputs).'
         )
         raise TypeError(msg)
 
     # Check option names:
-    opt_params = list(func_params.items())[num_file_paths:]
-    opt_params_func = [i[0] for i in opt_params]
+    params = list(func_params.items())[num_file_paths:]
+    params_func = [i[0] for i in params]
 
-    miss_params = list(set(option_names) - set(opt_params_func))
-    bad_params = list(set(opt_params_func) - set(option_names))
+    miss_params = list(set(option_names + input_names) - set(params_func))
+    bad_params = list(set(params_func) - set(option_names + input_names))
 
     if bad_params:
         bad_params_fmt = ', '.join([f'"{i}"' for i in bad_params])
         msg = (f'The following arguments in the output mapper function "{func.__name__}" '
-               f'are not known to be output mapper options: {bad_params_fmt}.')
+               f'are not output map options or inputs: {bad_params_fmt}.')
         raise TypeError(msg)
 
     if miss_params:
         miss_params_fmt = ', '.join([f'"{i}"' for i in miss_params])
-        msg = (f'The following output mapper options are missing from the signature of '
-               f'the output mapper function "{func.__name__}": {miss_params_fmt}.')
+        msg = (f'The following output mapper options and/or inputs are missing from the '
+               f'signature of the output mapper function "{func.__name__}": '
+               f'{miss_params_fmt}.')
         raise TypeError(msg)
 
 
@@ -223,6 +226,7 @@ def validate_task_schemas(task_schemas, task_input_map, task_output_map, task_fu
                     func=out_map_func,
                     num_file_paths=len(out_map['files']),
                     option_names=[i['name'] for i in out_map.get('options', [])],
+                    input_names=[i['name'] for i in out_map.get('inputs', [])],
                 )
             except TypeError as err:
                 raise UnsatisfiedSchemaError(key_msg + ' ' + str(err)) from None
