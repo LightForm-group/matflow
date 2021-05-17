@@ -2636,8 +2636,12 @@ class Workflow(object):
                    f'cannot be iterated.')
             raise WorkflowIterationError(msg)
 
-        # Only first task for now...
-        producing_task_idx = dep_tasks[outputs_iter_param.index(True)]
+        # Consider the task with the largest task_idx that outputs the iteration parameter:
+        # (in the case of multiple parameter-modifying tasks):
+        producing_task_trials = [i for idx, i in enumerate(dep_tasks)
+                                 if outputs_iter_param[idx]]
+        producing_task_idx = max(producing_task_trials)
+
         task_pathway = list(set(originating_tasks + dep_tasks))
         out = {
             'task_pathway': task_pathway,
