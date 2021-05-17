@@ -2065,7 +2065,7 @@ class Workflow(object):
             # Get any input parameters to be passed to the out_map function:
             out_map_ins = {
                 inp_dict['name']: element.get_input(inp_dict['name'])
-                for inp_dict in out_map.get('inputs')
+                for inp_dict in out_map.get('inputs', [])
             }
 
             # Run output map:
