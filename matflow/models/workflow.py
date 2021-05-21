@@ -888,7 +888,9 @@ class Workflow(object):
 
                 for elem_idx_i in iter_elem_idx:
 
+                    # Path as originally specified (absolute/relative/maybe with `~` etc):
                     file_path = local_ins[inputs_idx['local_input_idx'][elem_idx_i]]
+                    file_path = Path(file_path).expanduser()
 
                     # If `file_path` is absolute, joinpath will simply return `file_path`:
                     file_path_full = self.stage_directory.joinpath(file_path)

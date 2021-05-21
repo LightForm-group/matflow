@@ -11,6 +11,7 @@
 
 - Save element resource usage (e.g. run time). Fix [#97](https://github.com/LightForm-group/matflow/issues/97).
 - Fix bug when determining the "producing task" in an iteration pathway. Fix [#105](https://github.com/LightForm-group/matflow/issues/105).
+- Fix bug when a file input parameter is specified with a `$HOME` tilde: `~/path/to/file`.
 
 ## [0.2.20] - 2021.05.12
 
