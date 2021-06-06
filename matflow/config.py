@@ -25,6 +25,7 @@ class Config(object):
         'default_sticky_iterate_run_options',
         'parallel_modes',
         'archive_locations',
+        'default_metadata',
     ]
 
     __conf = {}
@@ -237,6 +238,7 @@ class Config(object):
             'default_sticky_preparation_run_options',
             'default_sticky_processing_run_options',
             'default_sticky_iterate_run_options',
+            'default_metadata',
         ]:
             Config.__conf[i] = config_dat.get(i, {})
 

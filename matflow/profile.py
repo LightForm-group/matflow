@@ -5,6 +5,7 @@ from pathlib import Path
 from ruamel import yaml
 
 from matflow.errors import ProfileError
+from matflow.config import Config
 
 
 def parse_workflow_profile(profile_path):
@@ -51,7 +52,7 @@ def parse_workflow_profile(profile_path):
         'name': profile['name'],
         'tasks': profile['tasks'],
         'figures': profile.get('figures'),
-        'metadata': profile.get('metadata'),
+        'metadata': {**Config.get('default_metadata'), **profile.get('metadata', {})},
         'num_iterations': profile.get('num_iterations'),
         'iterate': profile.get('iterate'),
         'extends': profile.get('extends'),

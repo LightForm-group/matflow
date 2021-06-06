@@ -7,6 +7,7 @@
 - Allow passing a subset of the task input parameters to the output mapper function. Resolve [#102](https://github.com/LightForm-group/matflow/issues/102).
 - Allow passing all iterations of an input parameter to a function mapper. Resolve [#104](https://github.com/LightForm-group/matflow/issues/104).
 - Allow running an on-demand archive to an existing/completed workflow: `matflow archive path/to/workflow/directory ARCHIVE_NAME`. Resolve [#68](https://github.com/LightForm-group/matflow/issues/68).
+- Allow specifying `default_metadata` in the `config.yml` file. Keys are merged with `metadata` specified in the workflow spec file. Resolve [#98](https://github.com/LightForm-group/matflow/issues/98).
 
 ### Fixed
 
