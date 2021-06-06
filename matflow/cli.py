@@ -129,5 +129,12 @@ def write_element_directories(iteration_idx, directory=None):
     api.write_element_directories(iteration_idx, directory)
 
 
+@cli.command()
+@click.argument('directory', type=click.Path(exists=True))
+@click.argument('archive')
+def archive(directory, archive):
+    api.archive(directory, archive)
+
+
 if __name__ == '__main__':
     cli()

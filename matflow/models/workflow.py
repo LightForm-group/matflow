@@ -2691,3 +2691,47 @@ class Workflow(object):
         ell_elems = [self.tasks[task_idx].elements[i] for i in all_elem_idx]
 
         return ell_elems
+
+    def do_archive(self, archive):
+        """Perform an on-demand archive outside of the normal workflow submission process.
+
+        Parameters
+        ----------
+        archive : str
+            Name of the archive. Must exist in the MatFlow config YAML file.
+
+        """
+        command_groups = [
+            {
+                'name': 'archive',
+                'directory': '.',
+                'commands': [
+                    {
+                        'line': 'echo "Archiving!"'
+                    },
+                ],
+                'archive': archive,
+                'archive_excludes': self.archive_excludes,
+            },
+        ]
+        archive_defn = {
+            **Config.get('archive_locations')[archive],
+            'root_directory_name': 'parent',
+        }
+        hf_data = {
+            'scheduler': 'sge',
+            'output_dir': 'output',
+            'error_dir': 'output',
+            'command_groups': command_groups,
+            'archive_locations': {archive: archive_defn},
+        }
+        hf_wid = hpcflow.make_workflow(
+            dir_path=self.path,
+            workflow_dict=hf_data,
+            config_dir=Config.get('hpcflow_config_dir'),
+        )
+        hpcflow.submit_workflow(
+            workflow_id=hf_wid,
+            dir_path=self.path,
+            config_dir=Config.get('hpcflow_config_dir'),
+        )

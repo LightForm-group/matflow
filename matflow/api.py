@@ -190,6 +190,12 @@ def write_element_directories(iteration_idx, directory):
         workflow.prepare_iteration(iteration_idx)
 
 
+def archive(directory, archive):
+    """Perform an on-demand archive of an existing workflow."""
+    workflow = load_workflow(directory)
+    workflow.do_archive(archive)
+
+
 def get_task_schemas():
     Config.set_config()
     return Config.get('task_schemas')
