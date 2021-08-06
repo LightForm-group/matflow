@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.22] - 2021.xx.xx
+
+### Fixed
+
+- Fix error message if an input mapper function has an unknown argument.
+
 ## [0.2.21] - 2021.06.06
 
 ### Added

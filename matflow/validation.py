@@ -38,8 +38,8 @@ def validate_input_mapper_func(func, task_inputs):
     bad_params = list(set(func_params) - set(task_inputs))
     if bad_params:
         bad_params_fmt = ', '.join([f'"{i}"' for i in bad_params])
-        msg = (f'The following schema input parameters are not compatible with the '
-               f'input mapper function "{func.__name__}": {bad_params_fmt}.')
+        msg = (f'The following arguments to the input mapper function "{func.__name__}" '
+               f'are not known by the schema: {bad_params_fmt}.')
         raise TypeError(msg)
 
 
