@@ -5,6 +5,7 @@
 ### Fixed
 
 - Fix error message if an input mapper function has an unknown argument.
+- Catch and print error message from output map function failure
 
 ## [0.2.21] - 2021.06.06
 

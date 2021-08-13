@@ -2072,7 +2072,12 @@ class Workflow(object):
 
             # Run output map:
             with working_directory(task_elem_path):
-                output = func(*file_paths, **out_map_ins, **out_map_opts)
+                try:
+                    output = func(*file_paths, **out_map_ins, **out_map_opts)
+                except Exception as err:
+                    output = None
+                    print(f'Failed to execute the output map for output '
+                          f'"{out_map["output"]}". Exception was: {err}')
 
             if is_array:
                 outputs_to_update.update({out_map['output']: output})
