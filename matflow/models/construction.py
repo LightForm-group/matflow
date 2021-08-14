@@ -1100,7 +1100,6 @@ def get_input_groups(task_idx, task_lst, dependency_idx, element_idx,
 
         input_alias = non_local_input_i['alias']
         input_name = non_local_input_i['name']
-        input_context = non_local_input_i['context']
 
         group_name = task['schema'].get_input_by_alias(input_alias)['group']
         if group_name == 'default':
@@ -1122,7 +1121,7 @@ def get_input_groups(task_idx, task_lst, dependency_idx, element_idx,
             group_dict = element_idx[input_task_idx]['groups']
         else:
             # Parameter is imported from another workflow.
-            import_key = (input_name, input_context or DEFAULT_TASK_CONTEXT)
+            import_key = task_param_deps[input_alias]['from_import']
             group_dict = imported_parameters[import_key]['groups']
 
         group_names_fmt = ', '.join([f'"{i}"' for i in group_dict.keys()])
