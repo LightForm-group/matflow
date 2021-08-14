@@ -18,6 +18,7 @@ def parse_workflow_profile(profile_path):
     good_keys = req_keys + task_globals + [
         'extends',
         'archive',
+        'archives',
         'archive_excludes',
         'figures',
         'metadata',
@@ -41,6 +42,17 @@ def parse_workflow_profile(profile_path):
         raise ProfileError(f'Specify exactly one of `import` and `import_list`. '
                            f'These options are functionally equivalent.')
 
+    if 'archive' in profile and 'archives' in profile:
+        raise ValueError('Specify either `archive` or `archives` but not both. For '
+                         'either case, valid values are a string or list of strings.')
+    elif 'archive' in profile:
+        profile['archives'] = profile.pop('archive')
+    elif 'archives' not in profile:
+        profile['archives'] = []
+
+    if isinstance(profile['archives'], str):
+        profile['archives'] = [profile['archives']]
+
     for i in task_globals:
         if i in profile:
             # Add to each task if it has none:
@@ -51,12 +63,12 @@ def parse_workflow_profile(profile_path):
     workflow_dict = {
         'name': profile['name'],
         'tasks': profile['tasks'],
+        'archives': profile['archives'],
         'figures': profile.get('figures'),
         'metadata': {**Config.get('default_metadata'), **profile.get('metadata', {})},
         'num_iterations': profile.get('num_iterations'),
         'iterate': profile.get('iterate'),
         'extends': profile.get('extends'),
-        'archive': profile.get('archive'),
         'archive_excludes': profile.get('archive_excludes'),
         'import_list': profile.get('import') or profile.get('import_list'),
     }

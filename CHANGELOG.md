@@ -2,6 +2,10 @@
 
 ## [0.2.22] - 2021.xx.xx
 
+### Added
+
+- Add support for multiple archives. Fix [#72](https://github.com/LightForm-group/matflow/issues/72).
+
 ### Fixed
 
 - Fix error message if an input mapper function has an unknown argument.

@@ -90,7 +90,7 @@ class Workflow(object):
         '_elements_idx',
         '_dependency_idx',
         '_history',
-        '_archive',
+        '_archives',
         '_archive_excludes',
         '_figures',
         '_metadata',
@@ -101,7 +101,7 @@ class Workflow(object):
         '_imported_parameters',
     ]
 
-    def __init__(self, name, tasks, stage_directory=None, extends=None, archive=None,
+    def __init__(self, name, tasks, stage_directory=None, extends=None, archives=None,
                  archive_excludes=None, figures=None, metadata=None, num_iterations=None,
                  iterate=None, iterate_run_options=None, import_list=None,
                  imported_parameters=None, check_integrity=True, profile=None,
@@ -116,7 +116,7 @@ class Workflow(object):
         self._extends = [str(Path(i).resolve()) for i in (extends or [])]
         self._stage_directory = str(Path(stage_directory or '').resolve())
         self._profile = profile
-        self._archive = archive
+        self._archives = archives or []
         self._archive_excludes = archive_excludes
         self._figures = [{'idx': idx, **i}
                          for idx, i in enumerate(figures)
@@ -231,18 +231,20 @@ class Workflow(object):
         return len(self.tasks)
 
     def _check_archive_connection(self):
-        if not self.archive:
-            return
+        for archive in self.archives:
+            if not archive:
+                return
 
-        # TODO: should this whole function be outsourced to hpcflow?
+            # TODO: should this whole function be outsourced to hpcflow?
 
-        # TODO: check local archive path exists
+            # TODO: check local archive path exists
 
-        if 'cloud_provider' in self.archive_definition:
-            provider = self.archive_definition['cloud_provider']
-            hpcflow.cloud_connect(provider, config_dir=Config.get('hpcflow_config_dir'))
+            if 'cloud_provider' in self.archive_definitions[archive]:
+                provider = self.archive_definitions[archive]['cloud_provider']
+                hpcflow.cloud_connect(
+                    provider, config_dir=Config.get('hpcflow_config_dir'))
 
-        # TODO when supported in DataLight, add datalight.check_access(...)
+            # TODO when supported in DataLight, add datalight.check_access(...)
 
     def _append_history(self, action, **kwargs):
         """Append a new history event."""
@@ -477,8 +479,8 @@ class Workflow(object):
         return [Path(i) for i in self._extends]
 
     @property
-    def archive(self):
-        return self._archive
+    def archives(self):
+        return self._archives
 
     @property
     def archive_excludes(self):
@@ -490,14 +492,18 @@ class Workflow(object):
         return list(set(self._archive_excludes or [] + schema_excludes))
 
     @property
-    def archive_definition(self):
-        if not self.archive:
+    def archive_definitions(self):
+        if not self.archives:
             return None
-        archive_defn = {
-            **Config.get('archive_locations')[self.archive],
-            'root_directory_name': 'parent',
-        }
-        return archive_defn
+        else:
+            archive_defns = {}
+            for archive in self.archives:
+                archive_defn = {
+                    **Config.get('archive_locations')[archive],
+                    'root_directory_name': 'parent',
+                }
+                archive_defns.update({archive: archive_defn})
+        return archive_defns
 
     @property
     def stage_directory(self):
@@ -1264,11 +1270,27 @@ class Workflow(object):
                 }
             })
 
-        if self.archive:
+        if self.archives:
+
             command_groups[-1].update({
-                'archive': self.archive,
+                'archive': self.archives[0],
                 'archive_excludes': self.archive_excludes,
             })
+
+            if len(self.archives) > 1:
+                # Add a command group for each additional archive:
+                for archive in self.archives[1:]:
+                    command_groups.append({
+                        'name': 'archive',
+                        'directory': '.',
+                        'commands': [
+                            {
+                                'line': f'echo "Archiving to {archive}!"'
+                            },
+                        ],
+                        'archive': archive,
+                        'archive_excludes': self.archive_excludes,
+                    })
 
         if self.num_iterations > 1 or self.iterate:
             command_groups.append({
@@ -1321,8 +1343,13 @@ class Workflow(object):
             # TODO: allow "meta" key in hpcflow command groups.
             hf_data['command_groups'][cmd_group_idx].pop('meta', None)
 
-        if self.archive:
-            hf_data.update({'archive_locations': {self.archive: self.archive_definition}})
+        if self.archives:
+            hf_data.update({
+                'archive_locations': {
+                    archive: self.archive_definitions[archive]
+                    for archive in self.archives
+                }
+            })
 
         return hf_data
 
