@@ -1,6 +1,6 @@
 # Change Log
 
-## [0.2.22] - 2021.xx.xx
+## [0.2.22] - 2021.08.14
 
 ### Added
 
@@ -9,8 +9,8 @@
 ### Fixed
 
 - Fix error message if an input mapper function has an unknown argument.
-- Catch and print error message from output map function failure
-- Fix incorrect import key when importing from a non-trivial context that is not defined in the schema
+- Catch and print error message from output map function failure.
+- Fix incorrect import key when importing from a non-trivial context that is not defined in the schema.
 
 ## [0.2.21] - 2021.06.06
 
