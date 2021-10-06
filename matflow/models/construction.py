@@ -707,7 +707,7 @@ def validate_run_options(run_opts, type_label=''):
     if 'preparation' in type_label or 'processing' in type_label:
         ALLOWED += ['job_array']
 
-    bad_keys = set(run_opts.keys()) - set(ALLOWED)
+    bad_keys = set((run_opts or {}).keys()) - set(ALLOWED)
     if bad_keys:
         bad_keys_fmt = ', '.join([f'{i!r}' for i in bad_keys])
         raise TaskError(f'Run options not known: {bad_keys_fmt}.')
@@ -880,8 +880,8 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
     task = {**def_keys, **copy.deepcopy(task)}
 
     all_run_opts = task.pop('run_options')
-    prep_run_opts = all_run_opts.pop('preparation', {})
-    proc_run_opts = all_run_opts.pop('processing', {})
+    prep_run_opts = all_run_opts.pop('preparation', None)
+    proc_run_opts = all_run_opts.pop('processing', None)
     task['prepare_run_options'] = validate_run_options(prep_run_opts, '.preparation')
     task['process_run_options'] = validate_run_options(proc_run_opts, '.processing')
     task['run_options'] = validate_run_options(all_run_opts)

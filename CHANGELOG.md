@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.24] - 2021.10.06
+
+### Fixed
+
+- Fix bug introduced in 0.2.23, where default preparation/processing run options were ignored.
+
 ## [0.2.23] - 2021.10.06
 
 ### Fixed
