@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.23] - 2021.xx.xx
+
+### Fixed
+
+- Fix inability to override default (preparation/processing) run options with an empty dict
+
 ## [0.2.22] - 2021.08.14
 
 ### Added

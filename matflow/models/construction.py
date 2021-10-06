@@ -715,7 +715,7 @@ def validate_run_options(run_opts, type_label=''):
     run_opts = copy.deepcopy(run_opts)
 
     if 'preparation' in type_label:
-        if not run_opts:
+        if run_opts is None:
             run_opts = {
                 **Config.get('default_sticky_preparation_run_options'),
                 **Config.get('default_preparation_run_options'),
@@ -726,7 +726,7 @@ def validate_run_options(run_opts, type_label=''):
                 **run_opts
             }
     elif 'processing' in type_label:
-        if not run_opts:
+        if run_opts is None:
             run_opts = {
                 **Config.get('default_sticky_processing_run_options'),
                 **Config.get('default_processing_run_options'),
@@ -737,7 +737,7 @@ def validate_run_options(run_opts, type_label=''):
                 **run_opts
             }
     else:
-        if not run_opts:
+        if run_opts is None:
             run_opts = {
                 **Config.get('default_sticky_run_options'),
                 **Config.get('default_run_options'),
