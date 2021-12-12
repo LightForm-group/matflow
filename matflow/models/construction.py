@@ -880,8 +880,14 @@ def validate_task_dict(task, is_from_file, all_software, all_task_schemas,
     task = {**def_keys, **copy.deepcopy(task)}
 
     all_run_opts = task.pop('run_options')
-    prep_run_opts = all_run_opts.pop('preparation', None)
-    proc_run_opts = all_run_opts.pop('processing', None)
+
+    if is_from_file:
+        prep_run_opts = task['prepare_run_options']
+        proc_run_opts = task['process_run_options']
+    else:
+        prep_run_opts = all_run_opts.pop('preparation', None)
+        proc_run_opts = all_run_opts.pop('processing', None)
+
     task['prepare_run_options'] = validate_run_options(prep_run_opts, '.preparation')
     task['process_run_options'] = validate_run_options(proc_run_opts, '.processing')
     task['run_options'] = validate_run_options(all_run_opts)
