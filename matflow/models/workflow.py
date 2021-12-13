@@ -1695,6 +1695,8 @@ class Workflow(object):
             'stage_directory': obj_json['stage_directory'],
             'profile': obj_json['profile'],
             'extends': obj_json['extends'],
+            'archives': obj_json['archives'],
+            'archive_excludes': obj_json['archive_excludes'],
         }
 
         # For loading older workflow files without these attributes:
