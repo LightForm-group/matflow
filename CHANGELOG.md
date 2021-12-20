@@ -1,5 +1,12 @@
 # Change Log
 
+## [0.2.25] - 2021.12.20
+
+### Fixed
+
+- Fix bug where preparation and processing run options were ignored on workflow load.
+- Fix bug where archive options were ignored on workflow load.
+
 ## [0.2.24] - 2021.10.06
 
 ### Fixed
