@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.26] - 2022.xx.xx
+
+### Fixed
+
+- Use `traceback` module to print full exception from an output map that generates an exception.
+
 ## [0.2.25] - 2021.12.20
 
 ### Fixed

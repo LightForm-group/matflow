@@ -10,6 +10,7 @@ import re
 import secrets
 import pickle
 import shutil
+import traceback
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -2107,6 +2108,7 @@ class Workflow(object):
                     output = None
                     print(f'Failed to execute the output map for output '
                           f'"{out_map["output"]}". Exception was: {err}')
+                    traceback.print_exc()
 
             if is_array:
                 outputs_to_update.update({out_map['output']: output})
