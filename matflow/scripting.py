@@ -89,7 +89,7 @@ def get_snippet_signature(package_name, script_name):
 
     def_line = re.search(r'def\s(.*)\(([\s\S]*?)\):', snippet_str).groups()
     func_name = def_line[0]
-    func_ins = [i.strip() for i in def_line[1].split(',')]
+    func_ins = [i.strip() for i in def_line[1].split(',') if i.strip()]
 
     if script_name != func_name + '.py':
         msg = ('For simplicity, the snippet main function name should be the same as the '
@@ -125,6 +125,9 @@ def get_wrapper_script(package_name, script_name, snippets, outputs):
     all_ins = [j for i in sigs for j in i['inputs']]
     all_outs = [j for i in sigs for j in i['outputs']]
 
+    print(f'all_ins: {all_ins}')
+    print(f'all_outs: {all_outs}')
+
     for i in outputs:
         if i not in all_outs:
             raise ValueError(f'Cannot output "{i}". No functions return this name.')
@@ -132,6 +135,9 @@ def get_wrapper_script(package_name, script_name, snippets, outputs):
     # Required inputs are those that are not output by any snippet
     req_ins = list(set(all_ins) - set(all_outs))
     req_ins_fmt = ', '.join(req_ins)
+
+    print(f'req_ins: {req_ins}')
+    print(f'req_ins_fmt: {req_ins_fmt}')
 
     main_sig = [f'def main({req_ins_fmt}):']
     main_body = [ind + get_snippet_call(package_name, i['name']) for i in snippets]
@@ -157,7 +163,10 @@ def get_wrapper_script(package_name, script_name, snippets, outputs):
 
     ''')
 
+    print(f'out 1: \n----------\n{out}\n----------\n')
     out = autopep8.fix_code(out)
+    print(f'out 2: \n----------\n{out}\n----------\n')
     out = black.format_str(out, mode=black.FileMode())
+    print(f'out 3: \n----------\n{out}\n----------\n')
 
     return out
