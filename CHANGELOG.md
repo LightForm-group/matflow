@@ -1,10 +1,11 @@
 # Change Log
 
-## [0.2.26] - 2022.xx.xx
+## [0.2.26] - 2022.03.18
 
 ### Fixed
 
 - Use `traceback` module to print full exception from an output map that generates an exception.
+- Bug in `scripting.get_snippet_signature` function that produces code with a syntax error.
 
 ## [0.2.25] - 2021.12.20
 
