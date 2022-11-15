@@ -507,3 +507,16 @@ def working_directory(path):
         yield
     finally:
         os.chdir(prev_cwd)
+
+
+def tensor_comps_fromaxis(axis):
+    """Given axis direction as string, return corresponding tensor index."""
+    if axis=="X":
+        tensor_comp = 1
+    if axis=="Y":
+        tensor_comp = 2
+    if axis=="Z":
+        tensor_comp = 3
+    return tensor_comp
+
+
