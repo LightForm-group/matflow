@@ -507,3 +507,24 @@ def working_directory(path):
         yield
     finally:
         os.chdir(prev_cwd)
+
+
+def tensorcomps_fromaxis(axis):
+    """
+    Given axis direction as string
+    return corresponding tensor indecies.
+    return unit vector as numpy array.
+    Used for extracting tensor components in post-processing.
+    """
+    if axis=="X":
+        tensor_comp = 1
+        unit_vector = np.array([1., 0., 0.])
+    if axis=="Y":
+        tensor_comp = 2
+        unit_vector = np.array([0., 1., 0.])
+    if axis=="Z":
+        tensor_comp = 3
+        unit_vector = np.array([0., 0., 1.])
+    return tensor_comp, unit_vector
+
+
