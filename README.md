@@ -1,5 +1,7 @@
 [![DOI](https://zenodo.org/badge/219949875.svg)](https://zenodo.org/badge/latestdoi/219949875) [![PyPI version](https://badge.fury.io/py/matflow.svg)](https://badge.fury.io/py/matflow)
 
+## **This code has been superseded by a new version that can be found here: https://github.com/hpcflow/matflow-new.**
+
 # MatFlow
 
 MatFlow is a framework for running reproducible workflows in materials science developed in the EPSRC programme grant [LightForm](http://lightform.org.uk), a research programme on light alloy formability. It is a python program that interacts with software (open-source and proprietary) used in materials science via extensions (see supported extensions below). It is particularly suited for hybrid workflows
