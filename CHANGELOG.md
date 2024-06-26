@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.2.27] - 2024.06.26
+
+### Fixed
+
+- Fix dependencies
+
 ## [0.2.26] - 2022.03.18
 
 ### Fixed
